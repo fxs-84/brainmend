@@ -781,8 +781,9 @@ function updateDotPosition(e) {
         state.trail.shift();
     }
 
-    state.yaw = state.dotX * 0.45;
-    state.pitch = state.dotY * 0.45;
+    // 角度映射：X轴=旋转(±80°), Y轴=前屈后伸(±45°)
+    state.yaw = state.dotX * 0.8;      // X轴右端=80°, 左端=-80°
+    state.pitch = state.dotY * 0.53;    // Y轴上端=45°, 下端=-45°
 
     updateDataDisplay();
 }
@@ -790,8 +791,8 @@ function updateDotPosition(e) {
 function returnToCenter() {
     state.dotX *= (1 - CONFIG.DOT_RETURN_SPEED);
     state.dotY *= (1 - CONFIG.DOT_RETURN_SPEED);
-    state.yaw = state.dotX * 0.45;
-    state.pitch = state.dotY * 0.45;
+    state.yaw = state.dotX * 0.8;
+    state.pitch = state.dotY * 0.53;
 }
 
 function initInput() {
@@ -988,8 +989,8 @@ function animate() {
     if (!isDraggingDot) {
         state.dotX *= CONFIG.DOT_RETURN_SPEED;
         state.dotY *= CONFIG.DOT_RETURN_SPEED;
-        state.yaw = state.dotX * 0.45;
-        state.pitch = state.dotY * 0.45;
+        state.yaw = state.dotX * 0.8;
+        state.pitch = state.dotY * 0.53;
 
         if (state.isRunning) {
             state.trail.push({ x: state.dotX, y: state.dotY });
