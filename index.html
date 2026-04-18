@@ -585,9 +585,9 @@ function drawCrosshair() {
 
 // 综合检测
 function updateIntegrated(elapsed) {
-    const t = elapsed * 0.3;
-    window.targetX = Math.sin(t) * 100;
-    window.targetY = Math.sin(t) * Math.cos(t) * 70;
+    // 暂时让红点静止在中心
+    window.targetX = 0;
+    window.targetY = 0;
     state.progress = elapsed / CONFIG.INTEGRATED_DURATION;
 
     // 追踪 ROM
