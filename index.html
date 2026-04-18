@@ -351,8 +351,8 @@ function drawGrid() {
     }
 }
 
-// 绘制十字准星
-function drawCrosshair() {
+// 绘制静态元素（十字准星背景）
+function drawStaticElements() {
     const actualCenterX = centerX + state.crosshairOffsetX;
     const actualCenterY = centerY + state.crosshairOffsetY;
 
@@ -572,7 +572,7 @@ function drawCrosshair() {
     const scale = ringRadius / 100;
 
     drawGrid();
-    drawCrosshair();
+    drawStaticElements();
     drawTrajectory(actualCenterX, actualCenterY, scale);
     drawTargetDot(actualCenterX, actualCenterY, scale, window.targetX, window.targetY);
     drawPositionDot(actualCenterX, actualCenterY, scale, state.dotX, state.dotY);
