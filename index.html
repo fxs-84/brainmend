@@ -372,18 +372,20 @@ function drawStaticElements() {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // 水平线
+    // 水平线（比外圆短一些）
+    const hLineLength = ringRadius * 1.3;
     ctx.beginPath();
-    ctx.moveTo(actualCenterX - crosshairSize / 2, actualCenterY);
-    ctx.lineTo(actualCenterX + crosshairSize / 2, actualCenterY);
+    ctx.moveTo(actualCenterX - hLineLength, actualCenterY);
+    ctx.lineTo(actualCenterX + hLineLength, actualCenterY);
     ctx.strokeStyle = CONFIG.COLORS.CROSSHAIR;
     ctx.lineWidth = 10;
     ctx.stroke();
 
-    // 中心垂直线
+    // 中心垂直线（比外圆短一些）
+    const vLineLength = ringRadius * 1.3;
     ctx.beginPath();
-    ctx.moveTo(actualCenterX, actualCenterY - crosshairSize / 2);
-    ctx.lineTo(actualCenterX, actualCenterY + crosshairSize / 2);
+    ctx.moveTo(actualCenterX, actualCenterY - vLineLength);
+    ctx.lineTo(actualCenterX, actualCenterY + vLineLength);
     ctx.strokeStyle = CONFIG.COLORS.CROSSHAIR;
     ctx.lineWidth = 10;
     ctx.stroke();
@@ -393,15 +395,15 @@ function drawStaticElements() {
     const rightX = actualCenterX + crosshairSize / 2 - 15;
 
     ctx.beginPath();
-    ctx.moveTo(leftX, actualCenterY - crosshairSize / 2);
-    ctx.lineTo(leftX, actualCenterY + crosshairSize / 2);
+    ctx.moveTo(leftX, actualCenterY - vLineLength);
+    ctx.lineTo(leftX, actualCenterY + vLineLength);
     ctx.strokeStyle = CONFIG.COLORS.CROSSHAIR;
     ctx.lineWidth = 10;
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.moveTo(rightX, actualCenterY - crosshairSize / 2);
-    ctx.lineTo(rightX, actualCenterY + crosshairSize / 2);
+    ctx.moveTo(rightX, actualCenterY - vLineLength);
+    ctx.lineTo(rightX, actualCenterY + vLineLength);
     ctx.strokeStyle = CONFIG.COLORS.CROSSHAIR;
     ctx.lineWidth = 10;
     ctx.stroke();
