@@ -764,8 +764,16 @@ function updateDotPosition(e) {
     const offsetY = actualCenterY - y;
 
     const scale = 100 / ringRadius;
-    state.dotX = offsetX * scale;
-    state.dotY = offsetY * scale;
+
+    // 限制在垂直线长度范围内
+    const vLineLength = ringRadius * 0.85;
+    const clampedOffsetY = Math.max(-vLineLength, Math.min(vLineLength, offsetY));
+    state.dotY = clampedOffsetY * scale;
+
+    // 限制在水平线长度范围内
+    const hLineLength = (crosshairSize / 2 - 15);
+    const clampedOffsetX = Math.max(-hLineLength, Math.min(hLineLength, offsetX));
+    state.dotX = clampedOffsetX * scale;
 
     state.trail.push({ x: state.dotX, y: state.dotY });
     if (state.trail.length > state.maxTrailLength) {
