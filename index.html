@@ -664,11 +664,13 @@ function updateCoordination(elapsed) {
         window.targetY = Math.sin(smoothT) * CONFIG.VERTICAL_AMPLITUDE;
         state.progress = Math.min(1, smoothT / (2 * Math.PI) / 2);
     } else if (state.trajectoryType === 'vertical_left') {
-        window.targetX = -100 * state.zoomFactor;
+        const verticalOffset = (crosshairSize / 2 - 15) / (ringRadius / 100);
+        window.targetX = -verticalOffset;
         window.targetY = Math.sin(smoothT) * CONFIG.VERTICAL_AMPLITUDE;
         state.progress = Math.min(1, smoothT / (2 * Math.PI) / 2);
     } else if (state.trajectoryType === 'vertical_right') {
-        window.targetX = 100 * state.zoomFactor;
+        const verticalOffset = (crosshairSize / 2 - 15) / (ringRadius / 100);
+        window.targetX = verticalOffset;
         window.targetY = Math.sin(smoothT) * CONFIG.VERTICAL_AMPLITUDE;
         state.progress = Math.min(1, smoothT / (2 * Math.PI) / 2);
     } else {
@@ -1019,12 +1021,13 @@ function init() {
                 b.style.color = b === btn ? 'var(--bg-dark)' : 'var(--text)';
             });
 
-            // 垂直左右跳转
+            // 垂直左右跳转 - 使用与垂直线匹配的位置
+            const verticalOffset = (crosshairSize / 2 - 15) / (ringRadius / 100);
             if (state.trajectoryType === 'vertical_left') {
-                window.targetX = -100 * state.zoomFactor;
+                window.targetX = -verticalOffset;
                 window.targetY = 0;
             } else if (state.trajectoryType === 'vertical_right') {
-                window.targetX = 100 * state.zoomFactor;
+                window.targetX = verticalOffset;
                 window.targetY = 0;
             }
         });
