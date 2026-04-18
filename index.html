@@ -782,8 +782,8 @@ function updateDotPosition(e) {
     }
 
     // 角度映射：X轴=旋转(±80°), Y轴=前屈后伸(±45°)
-    state.yaw = state.dotX * 0.8;      // X轴右端=80°, 左端=-80°
-    state.pitch = state.dotY * 0.53;    // Y轴上端=45°, 下端=-45°
+    state.yaw = state.dotX * 0.8;       // X轴右端=80°, 左端=-80°
+    state.pitch = -state.dotY * 0.53;   // Y轴上端=45°(后伸), 下端=-45°(前屈)
 
     updateDataDisplay();
 }
