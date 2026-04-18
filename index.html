@@ -1,0 +1,1446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>颈椎检测康复训练游戏</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #00D9A5;
+            --secondary: #0086FF;
+            --bg-dark: #0a0f1a;
+            --bg-panel: #111827;
+            --text: #E5E7EB;
+            --text-muted: #9CA3AF;
+            --danger: #EF4444;
+            --warning: #F59E0B;
+            --success: #10B981;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text);
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 16px;
+            background: var(--bg-panel);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .logo {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .header-info {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* Main content */
+        main {
+            flex: 1;
+            display: flex;
+            position: relative;
+        }
+
+        /* Detection Area (Left) */
+        #detection-area {
+            flex: 1;
+            position: relative;
+            background: radial-gradient(circle at center, #1a1f2e 0%, var(--bg-dark) 100%);
+            overflow: hidden;
+        }
+
+        #crosshair-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Side panel */
+        #side-panel {
+            width: 260px;
+            min-width: 260px;
+            background: var(--bg-panel);
+            border-left: 1px solid rgba(255,255,255,0.1);
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            font-size: 9px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 3px;
+        }
+
+        /* Data card */
+        .data-card {
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            padding: 6px;
+        }
+
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .data-row:last-child {
+            border-bottom: none;
+        }
+
+        .data-label {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .data-value {
+            font-size: 12px;
+            font-weight: 600;
+            font-family: 'Consolas', monospace;
+        }
+
+        .data-value.pitch { color: var(--primary); }
+        .data-value.yaw { color: var(--secondary); }
+        .data-value.error { color: var(--danger); }
+        .data-value.time { color: var(--warning); }
+
+        /* Crosshair Display */
+        .crosshair-display {
+            text-align: center;
+            padding: 2px;
+        }
+
+        .crosshair-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3px;
+        }
+
+        .crosshair-item {
+            background: rgba(0,0,0,0.3);
+            border-radius: 6px;
+            padding: 2px;
+        }
+
+        .crosshair-item-label {
+            font-size: 9px;
+            color: var(--text-muted);
+            margin-bottom: 1px;
+        }
+
+        .crosshair-item-value {
+            font-size: 14px;
+            font-weight: 700;
+            font-family: 'Consolas', monospace;
+        }
+
+        /* Progress Ring */
+        .progress-ring-container {
+            display: flex;
+            justify-content: center;
+            padding: 4px 0;
+        }
+
+        .progress-ring {
+            position: relative;
+            width: 80px;
+            height: 80px;
+        }
+
+        .progress-ring svg {
+            transform: rotate(-90deg);
+        }
+
+        .progress-ring-bg {
+            fill: none;
+            stroke: rgba(255,255,255,0.1);
+            stroke-width: 10;
+        }
+
+        .progress-ring-fill {
+            fill: none;
+            stroke: var(--primary);
+            stroke-width: 10;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.3s ease, stroke 0.3s ease;
+        }
+
+        .progress-ring-fill.warning {
+            stroke: var(--warning);
+        }
+
+        .progress-ring-fill.success {
+            stroke: var(--success);
+        }
+
+        .progress-ring-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .progress-ring-value {
+            font-size: 18px;
+            font-weight: 700;
+            font-family: 'Consolas', monospace;
+        }
+
+        .progress-ring-label {
+            font-size: 9px;
+            color: var(--text-muted);
+        }
+
+        /* Status badge */
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 4px;
+        }
+
+        .status-badge.idle {
+            background: rgba(255,255,255,0.1);
+            color: var(--text-muted);
+        }
+
+        .status-badge.running {
+            background: rgba(0,217,165,0.2);
+            color: var(--primary);
+        }
+
+        .status-badge.success {
+            background: rgba(16,185,129,0.2);
+            color: var(--success);
+        }
+
+        .status-badge.warning {
+            background: rgba(245,158,11,0.2);
+            color: var(--warning);
+        }
+
+        /* Mode buttons */
+        .mode-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3px;
+        }
+
+        .mode-btn {
+            padding: 5px 3px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: transparent;
+            color: var(--text);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 10px;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .mode-btn:hover {
+            border-color: var(--primary);
+            background: rgba(0, 217, 165, 0.1);
+        }
+
+        .mode-btn.active {
+            border-color: var(--primary);
+            background: var(--primary);
+            color: var(--bg-dark);
+        }
+
+        .mode-btn .icon {
+            font-size: 12px;
+            display: block;
+            margin-bottom: 1px;
+        }
+
+        /* Action button */
+        .action-btn {
+            width: 100%;
+            padding: 10px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .action-btn:hover {
+            opacity: 0.9;
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Status bar */
+        #status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 16px;
+            background: var(--bg-panel);
+            border-top: 1px solid rgba(255,255,255,0.1);
+            font-size: 11px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--warning);
+        }
+
+        .status-dot.connected {
+            background: var(--success);
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-panel);
+            border-radius: 16px;
+            padding: 24px;
+            width: 90%;
+            max-width: 400px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 4px;
+        }
+
+        .modal-subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .result-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .result-item {
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .result-item-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .result-item-value {
+            font-size: 24px;
+            font-weight: 700;
+            font-family: 'Consolas', monospace;
+        }
+
+        .result-item-bar {
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            margin-top: 6px;
+            overflow: hidden;
+        }
+
+        .result-item-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+
+        .modal-btn {
+            width: 100%;
+            padding: 12px;
+            margin-top: 16px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* Trajectory card */
+        #trajectory-card {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <div class="logo">颈椎康复训练</div>
+            <div class="header-info">陀螺仪模式</div>
+        </header>
+
+        <main>
+            <div id="detection-area">
+                <canvas id="crosshair-canvas"></canvas>
+            </div>
+
+            <div id="side-panel">
+                <!-- Status -->
+                <div class="panel-title">状态</div>
+                <div class="data-card">
+                    <div class="crosshair-display">
+                        <div class="crosshair-grid">
+                            <div class="crosshair-item">
+                                <div class="crosshair-item-label">Pitch</div>
+                                <div class="crosshair-item-value" id="pitch-value" style="color: var(--primary)">0.0°</div>
+                            </div>
+                            <div class="crosshair-item">
+                                <div class="crosshair-item-label">Yaw</div>
+                                <div class="crosshair-item-value" id="yaw-value" style="color: var(--secondary)">0.0°</div>
+                            </div>
+                            <div class="crosshair-item">
+                                <div class="crosshair-item-label">误差</div>
+                                <div class="crosshair-item-value" id="error-value" style="color: var(--danger)">0.0°</div>
+                            </div>
+                            <div class="crosshair-item">
+                                <div class="crosshair-item-label">保持</div>
+                                <div class="crosshair-item-value" id="time-value" style="color: var(--warning)">0.0s</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Progress -->
+                <div class="panel-title">进度</div>
+                <div class="data-card">
+                    <div class="progress-ring-container">
+                        <div class="progress-ring">
+                            <svg width="80" height="80">
+                                <circle class="progress-ring-bg" cx="40" cy="40" r="35"></circle>
+                                <circle class="progress-ring-fill" id="progress-ring-fill" cx="40" cy="40" r="35"
+                                    stroke-dasharray="220" stroke-dashoffset="220"></circle>
+                            </svg>
+                            <div class="progress-ring-text">
+                                <div class="progress-ring-value" id="progress-text">0%</div>
+                                <div class="progress-ring-label">进度</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mode Selection -->
+                <div class="panel-title">检测模式</div>
+                <div class="mode-grid">
+                    <button class="mode-btn active" data-mode="integrated">
+                        <span class="icon">◎</span>
+                        综合检测
+                    </button>
+                    <button class="mode-btn" data-mode="coordination">
+                        <span class="icon">∞</span>
+                        协调性
+                    </button>
+                </div>
+
+                <!-- Dot Position -->
+                <div class="panel-title">光点位置</div>
+                <div class="data-card">
+                    <div class="data-row">
+                        <span class="data-label">X</span>
+                        <span class="data-value" id="dot-x">0</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Y</span>
+                        <span class="data-value" id="dot-y">0</span>
+                    </div>
+                </div>
+
+                <!-- Zoom Control -->
+                <div class="panel-title">标靶大小</div>
+                <div class="data-card">
+                    <div class="data-row">
+                        <span class="data-label">缩放</span>
+                        <input type="range" id="zoom-slider" min="50" max="200" value="100" style="width: 80px;">
+                        <span class="data-value" id="zoom-value">100%</span>
+                    </div>
+                </div>
+
+                <!-- Action -->
+                <button class="action-btn" id="action-btn">开始检测</button>
+            </div>
+        </main>
+
+        <div id="status-bar">
+            <div class="status-item">
+                <div class="status-dot" id="device-status"></div>
+                <span id="device-text">模拟模式</span>
+            </div>
+            <div class="status-item">
+                <span id="current-time">00:00</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trajectory Selection Card -->
+    <div id="trajectory-card" style="display: block; position: fixed; bottom: 120px; left: 20px; background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 10px; z-index: 100; cursor: move;">
+        <div id="trajectory-card-header" style="font-size: 10px; color: var(--text-muted); margin-bottom: 6px; cursor: move;">📍 拖动调整位置</div>
+        <div style="display: flex; gap: 4px; margin-bottom: 8px;">
+            <button class="traj-btn active" data-traj="horizontal" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: var(--primary); color: var(--bg-dark); border-radius: 4px; cursor: pointer; font-size: 10px;">水平</button>
+            <button class="traj-btn" data-traj="vertical" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直</button>
+            <button class="traj-btn" data-traj="vertical_left" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直左</button>
+            <button class="traj-btn" data-traj="vertical_right" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直右</button>
+            <button class="traj-btn" data-traj="figure8" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">8字</button>
+        </div>
+    </div>
+
+    <!-- Result Modal -->
+    <div class="modal" id="result-modal">
+        <div class="modal-content">
+            <div class="modal-title">检测完成</div>
+            <div class="modal-subtitle">您的颈椎健康评估报告</div>
+            <div class="result-grid">
+                <div class="result-item">
+                    <div class="result-item-label">位置觉得分</div>
+                    <div class="result-item-value" id="result-position" style="color: var(--primary)">0</div>
+                    <div class="result-item-bar">
+                        <div class="result-item-bar-fill" id="bar-position" style="width: 0%; background: var(--primary)"></div>
+                    </div>
+                </div>
+                <div class="result-item">
+                    <div class="result-item-label">稳定性得分</div>
+                    <div class="result-item-value" id="result-stability" style="color: var(--secondary)">0</div>
+                    <div class="result-item-bar">
+                        <div class="result-item-bar-fill" id="bar-stability" style="width: 0%; background: var(--secondary)"></div>
+                    </div>
+                </div>
+                <div class="result-item">
+                    <div class="result-item-label">活动范围得分</div>
+                    <div class="result-item-value" id="result-rom" style="color: var(--warning)">0</div>
+                    <div class="result-item-bar">
+                        <div class="result-item-bar-fill" id="bar-rom" style="width: 0%; background: var(--warning)"></div>
+                    </div>
+                </div>
+                <div class="result-item">
+                    <div class="result-item-label">综合评分</div>
+                    <div class="result-item-value" id="result-coordination" style="color: #EC4899">0</div>
+                    <div class="result-item-bar">
+                        <div class="result-item-bar-fill" id="bar-coordination" style="width: 0%; background: #EC4899"></div>
+                    </div>
+                </div>
+            </div>
+            <button class="modal-btn" id="close-modal">确定</button>
+        </div>
+    </div>
+
+    <script>
+        // ============ State ============
+        const state = {
+            mode: 'integrated',
+            isRunning: false,
+            isHolding: false,
+
+            // Gyroscope data
+            pitch: 0,
+            yaw: 0,
+            roll: 0,
+
+            // Position dot
+            dotX: 0,
+            dotY: 0,
+
+            // Detection state
+            holdTime: 0,
+            holdThreshold: 5,
+            holdDuration: 3,
+            error: 0,
+
+            // Integrated detection state
+            integratedPhase: 0, // 0: hold target, 1: tracking, 2: ROM
+            integratedPhaseTime: 0,
+            integratedResults: {
+                positionScore: 0,
+                stabilityScore: 0,
+                romScore: 0
+            },
+
+            // Progress
+            progress: 0,
+            testDuration: 5,
+
+            // Zoom factor for crosshair size
+            zoomFactor: 1,
+
+            // Results
+            results: {
+                position: 0,
+                stability: 0,
+                rom: 0,
+                coordination: 0,
+            },
+
+            // Trajectory type
+            trajectoryType: 'horizontal',
+
+            // Green dot trail
+            trail: [],
+            maxTrailLength: 200,
+
+            // ROM tracking
+            romRange: {
+                pitch: { min: 0, max: 0 },
+                yaw: { min: 0, max: 0 }
+            },
+
+            // Crosshair offset
+            crosshairOffsetX: 0,
+            crosshairOffsetY: 0,
+            isDraggingCrosshair: false,
+            lastDragX: 0,
+            lastDragY: 0
+        };
+
+        // ============ Canvas / Crosshair ============
+        const canvas = document.getElementById('crosshair-canvas');
+        const ctx = canvas.getContext('2d');
+        let centerX, centerY;
+        let crosshairSize = 300;
+        let dotRadius = 12;
+        let ringRadius = 100;
+
+        // Target position
+        let targetX = 0;
+        let targetY = 0;
+
+        function resizeCanvas() {
+            const container = document.getElementById('detection-area');
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            canvas.style.width = rect.width + 'px';
+            canvas.style.height = rect.height + 'px';
+            centerX = canvas.width / 2;
+            centerY = canvas.height / 2;
+            crosshairSize = Math.min(canvas.width, canvas.height) * 0.5 * state.zoomFactor;
+            ringRadius = crosshairSize * 0.35;
+        }
+
+        // Draw trail from state
+        function drawTrail() {
+            if (state.trail.length < 2) return;
+
+            const actualCenterX = centerX + state.crosshairOffsetX;
+            const actualCenterY = centerY + state.crosshairOffsetY;
+            const trailScale = ringRadius / 100;
+            ctx.beginPath();
+            for (let i = 0; i < state.trail.length; i++) {
+                const point = state.trail[i];
+                const x = actualCenterX + point.x * trailScale;
+                const y = actualCenterY - point.y * trailScale;
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.strokeStyle = 'rgba(0, 217, 165, 0.3)';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.stroke();
+        }
+
+        function drawCrosshair() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const actualCenterX = centerX + state.crosshairOffsetX;
+            const actualCenterY = centerY + state.crosshairOffsetY;
+            const scale = ringRadius / 100;
+
+            // Background grid
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+            ctx.lineWidth = 1;
+            const gridStep = 50;
+            for (let x = 0; x < canvas.width; x += gridStep) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += gridStep) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            // Outer reference ring (dashed)
+            ctx.beginPath();
+            ctx.arc(actualCenterX, actualCenterY, ringRadius, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([10, 10]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Inner ring
+            ctx.beginPath();
+            ctx.arc(actualCenterX, actualCenterY, ringRadius * 0.5, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Horizontal line
+            ctx.beginPath();
+            ctx.moveTo(actualCenterX - crosshairSize / 2, actualCenterY);
+            ctx.lineTo(actualCenterX + crosshairSize / 2, actualCenterY);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 10;
+            ctx.stroke();
+
+            // Vertical line (center)
+            ctx.beginPath();
+            ctx.moveTo(actualCenterX, actualCenterY - crosshairSize / 2);
+            ctx.lineTo(actualCenterX, actualCenterY + crosshairSize / 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 10;
+            ctx.stroke();
+
+            // Left vertical line (at marker position)
+            ctx.beginPath();
+            ctx.moveTo(actualCenterX - crosshairSize / 2 + 15, actualCenterY - crosshairSize / 2);
+            ctx.lineTo(actualCenterX - crosshairSize / 2 + 15, actualCenterY + crosshairSize / 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 10;
+            ctx.stroke();
+
+            // Right vertical line (at marker position)
+            ctx.beginPath();
+            ctx.moveTo(actualCenterX + crosshairSize / 2 - 15, actualCenterY - crosshairSize / 2);
+            ctx.lineTo(actualCenterX + crosshairSize / 2 - 15, actualCenterY + crosshairSize / 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 10;
+            ctx.stroke();
+
+            // Center crosshair marks
+            const markSize = 15;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 5;
+
+            ctx.beginPath();
+            ctx.moveTo(actualCenterX - markSize, actualCenterY - crosshairSize / 2 + 10);
+            ctx.lineTo(actualCenterX + markSize, actualCenterY - crosshairSize / 2 + 10);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(actualCenterX - markSize, actualCenterY + crosshairSize / 2 - 10);
+            ctx.lineTo(actualCenterX + markSize, actualCenterY + crosshairSize / 2 - 10);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(actualCenterX - crosshairSize / 2 + 10, actualCenterY - markSize);
+            ctx.lineTo(actualCenterX - crosshairSize / 2 + 10, actualCenterY + markSize);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(actualCenterX + crosshairSize / 2 - 10, actualCenterY - markSize);
+            ctx.lineTo(actualCenterX + crosshairSize / 2 - 10, actualCenterY + markSize);
+            ctx.stroke();
+
+            // Calculate dot position
+            const dotX = actualCenterX + state.dotX * scale;
+            const dotY = actualCenterY - state.dotY * scale;
+
+            // Draw target position and trajectory for tracking modes
+            if (state.mode === 'stability' || state.mode === 'coordination' || state.mode === 'integrated') {
+                let tX = actualCenterX + targetX * scale;
+                let tY = actualCenterY - targetY * scale;
+
+                // Draw trajectory path for coordination/integrated mode
+                if (state.mode === 'coordination' || state.mode === 'integrated') {
+                    const isFigure8 = state.mode === 'integrated' || state.trajectoryType === 'figure8';
+                    const isHorizontal = state.trajectoryType === 'horizontal';
+                    const isVertical = state.trajectoryType === 'vertical';
+                    const isVerticalLeft = state.trajectoryType === 'vertical_left';
+                    const isVerticalRight = state.trajectoryType === 'vertical_right';
+
+                    ctx.beginPath();
+                    for (let i = 0; i <= 200; i++) {
+                        const tParam = (i / 200) * Math.PI * 2;
+                        let pathX, pathY;
+                        if (isFigure8) {
+                            pathX = actualCenterX + Math.sin(tParam) * scale * 120;
+                            pathY = actualCenterY - Math.sin(tParam) * Math.cos(tParam) * scale * 70;
+                        } else if (isHorizontal) {
+                            pathX = actualCenterX + Math.sin(tParam) * scale * 80;
+                            pathY = actualCenterY;
+                        } else if (isVertical) {
+                            pathX = actualCenterX;
+                            pathY = actualCenterY - Math.cos(tParam) * scale * 60;
+                        } else {
+                            // vertical_left and vertical_right: no trajectory line, just dot
+                            pathX = actualCenterX;
+                            pathY = actualCenterY;
+                        }
+                        if (i === 0) {
+                            ctx.moveTo(pathX, pathY);
+                        } else {
+                            ctx.lineTo(pathX, pathY);
+                        }
+                    }
+                    ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
+                    ctx.lineWidth = 10;
+                    ctx.stroke();
+                }
+
+                // Draw target dot with glow
+                const targetGradient = ctx.createRadialGradient(tX, tY, 0, tX, tY, dotRadius * 2);
+                targetGradient.addColorStop(0, 'rgba(239, 68, 68, 0.8)');
+                targetGradient.addColorStop(0.5, 'rgba(239, 68, 68, 0.3)');
+                targetGradient.addColorStop(1, 'rgba(239, 68, 68, 0)');
+                ctx.beginPath();
+                ctx.arc(tX, tY, dotRadius * 2, 0, Math.PI * 2);
+                ctx.fillStyle = targetGradient;
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(tX, tY, dotRadius, 0, Math.PI * 2);
+                ctx.fillStyle = '#EF4444';
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(tX, tY, dotRadius, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            // Draw position dot with glow
+            const gradient = ctx.createRadialGradient(dotX, dotY, 0, dotX, dotY, dotRadius * 2);
+            gradient.addColorStop(0, 'rgba(0, 217, 165, 0.8)');
+            gradient.addColorStop(0.5, 'rgba(0, 217, 165, 0.3)');
+            gradient.addColorStop(1, 'rgba(0, 217, 165, 0)');
+            ctx.beginPath();
+            ctx.arc(dotX, dotY, dotRadius * 2, 0, Math.PI * 2);
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
+            ctx.fillStyle = '#00D9A5';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Trail effect
+            drawTrail();
+        }
+
+        // ============ Mouse / Touch Simulation ============
+        let isDraggingDot = false;
+        let spacePressed = false;
+
+        function initInput() {
+            canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+            canvas.addEventListener('mousedown', (e) => {
+                if (e.button === 0 && !spacePressed) {
+                    isDraggingDot = true;
+                    updateDotPosition(e);
+                } else if (e.button === 2 || spacePressed) {
+                    state.isDraggingCrosshair = true;
+                    state.lastDragX = e.clientX;
+                    state.lastDragY = e.clientY;
+                }
+            });
+
+            canvas.addEventListener('mouseup', (e) => {
+                if (e.button === 0) {
+                    isDraggingDot = false;
+                    returnToCenter();
+                } else {
+                    state.isDraggingCrosshair = false;
+                }
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                isDraggingDot = false;
+                state.isDraggingCrosshair = false;
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                if (isDraggingDot) {
+                    updateDotPosition(e);
+                } else if (state.isDraggingCrosshair) {
+                    const dx = e.clientX - state.lastDragX;
+                    const dy = e.clientY - state.lastDragY;
+                    state.crosshairOffsetX += dx;
+                    state.crosshairOffsetY += dy;
+                    state.lastDragX = e.clientX;
+                    state.lastDragY = e.clientY;
+                }
+            });
+
+            // Touch events
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (e.touches.length === 1) {
+                    isDraggingDot = true;
+                    updateDotPosition(e.touches[0]);
+                }
+            });
+
+            canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (e.touches.length === 1 && isDraggingDot) {
+                    updateDotPosition(e.touches[0]);
+                }
+            });
+
+            canvas.addEventListener('touchend', () => {
+                isDraggingDot = false;
+                returnToCenter();
+            });
+
+            // Keyboard events
+            document.addEventListener('keydown', (e) => {
+                if (e.code === 'Space' && !e.repeat) {
+                    e.preventDefault();
+                    spacePressed = true;
+                } else if (e.code === 'ArrowUp') {
+                    e.preventDefault();
+                    state.crosshairOffsetY -= 10;
+                } else if (e.code === 'ArrowDown') {
+                    e.preventDefault();
+                    state.crosshairOffsetY += 10;
+                } else if (e.code === 'ArrowLeft') {
+                    e.preventDefault();
+                    state.crosshairOffsetX -= 10;
+                } else if (e.code === 'ArrowRight') {
+                    e.preventDefault();
+                    state.crosshairOffsetX += 10;
+                } else if (e.code === 'KeyR') {
+                    state.crosshairOffsetX = 0;
+                    state.crosshairOffsetY = 0;
+                }
+            });
+
+            document.addEventListener('keyup', (e) => {
+                if (e.code === 'Space') {
+                    spacePressed = false;
+                }
+            });
+        }
+
+        function updateDotPosition(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const actualCenterX = centerX + state.crosshairOffsetX;
+            const actualCenterY = centerY + state.crosshairOffsetY;
+
+            const offsetX = x - actualCenterX;
+            const offsetY = actualCenterY - y;
+
+            const scale = 100 / ringRadius;
+            state.dotX = offsetX * scale;
+            state.dotY = offsetY * scale;
+
+            // Record trail
+            state.trail.push({ x: state.dotX, y: state.dotY });
+            if (state.trail.length > state.maxTrailLength) {
+                state.trail.shift();
+            }
+
+            state.yaw = state.dotX * 0.45;
+            state.pitch = state.dotY * 0.45;
+
+            updateDataDisplay();
+        }
+
+        function returnToCenter() {
+            const returnSpeed = 0.05;
+            state.dotX *= (1 - returnSpeed);
+            state.dotY *= (1 - returnSpeed);
+            state.yaw = state.dotX * 0.45;
+            state.pitch = state.dotY * 0.45;
+        }
+
+        // ============ UI Updates ============
+        function updateDataDisplay() {
+            document.getElementById('pitch-value').textContent = state.pitch.toFixed(1) + '°';
+            document.getElementById('yaw-value').textContent = state.yaw.toFixed(1) + '°';
+            state.error = Math.sqrt(state.dotX ** 2 + state.dotY ** 2);
+            document.getElementById('error-value').textContent = state.error.toFixed(1) + '°';
+            document.getElementById('dot-x').textContent = Math.round(state.dotX);
+            document.getElementById('dot-y').textContent = Math.round(state.dotY);
+        }
+
+        function updateProgress() {
+            const progressRing = document.getElementById('progress-ring-fill');
+            const progressText = document.getElementById('progress-text');
+            const circumference = 2 * Math.PI * 35;
+            const offset = circumference - state.progress * circumference;
+            progressRing.style.strokeDashoffset = offset;
+            progressText.textContent = Math.round(state.progress * 100) + '%';
+
+            if (state.progress >= 1) {
+                progressRing.classList.add('success');
+                progressRing.classList.remove('warning');
+            } else if (state.progress >= 0.5) {
+                progressRing.classList.add('warning');
+                progressRing.classList.remove('success');
+            } else {
+                progressRing.classList.remove('warning', 'success');
+            }
+        }
+
+        function showResults() {
+            let positionScore, stabilityScore, romScore;
+
+            if (state.mode === 'integrated') {
+                // Use the real-time calculated scores
+                positionScore = state.integratedResults.positionScore;
+                stabilityScore = state.integratedResults.stabilityScore;
+                romScore = state.integratedResults.romScore;
+            } else {
+                positionScore = state.results.position;
+                stabilityScore = state.results.stability;
+                romScore = state.results.rom;
+            }
+
+            // Calculate overall score
+            const overall = Math.round((positionScore + stabilityScore + romScore) / 3);
+
+            document.getElementById('result-position').textContent = Math.round(positionScore);
+            document.getElementById('bar-position').style.width = positionScore + '%';
+
+            document.getElementById('result-stability').textContent = Math.round(stabilityScore);
+            document.getElementById('bar-stability').style.width = stabilityScore + '%';
+
+            document.getElementById('result-rom').textContent = Math.round(romScore);
+            document.getElementById('bar-rom').style.width = romScore + '%';
+
+            document.getElementById('result-coordination').textContent = overall;
+            document.getElementById('bar-coordination').style.width = overall + '%';
+
+            document.getElementById('result-modal').classList.add('show');
+        }
+
+        // ============ Detection Logic ============
+        function setMode(mode) {
+            state.mode = mode;
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.mode === mode);
+            });
+
+            const trajCard = document.getElementById('trajectory-card');
+            if (trajCard) {
+                trajCard.style.display = mode === 'coordination' ? 'block' : 'none';
+            }
+
+            state.progress = 0;
+            state.holdTime = 0;
+            state.integratedPhase = 0;
+            updateProgress();
+
+            state.trail = [];
+
+            // Reset error tracking
+            state.lastError = 0;
+
+            if (mode === 'integrated' || mode === 'coordination') {
+                targetX = 0;
+                targetY = 0;
+            }
+        }
+
+        async function startDetection() {
+            if (state.isRunning) return;
+
+            state.isRunning = true;
+            state.progress = 0;
+            state.holdTime = 0;
+            state.results[state.mode] = 0;
+
+            // Set test duration based on mode
+            state.testDuration = state.mode === 'integrated' ? 20 : 5;
+
+            state.romRange = {
+                pitch: { min: state.pitch, max: state.pitch },
+                yaw: { min: state.yaw, max: state.yaw }
+            };
+
+            // Reset integrated results
+            state.integratedResults = {
+                positionScore: 0,
+                stabilityScore: 0,
+                romScore: 0
+            };
+
+            document.getElementById('action-btn').textContent = '检测中...';
+            document.getElementById('action-btn').disabled = true;
+
+            const startTime = Date.now();
+
+            function update() {
+                if (!state.isRunning) return;
+
+                const elapsed = (Date.now() - startTime) / 1000;
+                state.progress = Math.min(1, elapsed / state.testDuration);
+
+                switch (state.mode) {
+                    case 'integrated':
+                        // Single continuous detection measuring all three aspects simultaneously
+                        // Target moves in a complex figure-8 pattern that:
+                        // - Exercises all directions (ROM)
+                        // - Has varying speeds (stability)
+                        // - Requires position accuracy throughout
+
+                        const t = elapsed * 0.3;
+                        // Figure-8 trajectory that covers all directions
+                        targetX = Math.sin(t) * 100;
+                        targetY = Math.sin(t) * Math.cos(t) * 70;
+                        state.progress = elapsed / 20;
+
+                        // Track ROM (all directions)
+                        state.romRange.pitch.min = Math.min(state.romRange.pitch.min, state.pitch);
+                        state.romRange.pitch.max = Math.max(state.romRange.pitch.max, state.pitch);
+                        state.romRange.yaw.min = Math.min(state.romRange.yaw.min, state.yaw);
+                        state.romRange.yaw.max = Math.max(state.romRange.yaw.max, state.yaw);
+
+                        // Calculate all three scores in real-time
+                        const trackingError = Math.sqrt((state.dotX - targetX) ** 2 + (state.dotY - targetY) ** 2);
+
+                        // Position score: based on current tracking error
+                        state.integratedResults.positionScore = Math.max(0, 100 - trackingError);
+
+                        // Stability score: based on tracking error variance (smoothness)
+                        if (!state.lastError) state.lastError = trackingError;
+                        const errorDelta = Math.abs(trackingError - state.lastError);
+                        state.lastError = trackingError;
+                        state.integratedResults.stabilityScore = Math.max(0, 100 - errorDelta * 10);
+
+                        // ROM score: calculated from tracked ranges
+                        const pitchRange = state.romRange.pitch.max - state.romRange.pitch.min;
+                        const yawRange = state.romRange.yaw.max - state.romRange.yaw.min;
+                        const expectedPitch = 45;
+                        const expectedYaw = 60;
+                        state.integratedResults.romScore = Math.min(100,
+                            ((pitchRange / expectedPitch) + (yawRange / expectedYaw)) / 2 * 100
+                        );
+                        break;
+
+                    case 'position':
+                        if (state.error <= state.holdThreshold) {
+                            state.holdTime += 1 / 60;
+                        } else {
+                            state.holdTime = Math.max(0, state.holdTime - 0.5);
+                        }
+                        state.results.position = Math.min(100, (state.holdTime / state.holdDuration) * 100);
+                        break;
+
+                    case 'stability':
+                        const time = elapsed * 0.5;
+                        targetX = Math.sin(time) * 70;
+                        targetY = Math.cos(time) * 70;
+
+                        const stabilityError = Math.sqrt((state.dotX - targetX) ** 2 + (state.dotY - targetY) ** 2);
+                        state.results.stability = Math.max(0, 100 - stabilityError);
+                        break;
+
+                    case 'rom':
+                        state.romRange.pitch.min = Math.min(state.romRange.pitch.min, state.pitch);
+                        state.romRange.pitch.max = Math.max(state.romRange.pitch.max, state.pitch);
+                        state.romRange.yaw.min = Math.min(state.romRange.yaw.min, state.yaw);
+                        state.romRange.yaw.max = Math.max(state.romRange.yaw.max, state.yaw);
+
+                        const romPitchRange = state.romRange.pitch.max - state.romRange.pitch.min;
+                        const romYawRange = state.romRange.yaw.max - state.romRange.yaw.min;
+                        const romExpectedPitch = 45;
+                        const romExpectedYaw = 60;
+
+                        state.results.rom = Math.min(100,
+                            ((romPitchRange / romExpectedPitch) + (romYawRange / romExpectedYaw)) / 2 * 100
+                        );
+                        break;
+
+                    case 'coordination':
+                        const speed = 0.3;
+                        const smoothT = elapsed * speed;
+
+                        if (state.trajectoryType === 'horizontal') {
+                            targetX = Math.sin(smoothT) * 80;
+                            targetY = 0;
+                            const cyclesCompleted = smoothT / (2 * Math.PI);
+                            state.progress = Math.min(1, cyclesCompleted / 2);
+                        } else if (state.trajectoryType === 'vertical') {
+                            targetX = 0;
+                            targetY = Math.sin(smoothT) * 60;
+                            const cyclesCompleted = smoothT / (2 * Math.PI);
+                            state.progress = Math.min(1, cyclesCompleted / 2);
+                        } else if (state.trajectoryType === 'vertical_left') {
+                            // Move up/down along left edge
+                            targetX = -100 * state.zoomFactor;
+                            targetY = Math.sin(smoothT) * 60;
+                            const cyclesCompleted = smoothT / (2 * Math.PI);
+                            state.progress = Math.min(1, cyclesCompleted / 2);
+                        } else if (state.trajectoryType === 'vertical_right') {
+                            // Move up/down along right edge
+                            targetX = 100 * state.zoomFactor;
+                            targetY = Math.sin(smoothT) * 60;
+                            const cyclesCompleted = smoothT / (2 * Math.PI);
+                            state.progress = Math.min(1, cyclesCompleted / 2);
+                        } else {
+                            targetX = Math.sin(smoothT) * 120;
+                            targetY = Math.sin(smoothT) * Math.cos(smoothT) * 70;
+                            const cyclesCompleted = smoothT / (4 * Math.PI);
+                            state.progress = Math.min(1, cyclesCompleted / 2);
+                        }
+
+                        const coordError = Math.sqrt((state.dotX - targetX) ** 2 + (state.dotY - targetY) ** 2);
+                        if (coordError > 25) {
+                            state.coordFailTime = (state.coordFailTime || 0) + 1/60;
+                        } else {
+                            state.coordFailTime = Math.max(0, (state.coordFailTime || 0) - 0.5);
+                        }
+                        state.results.coordination = state.coordFailTime < 1 ? 100 : Math.max(0, 100 - state.coordFailTime * 10);
+                        break;
+                }
+
+                document.getElementById('time-value').textContent = state.holdTime.toFixed(1) + 's';
+                updateProgress();
+
+                if (state.progress >= 1) {
+                    stopDetection();
+                } else {
+                    requestAnimationFrame(update);
+                }
+            }
+
+            requestAnimationFrame(update);
+        }
+
+        function stopDetection() {
+            state.isRunning = false;
+            state.trail = [];
+            targetX = 0;
+            targetY = 0;
+            document.getElementById('action-btn').textContent = '开始检测';
+            document.getElementById('action-btn').disabled = false;
+
+            const trajCard = document.getElementById('trajectory-card');
+            if (trajCard) {
+                trajCard.style.display = 'none';
+            }
+
+            showResults();
+        }
+
+        // ============ Animation Loop ============
+        function animate() {
+            drawCrosshair();
+            updateDataDisplay();
+
+            if (!isDraggingDot) {
+                state.dotX *= 0.98;
+                state.dotY *= 0.98;
+                state.yaw = state.dotX * 0.45;
+                state.pitch = state.dotY * 0.45;
+
+                if (state.isRunning) {
+                    state.trail.push({ x: state.dotX, y: state.dotY });
+                    if (state.trail.length > state.maxTrailLength) {
+                        state.trail.shift();
+                    }
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // ============ Event Listeners ============
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (state.isRunning) return;
+                setMode(btn.dataset.mode);
+            });
+        });
+
+        document.querySelectorAll('.traj-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (state.isRunning) return;
+                state.trajectoryType = btn.dataset.traj;
+                document.querySelectorAll('.traj-btn').forEach(b => {
+                    b.style.background = b === btn ? 'var(--primary)' : 'transparent';
+                    b.style.color = b === btn ? 'var(--bg-dark)' : 'var(--text)';
+                });
+
+                // Jump to start position for vertical_left/right
+                // Position based on zoom factor so it stays on the outer vertical lines
+                const baseX = 100 * state.zoomFactor;
+                if (state.trajectoryType === 'vertical_left') {
+                    targetX = -baseX;
+                    targetY = 0;
+                } else if (state.trajectoryType === 'vertical_right') {
+                    targetX = baseX;
+                    targetY = 0;
+                }
+            });
+        });
+
+        // Zoom slider
+        const zoomSlider = document.getElementById('zoom-slider');
+        const zoomValue = document.getElementById('zoom-value');
+        if (zoomSlider) {
+            zoomSlider.addEventListener('input', (e) => {
+                state.zoomFactor = e.target.value / 100;
+                zoomValue.textContent = e.target.value + '%';
+                resizeCanvas();
+            });
+        }
+
+        document.getElementById('action-btn').addEventListener('click', () => {
+            if (state.isRunning) return;
+            startDetection();
+        });
+
+        // ============ Mouse Wheel Zoom ============
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomDelta = e.deltaY > 0 ? -0.1 : 0.1;
+            state.zoomFactor = Math.max(0.3, Math.min(3, state.zoomFactor + zoomDelta));
+            document.getElementById('zoom-slider').value = state.zoomFactor * 100;
+            document.getElementById('zoom-value').textContent = Math.round(state.zoomFactor * 100) + '%';
+            resizeCanvas();
+        }, { passive: false });
+
+        // Trajectory card draggable
+        const trajCard = document.getElementById('trajectory-card');
+        let isDragging = false;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        trajCard.addEventListener('mousedown', (e) => {
+            if (e.target.classList.contains('traj-btn')) return;
+            isDragging = true;
+            dragOffsetX = e.clientX - trajCard.offsetLeft;
+            dragOffsetY = e.clientY - trajCard.offsetTop;
+            trajCard.style.cursor = 'grabbing';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const x = Math.max(0, Math.min(window.innerWidth - trajCard.offsetWidth, e.clientX - dragOffsetX));
+            const y = Math.max(0, Math.min(window.innerHeight - trajCard.offsetHeight, e.clientY - dragOffsetY));
+            trajCard.style.left = x + 'px';
+            trajCard.style.bottom = 'auto';
+            trajCard.style.top = y + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            trajCard.style.cursor = 'move';
+        });
+
+        document.getElementById('close-modal').addEventListener('click', () => {
+            document.getElementById('result-modal').classList.remove('show');
+        });
+
+        // ============ Init ============
+        function init() {
+            resizeCanvas();
+            initInput();
+            animate();
+            updateProgress();
+        }
+
+        // Clock
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('current-time').textContent =
+                now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        }, 1000);
+
+        if (document.readyState === 'complete') {
+            setTimeout(init, 100);
+        } else {
+            window.addEventListener('load', () => setTimeout(init, 100));
+        }
+
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+        });
+    </script>
+</body>
+</html>
