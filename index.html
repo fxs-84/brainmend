@@ -215,9 +215,10 @@ const CONFIG = {
     COORDINATION_DURATION: 5,
     TRAJECTORY_SPEED: 0.3,
 
-    // 评分期望值
-    EXPECTED_PITCH_RANGE: 45,
-    EXPECTED_YAW_RANGE: 60,
+    // 颈椎正常活动范围
+    // 前屈: 35-45°, 后伸: 35-45°, 旋转: 60-80°
+    EXPECTED_PITCH_RANGE: 80,      // 前屈+后伸总范围约70-90°
+    EXPECTED_YAW_RANGE: 140,        // 左右旋转各60-80°
 
     // 轨迹幅度
     HORIZONTAL_AMPLITUDE: 80,
