@@ -381,8 +381,8 @@ function drawStaticElements() {
     ctx.lineWidth = 10;
     ctx.stroke();
 
-    // 中心垂直线（比外圆短一些）
-    const vLineLength = ringRadius * 1.3;
+    // 中心垂直线（比外圆直径短很多）
+    const vLineLength = ringRadius * 0.85;
     ctx.beginPath();
     ctx.moveTo(actualCenterX, actualCenterY - vLineLength);
     ctx.lineTo(actualCenterX, actualCenterY + vLineLength);
