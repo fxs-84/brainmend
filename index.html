@@ -25,7 +25,7 @@
         main { flex: 1; display: flex; position: relative; }
         #detection-area { flex: 1; position: relative; background: radial-gradient(circle at center, #1a1f2e 0%, var(--bg-dark) 100%); overflow: hidden; }
         #crosshair-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; }
-        #side-panel { width: 260px; min-width: 260px; background: var(--bg-panel); border-left: 1px solid rgba(255,255,255,0.1); padding: 6px; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; }
+        #side-panel { width: 260px; min-width: 260px; background: var(--bg-panel); border-left: 1px solid rgba(255,255,255,0.1); padding: 6px; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; position: relative; z-index: 1000; }
         .panel-title { font-size: 9px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
         .data-card { background: rgba(255,255,255,0.03); border-radius: 8px; padding: 6px; }
         .data-row { display: flex; justify-content: space-between; align-items: center; padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
@@ -52,6 +52,8 @@
         .mode-btn:hover { border-color: var(--primary); background: rgba(0, 217, 165, 0.1); }
         .mode-btn.active { border-color: var(--primary); background: var(--primary); color: var(--bg-dark); }
         .mode-btn .icon { font-size: 12px; display: block; margin-bottom: 1px; }
+        .back-btn { width: 100%; padding: 8px; background: transparent; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; color: var(--text); font-size: 11px; cursor: pointer; margin-bottom: 8px; text-align: left; }
+        .back-btn:hover { background: rgba(255,255,255,0.05); border-color: var(--primary); }
         .action-btn { width: 100%; padding: 10px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border: none; border-radius: 8px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
         .action-btn:hover { opacity: 0.9; }
         .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -72,6 +74,16 @@
         .result-item-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
         .modal-btn { width: 100%; padding: 12px; margin-top: 16px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border: none; border-radius: 8px; color: white; font-size: 14px; font-weight: 600; cursor: pointer; }
         #trajectory-card { display: none; }
+        .collect-btn { width: 100%; padding: 8px; background: var(--warning); border: none; border-radius: 6px; color: white; font-size: 11px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; margin-top: 5px; }
+        .collect-btn:hover { opacity: 0.9; }
+        .collect-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .collected-list { max-height: 120px; overflow-y: auto; margin-top: 5px; }
+        .collected-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 6px; background: rgba(255,255,255,0.03); border-radius: 4px; margin-bottom: 3px; font-size: 10px; }
+        .collected-item .label { color: var(--text-muted); }
+        .collected-item .value { font-family: 'Consolas', monospace; color: var(--primary); }
+        .collected-item .delete-btn { background: none; border: none; color: var(--danger); cursor: pointer; padding: 2px 4px; font-size: 10px; }
+        .rom-guide-active { border: 2px solid var(--primary); background: rgba(0, 217, 165, 0.1); }
+        .rom-step-done { background: rgba(16, 185, 129, 0.2); }
     </style>
 </head>
 <body>
@@ -96,36 +108,100 @@
                                 <div class="crosshair-item-value" id="yaw-value" style="color: var(--secondary)">0.0°</div>
                             </div>
                             <div class="crosshair-item">
+                                <div class="crosshair-item-label">Roll</div>
+                                <div class="crosshair-item-value" id="roll-value" style="color: var(--warning)">0.0°</div>
+                            </div>
+                            <div class="crosshair-item">
                                 <div class="crosshair-item-label">误差</div>
                                 <div class="crosshair-item-value" id="error-value" style="color: var(--danger)">0.0°</div>
                             </div>
-                            <div class="crosshair-item">
-                                <div class="crosshair-item-label">保持</div>
-                                <div class="crosshair-item-value" id="time-value" style="color: var(--warning)">0.0s</div>
-                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="panel-title">进度</div>
-                <div class="data-card">
-                    <div class="progress-ring-container">
-                        <div class="progress-ring">
-                            <svg width="80" height="80">
-                                <circle class="progress-ring-bg" cx="40" cy="40" r="35"></circle>
-                                <circle class="progress-ring-fill" id="progress-ring-fill" cx="40" cy="40" r="35" stroke-dasharray="220" stroke-dashoffset="220"></circle>
-                            </svg>
-                            <div class="progress-ring-text">
-                                <div class="progress-ring-value" id="progress-text">0%</div>
-                                <div class="progress-ring-label">进度</div>
+                <!-- 模式选择视图 -->
+                <div id="view-mode-select">
+                    <div class="panel-title">检测模式</div>
+                    <div class="mode-grid">
+                        <button class="mode-btn active" data-mode="integrated"><span class="icon">◎</span>综合检测</button>
+                        <button class="mode-btn" data-mode="coordination"><span class="icon">∞</span>协调性</button>
+                        <button class="mode-btn" data-mode="rom"><span class="icon">□</span>ROM检测</button>
+                        <button class="mode-btn" data-mode="position"><span class="icon">◎</span>位置觉</button>
+                    </div>
+                </div>
+
+                <!-- 综合检测视图 -->
+                <div id="view-integrated" style="display: none;">
+                    <button class="back-btn" id="back-btn-integrated">← 返回</button>
+                    <div class="panel-title">进度</div>
+                    <div class="data-card">
+                        <div class="progress-ring-container">
+                            <div class="progress-ring">
+                                <svg width="80" height="80">
+                                    <circle class="progress-ring-bg" cx="40" cy="40" r="35"></circle>
+                                    <circle class="progress-ring-fill" id="progress-ring-fill" cx="40" cy="40" r="35" stroke-dasharray="220" stroke-dashoffset="220"></circle>
+                                </svg>
+                                <div class="progress-ring-text">
+                                    <div class="progress-ring-value" id="progress-text">0%</div>
+                                    <div class="progress-ring-label">进度</div>
+                                </div>
                             </div>
                         </div>
                     </div>
+                    <button class="action-btn" id="action-btn">开始检测</button>
                 </div>
-                <div class="panel-title">检测模式</div>
-                <div class="mode-grid">
-                    <button class="mode-btn active" data-mode="integrated"><span class="icon">◎</span>综合检测</button>
-                    <button class="mode-btn" data-mode="coordination"><span class="icon">∞</span>协调性</button>
+
+                <!-- 协调性检测视图 -->
+                <div id="view-coordination" style="display: none;">
+                    <button class="back-btn" id="back-btn-coordination">← 返回</button>
+                    <div class="panel-title">轨迹选择</div>
+                    <div class="data-card">
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                            <button class="traj-btn active" data-traj="horizontal" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: var(--primary); color: var(--bg-dark); border-radius: 4px; cursor: pointer; font-size: 10px;">水平</button>
+                            <button class="traj-btn" data-traj="vertical" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直</button>
+                            <button class="traj-btn" data-traj="vertical_left" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直左</button>
+                            <button class="traj-btn" data-traj="vertical_right" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直右</button>
+                            <button class="traj-btn" data-traj="figure8" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">8字</button>
+                        </div>
+                    </div>
+                    <button class="action-btn" id="action-btn-coord">开始检测</button>
                 </div>
+
+                <!-- ROM检测视图 -->
+                <div id="view-rom" style="display: none; flex-direction: column; flex: 1; gap: 5px;">
+                    <button class="back-btn" id="back-btn-rom">← 返回</button>
+                    <div class="panel-title">检测引导</div>
+                    <div class="data-card" id="rom-guide">
+                        <div style="font-size: 14px; font-weight: 600; color: var(--primary); margin-bottom: 8px; padding: 10px; background: rgba(0,217,165,0.1); border-radius: 8px; text-align: center;" id="rom-instruction">请先归零</div>
+                        <div style="font-size: 12px; color: var(--text-muted); text-align: center;" id="rom-progress">步骤 0/6</div>
+                    </div>
+                    <div class="panel-title">采集数据</div>
+                    <div class="data-card" id="rom-results" style="flex: 1; min-height: 80px;">
+                        <div id="rom-collect-count" style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">已采集 0/6</div>
+                        <div style="font-size: 10px; color: var(--text-muted);">暂无结果</div>
+                    </div>
+                    <button class="collect-btn" id="zero-btn" style="background: var(--secondary);">⟳ 归零</button>
+                    <button class="collect-btn" id="collect-btn" style="margin-top: 5px;">📍 采集当前点</button>
+                </div>
+
+                <!-- 位置觉检测视图 -->
+                <div id="view-position" style="flex-direction: column; flex: 1; gap: 5px;">
+                    <button class="back-btn" id="back-btn-position">← 返回</button>
+                    <div class="panel-title">检测引导</div>
+                    <div class="data-card" id="position-guide">
+                        <div style="font-size: 14px; font-weight: 600; color: var(--primary); margin-bottom: 8px; padding: 10px; background: rgba(0,217,165,0.1); border-radius: 8px; text-align: center;" id="position-instruction">请先归零</div>
+                        <div style="font-size: 12px; color: var(--text-muted); text-align: center;" id="position-progress">步骤 0/6</div>
+                        <div style="font-size: 18px; font-weight: 700; color: var(--warning); text-align: center; margin-top: 10px; display: none;" id="position-countdown">5</div>
+                        <div style="font-size: 12px; color: var(--danger); text-align: center; margin-top: 5px; display: none;" id="position-eye-hint">请闭眼</div>
+                    </div>
+                    <div class="panel-title">采集数据</div>
+                    <div class="data-card" id="position-results" style="flex: 1; min-height: 80px;">
+                        <div id="collect-count" style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">已采集 0/6</div>
+                        <div style="font-size: 10px; color: var(--text-muted);">暂无结果</div>
+                    </div>
+                    <button class="collect-btn" id="zero-btn-position" style="background: var(--secondary);">⟳ 归零</button>
+                    <button class="action-btn" id="start-position-btn" style="background: var(--warning); margin-top: 5px;">开始检测</button>
+                </div>
+
                 <div class="panel-title">光点位置</div>
                 <div class="data-card">
                     <div class="data-row"><span class="data-label">X</span><span class="data-value" id="dot-x">0</span></div>
@@ -139,7 +215,6 @@
                         <span class="data-value" id="zoom-value">100%</span>
                     </div>
                 </div>
-                <button class="action-btn" id="action-btn">开始检测</button>
             </div>
         </main>
         <div id="status-bar">
@@ -239,7 +314,27 @@ const CONFIG = {
         CROSSHAIR: 'rgba(255, 255, 255, 0.4)',
         RING_OUTER: 'rgba(255, 255, 255, 0.15)',
         RING_INNER: 'rgba(255, 255, 255, 0.1)'
-    }
+    },
+
+    // ROM检测步骤
+    ROM_STEPS: [
+        { name: '前屈', instruction: '请低头到最大范围', axis: 'pitch', extreme: 'min', normal: 45 },
+        { name: '后伸', instruction: '请抬头到最大范围', axis: 'pitch', extreme: 'max', normal: 45 },
+        { name: '左旋', instruction: '请头向左转到最大范围', axis: 'yaw', extreme: 'min', normal: 80 },
+        { name: '右旋', instruction: '请头向右转到最大范围', axis: 'yaw', extreme: 'max', normal: 80 },
+        { name: '左屈', instruction: '请头向左屈到最大范围', axis: 'roll', extreme: 'min', normal: 45 },
+        { name: '右屈', instruction: '请头向右屈到最大范围', axis: 'roll', extreme: 'max', normal: 45 }
+    ],
+
+    // 位置觉检测步骤（本体感觉）
+    POSITION_STEPS: [
+        { name: '右旋', instruction: '请闭眼，头向右转到最大范围', targetAxis: 'yaw', targetExtreme: 'max' },
+        { name: '左旋', instruction: '请闭眼，头向左转到最大范围', targetAxis: 'yaw', targetExtreme: 'min' },
+        { name: '后伸', instruction: '请闭眼，抬头到最大范围', targetAxis: 'pitch', targetExtreme: 'max' },
+        { name: '前屈', instruction: '请闭眼，低头到最大范围', targetAxis: 'pitch', targetExtreme: 'min' },
+        { name: '右屈', instruction: '请闭眼，头向右屈到最大范围', targetAxis: 'roll', targetExtreme: 'max' },
+        { name: '左屈', instruction: '请闭眼，头向左屈到最大范围', targetAxis: 'roll', targetExtreme: 'min' }
+    ]
 };
 
 // ============================================================
@@ -258,6 +353,31 @@ const createState = () => ({
     // 光点位置
     dotX: 0,
     dotY: 0,
+
+    // 角度偏移量（归零用）
+    pitchOffset: 0,
+    yawOffset: 0,
+    rollOffset: 0,
+
+    // 采集的ROM点
+    collectedPoints: [],
+
+    // ROM检测状态
+    romStepIndex: 0,
+    romResults: {},
+    romIsWaitingForZero: false,
+
+    // 位置觉检测状态
+    positionStepIndex: 0,
+    positionResults: [],
+    positionIsRunning: false,
+    positionInitialPitch: 0,
+    positionInitialYaw: 0,
+    positionInitialRoll: 0,
+
+    // 角度系数（动态计算以匹配实际显示范围）
+    yawCoefficient: 0.8,
+    pitchCoefficient: 0.53,
 
     // 检测状态
     holdTime: 0,
@@ -695,17 +815,227 @@ function updateCoordination(elapsed) {
 // ============================================================
 
 function updateDataDisplay() {
-    document.getElementById('pitch-value').textContent = state.pitch.toFixed(1) + '°';
-    document.getElementById('yaw-value').textContent = state.yaw.toFixed(1) + '°';
+    const displayPitch = state.pitch - state.pitchOffset;
+    const displayYaw = state.yaw - state.yawOffset;
+    const displayRoll = state.roll - state.rollOffset;
+    document.getElementById('pitch-value').textContent = displayPitch.toFixed(1) + '°';
+    document.getElementById('yaw-value').textContent = displayYaw.toFixed(1) + '°';
+    document.getElementById('roll-value').textContent = displayRoll.toFixed(1) + '°';
     state.error = Math.sqrt(state.dotX ** 2 + state.dotY ** 2);
     document.getElementById('error-value').textContent = state.error.toFixed(1) + '°';
     document.getElementById('dot-x').textContent = Math.round(state.dotX);
     document.getElementById('dot-y').textContent = Math.round(state.dotY);
 }
 
+function zeroPosition() {
+    state.pitchOffset = state.pitch;
+    state.yawOffset = state.yaw;
+    state.rollOffset = state.roll;
+
+    // ROM检测模式：romStepIndex=0未开始, 1-6进行中, 7完成
+    // 只有采集后才能归零进入下一步
+    if (state.mode === 'rom') {
+        if (state.romStepIndex === 0) {
+            // 第一次归零：开始检测
+            state.romStepIndex = 1;
+            state.romIsWaitingForZero = false;
+            updateROMGuide();
+        } else if (state.romStepIndex >= 1 && state.romStepIndex <= 6 && state.romIsWaitingForZero === false) {
+            // 已开始但还未采集就归零：忽略
+        } else if (state.romStepIndex >= 1 && state.romStepIndex <= 6 && state.romIsWaitingForZero) {
+            // 已采集，现在归零进入下一步
+            state.romIsWaitingForZero = false;
+            if (state.romStepIndex >= 6) {
+                state.romStepIndex = 7;
+            } else {
+                state.romStepIndex++;
+            }
+            updateROMGuide();
+        }
+    }
+
+    // 位置觉检测模式
+    if (state.mode === 'position') {
+        console.log('归零检查: stepIndex=', state.positionStepIndex, 'isRunning=', state.positionIsRunning);
+        if (state.positionStepIndex === 0) {
+            // 第一次归零：记录初始位置并开始检测
+            state.positionInitialPitch = state.pitch;
+            state.positionInitialYaw = state.yaw;
+            state.positionInitialRoll = state.roll;
+            state.positionStepIndex = 1;
+            state.positionIsRunning = true;
+            console.log('位置觉检测开始, step:', state.positionStepIndex);
+            updatePositionGuide();
+        } else if (state.positionStepIndex > 0 && state.positionIsRunning === 'waiting_for_zero') {
+            // 采集后的归零：记录新的初始位置，进入下一步
+            state.positionInitialPitch = state.pitch;
+            state.positionInitialYaw = state.yaw;
+            state.positionInitialRoll = state.roll;
+            state.positionIsRunning = true;
+            console.log('位置觉归零进入下一步, step:', state.positionStepIndex, '->', state.positionStepIndex + 1);
+            updatePositionGuide();
+        }
+    }
+}
+
+function collectPoint() {
+    // ROM检测完成时，显示结果
+    if (state.mode === 'rom' && state.romStepIndex > 6) {
+        showROMResults();
+        return;
+    }
+
+    // ROM检测时，如果还未开始（romStepIndex=0），提示先归零
+    if (state.mode === 'rom' && state.romStepIndex === 0) {
+        alert('请先点击"归零"按钮开始检测');
+        return;
+    }
+
+    // ROM检测时，如果已采集等待归零，不处理
+    if (state.mode === 'rom' && state.romIsWaitingForZero) {
+        return;
+    }
+
+    const displayPitch = state.pitch - state.pitchOffset;
+    const displayYaw = state.yaw - state.yawOffset;
+    const displayRoll = state.roll - state.rollOffset;
+    const point = {
+        id: Date.now(),
+        dotX: state.dotX,
+        dotY: state.dotY,
+        pitch: displayPitch,
+        yaw: displayYaw,
+        roll: displayRoll,
+        timestamp: new Date().toLocaleTimeString()
+    };
+    state.collectedPoints.push(point);
+
+    // ROM检测模式：采集后等待归零进入下一步
+    if (state.mode === 'rom' && state.romStepIndex >= 1 && state.romStepIndex <= 6) {
+        const step = CONFIG.ROM_STEPS[state.romStepIndex - 1];
+        state.romResults[step.name] = point[step.axis];
+        state.romIsWaitingForZero = true;
+        updateROMGuide();
+    }
+
+    // 在romResults设置后再更新显示
+    if (state.mode === 'rom') {
+        showROMInlineResults();
+    }
+}
+
+function showROMInlineResults() {
+    const resultsDiv = document.getElementById('rom-results');
+    const countDiv = document.getElementById('rom-collect-count');
+
+    if (Object.keys(state.romResults).length === 0) {
+        resultsDiv.innerHTML = `
+            <div id="rom-collect-count" style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">已采集 0/6</div>
+            <div style="font-size: 10px; color: var(--text-muted);">暂无结果</div>
+        `;
+        return;
+    }
+
+    let html = `<div id="rom-collect-count" style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">已采集 ${Object.keys(state.romResults).length}/6</div>`;
+    for (let i = 0; i < CONFIG.ROM_STEPS.length; i++) {
+        const step = CONFIG.ROM_STEPS[i];
+        const value = state.romResults[step.name];
+        if (value !== undefined) {
+            const absValue = Math.abs(value);
+            const percentage = Math.min(100, (absValue / step.normal) * 100);
+            const status = absValue >= step.normal * 0.8 ? '正常' : absValue >= step.normal * 0.5 ? '轻度' : '受限';
+            const color = absValue >= step.normal * 0.8 ? 'var(--success)' : absValue >= step.normal * 0.5 ? 'var(--warning)' : 'var(--danger)';
+            html += `
+                <div style="padding: 2px 0;">
+                    <span style="font-size: 10px;">${step.name}:</span>
+                    <span style="font-size: 10px; color: ${color};">${value.toFixed(1)}° ${status}</span>
+                </div>
+            `;
+        }
+    }
+
+    resultsDiv.innerHTML = html;
+}
+
+function showROMResults() {
+    const results = [];
+    for (let i = 0; i < CONFIG.ROM_STEPS.length; i++) {
+        const step = CONFIG.ROM_STEPS[i];
+        const value = state.romResults[step.name];
+        const absValue = Math.abs(value);
+        const percentage = Math.min(100, (absValue / step.normal) * 100);
+        const status = absValue >= step.normal * 0.8 ? '正常' : absValue >= step.normal * 0.5 ? '轻度受限' : '明显受限';
+        results.push({
+            name: step.name,
+            value: value.toFixed(1),
+            normal: step.normal,
+            percentage: percentage.toFixed(0),
+            status: status
+        });
+    }
+
+    let html = '<div style="max-height: 300px; overflow-y: auto;">';
+    results.forEach(r => {
+        const color = r.status === '正常' ? 'var(--success)' : r.status === '轻度受限' ? 'var(--warning)' : 'var(--danger)';
+        html += `
+            <div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 10px; margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span style="font-size: 12px; font-weight: 600;">${r.name}</span>
+                    <span style="font-size: 12px; color: ${color}; font-weight: 600;">${r.status}</span>
+                </div>
+                <div style="font-size: 18px; font-family: Consolas, monospace; margin-bottom: 4px;">
+                    ${r.value}° <span style="font-size: 10px; color: var(--text-muted);">/ 正常${r.normal}°</span>
+                </div>
+                <div style="height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden;">
+                    <div style="height: 100%; width: ${r.percentage}%; background: ${color}; border-radius: 2px;"></div>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+
+    document.getElementById('result-position').parentElement.innerHTML = html;
+    document.getElementById('close-modal').textContent = '重新检测';
+    document.getElementById('result-position').textContent = 'ROM';
+    document.getElementById('close-modal').onclick = () => {
+        closeModal();
+        state.romStepIndex = 0;
+        state.romResults = {};
+        state.romIsWaitingForZero = false;
+        state.collectedPoints = [];
+        showROMInlineResults();
+        updateROMGuide();
+        document.getElementById('close-modal').textContent = '确定';
+        document.getElementById('close-modal').onclick = closeModal;
+    };
+    document.getElementById('result-modal').classList.add('show');
+}
+
+function deleteCollectedPoint(id) {
+    state.collectedPoints = state.collectedPoints.filter(p => p.id !== id);
+    renderCollectedPoints();
+}
+
+function renderCollectedPoints() {
+    const list = document.getElementById('collected-list');
+    if (!list) return;
+    if (state.collectedPoints.length === 0) {
+        list.innerHTML = '<div style="font-size: 10px; color: var(--text-muted); text-align: center; padding: 8px;">暂无采集点</div>';
+        return;
+    }
+    list.innerHTML = state.collectedPoints.map((p, i) => `
+        <div class="collected-item">
+            <span class="label">点${i + 1}</span>
+            <span class="value">P:${p.pitch.toFixed(0)}° Y:${p.yaw.toFixed(0)}° R:${p.roll.toFixed(0)}°</span>
+            <button class="delete-btn" onclick="deleteCollectedPoint(${p.id})">×</button>
+        </div>
+    `).join('');
+}
+
 function updateProgress() {
     const progressRing = document.getElementById('progress-ring-fill');
     const progressText = document.getElementById('progress-text');
+    if (!progressRing || !progressText) return;
     const circumference = 2 * Math.PI * 35;
     const offset = circumference - state.progress * circumference;
     progressRing.style.strokeDashoffset = offset;
@@ -766,24 +1096,29 @@ function updateDotPosition(e) {
 
     const scale = 100 / ringRadius;
 
-    // 限制在垂直线长度范围内
+    // 限制在垂直线长度范围内（对应后伸/前屈 ±45°）
     const vLineLength = ringRadius * 0.85;
     const clampedOffsetY = Math.max(-vLineLength, Math.min(vLineLength, offsetY));
     state.dotY = clampedOffsetY * scale;
 
-    // 限制在水平线长度范围内
+    // 限制在水平线长度范围内（对应旋转 ±80°）
     const hLineLength = (crosshairSize / 2 - 15);
     const clampedOffsetX = Math.max(-hLineLength, Math.min(hLineLength, offsetX));
     state.dotX = clampedOffsetX * scale;
+
+    // 动态计算角度系数，确保最大位移对应 ±80°/±45°
+    state.yawCoefficient = 80 / (hLineLength * scale);
+    state.pitchCoefficient = 45 / (vLineLength * scale);
 
     state.trail.push({ x: state.dotX, y: state.dotY });
     if (state.trail.length > state.maxTrailLength) {
         state.trail.shift();
     }
 
-    // 角度映射：X轴=旋转(±80°), Y轴=前屈后伸(±45°)
-    state.yaw = state.dotX * 0.8;       // X轴右端=80°, 左端=-80°
-    state.pitch = -state.dotY * 0.53;   // Y轴上端=45°(后伸), 下端=-45°(前屈)
+    // 角度映射：使用动态系数确保最大位移对应 ±80°/±45°
+    state.yaw = state.dotX * state.yawCoefficient;
+    state.pitch = -state.dotY * state.pitchCoefficient;
+    state.roll = 0; // 模拟数据暂无roll，真实陀螺仪会提供
 
     updateDataDisplay();
 }
@@ -791,8 +1126,9 @@ function updateDotPosition(e) {
 function returnToCenter() {
     state.dotX *= (1 - CONFIG.DOT_RETURN_SPEED);
     state.dotY *= (1 - CONFIG.DOT_RETURN_SPEED);
-    state.yaw = state.dotX * 0.8;
-    state.pitch = state.dotY * 0.53;
+    state.yaw = state.dotX * state.yawCoefficient;
+    state.pitch = -state.dotY * state.pitchCoefficient;
+    state.roll = 0;
 }
 
 function initInput() {
@@ -898,17 +1234,224 @@ function setMode(mode) {
     const trajCard = document.getElementById('trajectory-card');
     trajCard.style.display = mode === 'coordination' ? 'block' : 'none';
 
+    // 显示对应模式的视图
+    document.getElementById('view-mode-select').style.display = mode === 'mode-select' ? 'block' : 'none';
+    document.getElementById('view-integrated').style.display = mode === 'integrated' ? 'block' : 'none';
+    document.getElementById('view-coordination').style.display = mode === 'coordination' ? 'block' : 'none';
+    document.getElementById('view-rom').style.display = mode === 'rom' ? 'flex' : 'none';
+    document.getElementById('view-position').style.display = mode === 'position' ? 'flex' : 'none';
+
+    // ROM检测初始化
+    if (mode === 'rom') {
+        state.romStepIndex = 0;
+        state.romResults = {};
+        state.romIsWaitingForZero = false;
+        state.collectedPoints = [];
+        showROMInlineResults();
+        updateROMGuide();
+    }
+
+    // 位置觉检测初始化
+    if (mode === 'position') {
+        state.positionStepIndex = 0;
+        state.positionResults = [];
+        state.positionIsRunning = false;
+        updatePositionGuide();
+    }
+
     state.progress = 0;
     state.holdTime = 0;
     state.integratedPhase = 0;
     updateProgress();
     state.trail = [];
     state.lastError = 0;
+    state.collectedPoints = [];
+    renderCollectedPoints();
+    state.pitchOffset = 0;
+    state.yawOffset = 0;
+    state.rollOffset = 0;
 
     if (mode === 'integrated' || mode === 'coordination') {
         window.targetX = 0;
         window.targetY = 0;
     }
+}
+
+function updateROMGuide() {
+    const romGuide = document.getElementById('rom-guide');
+    const instruction = document.getElementById('rom-instruction');
+    const progress = document.getElementById('rom-progress');
+    const collectBtn = document.getElementById('collect-btn');
+
+    if (state.romStepIndex === 0) {
+        instruction.textContent = '请先归零';
+        progress.textContent = '步骤 0/6';
+        romGuide.classList.remove('rom-guide-active');
+        collectBtn.textContent = '📍 采集当前点';
+        collectBtn.disabled = true;
+    } else if (state.romStepIndex <= 6) {
+        const step = CONFIG.ROM_STEPS[state.romStepIndex - 1];
+        if (state.romIsWaitingForZero) {
+            instruction.textContent = '请归零进入下一步';
+            instruction.style.background = 'rgba(0,217,165,0.1)';
+            instruction.style.color = 'var(--primary)';
+        } else {
+            instruction.textContent = step.instruction;
+            instruction.style.background = 'rgba(239,68,68,0.1)';
+            instruction.style.color = 'var(--danger)';
+        }
+        progress.textContent = `步骤 ${state.romStepIndex}/6`;
+        romGuide.classList.add('rom-guide-active');
+        collectBtn.disabled = state.romIsWaitingForZero;
+        collectBtn.textContent = state.romIsWaitingForZero ? '等待归零' : '📍 采集当前点';
+    } else {
+        instruction.textContent = '检测完成';
+        progress.textContent = '已完成';
+        romGuide.classList.remove('rom-guide-active');
+        collectBtn.textContent = '查看结果';
+        collectBtn.disabled = false;
+    }
+}
+
+function updatePositionGuide() {
+    const guide = document.getElementById('position-guide');
+    const instruction = document.getElementById('position-instruction');
+    const progress = document.getElementById('position-progress');
+    const countdown = document.getElementById('position-countdown');
+    const eyeHint = document.getElementById('position-eye-hint');
+    const startBtn = document.getElementById('start-position-btn');
+
+    console.log('updatePositionGuide called, step:', state.positionStepIndex);
+    countdown.style.display = 'none';
+    eyeHint.style.display = 'none';
+    startBtn.onclick = null; // 重置onclick
+
+    if (state.positionStepIndex === 0) {
+        instruction.textContent = '请先归零';
+        instruction.style.background = 'rgba(0,217,165,0.1)';
+        instruction.style.color = 'var(--primary)';
+        progress.textContent = '步骤 0/6';
+        startBtn.textContent = '开始检测';
+        startBtn.disabled = false;
+    } else if (state.positionStepIndex <= 6) {
+        const step = CONFIG.POSITION_STEPS[state.positionStepIndex - 1];
+        instruction.textContent = step.instruction;
+        instruction.style.background = 'rgba(239,68,68,0.1)';
+        instruction.style.color = 'var(--danger)';
+        progress.textContent = `步骤 ${state.positionStepIndex}/6`;
+        startBtn.textContent = '>>> 开始执行 <<<';
+        startBtn.disabled = false;
+        startBtn.style.fontWeight = 'bold';
+        startBtn.style.fontSize = '14px';
+        startBtn.style.display = 'block';
+        startBtn.style.visibility = 'visible';
+        console.log('按钮文字已设置为: >>> 开始执行 <<<, actual:', startBtn.textContent, 'display:', startBtn.style.display);
+        // 强制重新渲染
+        startBtn.offsetHeight;
+    } else {
+        instruction.textContent = '检测完成';
+        instruction.style.background = 'rgba(16,185,129,0.1)';
+        instruction.style.color = 'var(--success)';
+        progress.textContent = '已完成';
+        startBtn.textContent = '重新检测';
+        startBtn.disabled = false;
+        showPositionResults();
+    }
+}
+
+function startPositionDetection() {
+    // 此函数已弃用，位置觉检测由 zeroPosition 处理
+}
+
+function executePositionStep() {
+    const step = CONFIG.POSITION_STEPS[state.positionStepIndex - 1];
+    const instruction = document.getElementById('position-instruction');
+    const countdown = document.getElementById('position-countdown');
+    const eyeHint = document.getElementById('position-eye-hint');
+    const startBtn = document.getElementById('start-position-btn');
+
+    // 显示闭眼提示
+    eyeHint.style.display = 'block';
+
+    // 开始5秒倒计时
+    let count = 5;
+    countdown.style.display = 'block';
+    countdown.textContent = count;
+
+    const timer = setInterval(() => {
+        count--;
+        countdown.textContent = count;
+        if (count <= 0) {
+            clearInterval(timer);
+            countdown.style.display = 'none';
+            eyeHint.style.display = 'none';
+            instruction.textContent = '请回到初始位置，然后睁眼';
+            startBtn.textContent = '采集位置';
+            startBtn.disabled = false;
+            state.positionIsRunning = false; // 等待采集
+        }
+    }, 1000);
+}
+
+function collectPositionPoint() {
+    // 计算与初始位置的偏移
+    const errorPitch = Math.abs(state.pitch - state.positionInitialPitch);
+    const errorYaw = Math.abs(state.yaw - state.positionInitialYaw);
+    const errorRoll = Math.abs(state.roll - state.positionInitialRoll);
+
+    const step = CONFIG.POSITION_STEPS[state.positionStepIndex - 1];
+    state.positionResults.push({
+        name: step.name,
+        errorPitch: errorPitch,
+        errorYaw: errorYaw,
+        errorRoll: errorRoll,
+        totalError: Math.sqrt(errorPitch * errorPitch + errorYaw * errorYaw + errorRoll * errorRoll)
+    });
+
+    state.positionStepIndex++;
+
+    if (state.positionStepIndex > 6) {
+        updatePositionGuide();
+    } else {
+        // 提示归零
+        const instruction = document.getElementById('position-instruction');
+        const startBtn = document.getElementById('start-position-btn');
+        instruction.textContent = '请睁眼归零，然后进入下一步';
+        instruction.style.background = 'rgba(0,217,165,0.1)';
+        instruction.style.color = 'var(--primary)';
+        startBtn.textContent = '归零';
+        startBtn.disabled = false;
+        state.positionIsRunning = 'waiting_for_zero'; // 等待归零状态
+    }
+
+    // 更新结果面板
+    showPositionResults();
+}
+
+function showPositionResults() {
+    const resultsDiv = document.getElementById('position-results');
+
+    if (state.positionResults.length === 0) {
+        resultsDiv.innerHTML = `
+            <div id="collect-count" style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">已采集 0/6</div>
+            <div style="font-size: 10px; color: var(--text-muted);">暂无结果</div>
+        `;
+        return;
+    }
+
+    let html = `<div id="collect-count" style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">已采集 ${state.positionResults.length}/6</div>`;
+    state.positionResults.forEach(r => {
+        const status = r.totalError < 5 ? '正常' : r.totalError < 10 ? '轻度' : '明显';
+        const color = r.totalError < 5 ? 'var(--success)' : r.totalError < 10 ? 'var(--warning)' : 'var(--danger)';
+        html += `
+            <div style="padding: 2px 0;">
+                <span style="font-size: 10px;">${r.name}:</span>
+                <span style="font-size: 10px; color: ${color};">${r.totalError.toFixed(1)}° ${status}</span>
+            </div>
+        `;
+    });
+
+    resultsDiv.innerHTML = html;
 }
 
 function startDetection() {
@@ -922,6 +1465,8 @@ function startDetection() {
 
     state.romRange = { pitch: { min: state.pitch, max: state.pitch }, yaw: { min: state.yaw, max: state.yaw } };
     state.integratedResults = { positionScore: 0, stabilityScore: 0, romScore: 0 };
+    state.collectedPoints = [];
+    renderCollectedPoints();
 
     document.getElementById('action-btn').textContent = '检测中...';
     document.getElementById('action-btn').disabled = true;
@@ -951,7 +1496,6 @@ function startDetection() {
                 break;
         }
 
-        document.getElementById('time-value').textContent = state.holdTime.toFixed(1) + 's';
         updateProgress();
 
         if (state.progress >= 1) {
@@ -989,8 +1533,9 @@ function animate() {
     if (!isDraggingDot) {
         state.dotX *= CONFIG.DOT_RETURN_SPEED;
         state.dotY *= CONFIG.DOT_RETURN_SPEED;
-        state.yaw = state.dotX * 0.8;
-        state.pitch = state.dotY * 0.53;
+        state.yaw = state.dotX * state.yawCoefficient;
+        state.pitch = -state.dotY * state.pitchCoefficient;
+        state.roll = 0;
 
         if (state.isRunning) {
             state.trail.push({ x: state.dotX, y: state.dotY });
@@ -1012,6 +1557,7 @@ function init() {
     initInput();
     animate();
     updateProgress();
+    renderCollectedPoints();
 
     // 模式按钮
     document.querySelectorAll('.mode-btn').forEach(btn => {
@@ -1043,6 +1589,52 @@ function init() {
         });
     });
 
+    // 采集按钮
+    document.getElementById('collect-btn').addEventListener('click', collectPoint);
+
+    // 归零按钮
+    document.getElementById('zero-btn').addEventListener('click', zeroPosition);
+    document.getElementById('zero-btn-position').addEventListener('click', zeroPosition);
+
+    // 返回按钮
+    document.getElementById('back-btn-integrated').addEventListener('click', () => setMode('mode-select'));
+    document.getElementById('back-btn-coordination').addEventListener('click', () => setMode('mode-select'));
+    document.getElementById('back-btn-rom').addEventListener('click', () => setMode('mode-select'));
+    document.getElementById('back-btn-position').addEventListener('click', () => setMode('mode-select'));
+
+    // 位置觉检测开始按钮
+    const startPosBtn = document.getElementById('start-position-btn');
+    console.log('startPosBtn found:', startPosBtn);
+    console.log('startPosBtn initial text:', startPosBtn.textContent);
+    startPosBtn.addEventListener('click', () => {
+        console.log('start-position-btn clicked, positionStepIndex:', state.positionStepIndex, 'isRunning:', state.positionIsRunning);
+        if (state.positionStepIndex === 0) {
+            // 等待用户先归零
+        } else if (state.positionStepIndex >= 1 && state.positionStepIndex <= 6) {
+            if (state.positionIsRunning === true) {
+                executePositionStep();
+            } else if (state.positionIsRunning === false) {
+                collectPositionPoint();
+            } else if (state.positionIsRunning === 'waiting_for_zero') {
+                console.log('calling zeroPosition from startPosBtn');
+                zeroPosition();
+            }
+        } else {
+            // 重新开始
+            state.positionStepIndex = 0;
+            state.positionResults = [];
+            document.getElementById('position-results').innerHTML = '<div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px;">暂无结果</div>';
+            updatePositionGuide();
+        }
+    });
+
+    // 位置觉归零按钮
+    const zeroBtnPos = document.getElementById('zero-btn-position');
+    zeroBtnPos.addEventListener('click', () => {
+        console.log('zero-btn-position clicked');
+        zeroPosition();
+    });
+
     // 缩放滑块
     const zoomSlider = document.getElementById('zoom-slider');
     const zoomValue = document.getElementById('zoom-value');
@@ -1062,9 +1654,17 @@ function init() {
         resizeCanvas();
     }, { passive: false });
 
-    // 开始检测按钮
+    // 开始检测按钮（综合检测）
     document.getElementById('action-btn').addEventListener('click', () => {
         if (state.isRunning) return;
+        setMode('integrated');
+        startDetection();
+    });
+
+    // 开始检测按钮（协调性检测）
+    document.getElementById('action-btn-coord').addEventListener('click', () => {
+        if (state.isRunning) return;
+        setMode('coordination');
         startDetection();
     });
 
@@ -1096,9 +1696,10 @@ function init() {
     });
 
     // 关闭弹窗
-    document.getElementById('close-modal').addEventListener('click', () => {
+    function closeModal() {
         document.getElementById('result-modal').classList.remove('show');
-    });
+    }
+    document.getElementById('close-modal').addEventListener('click', closeModal);
 
     // 时钟
     setInterval(() => {
