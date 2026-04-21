@@ -182,7 +182,7 @@ function executePositionStep() {
     const eyeHint = document.getElementById('position-eye-hint');
     const startBtn = document.getElementById('start-position-btn');
 
-    // TTS：直接读屏幕上的文字
+    // TTS：直接读屏幕上的文字（只在开始时播报一次）
     speak(instruction.textContent);
 
     // 显示闭眼提示
@@ -196,10 +196,7 @@ function executePositionStep() {
     const timer = setInterval(() => {
         count--;
         countdown.textContent = count;
-        // TTS倒计时
-        if (count > 0 && count <= 3) {
-            speak(String(count));
-        }
+        // 不再TTS播报倒计时数字，用户可以看到屏幕上的倒计时
         if (count <= 0) {
             clearInterval(timer);
             countdown.style.display = 'none';
@@ -208,6 +205,7 @@ function executePositionStep() {
             startBtn.textContent = '采集位置';
             startBtn.disabled = false;
             state.positionIsRunning = false; // 等待采集
+            // 倒计时结束时播报一次结果提示
             speak(instruction.textContent);
         }
     }, 1000);

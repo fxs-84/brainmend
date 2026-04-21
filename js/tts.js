@@ -13,6 +13,12 @@ const TTS_CONFIG = {
 // 可用语音列表
 let cachedVoices = [];
 
+// TTS优化：队列机制 + 防抖
+let ttsQueue = [];
+let lastSpokenText = '';
+let lastSpokenTime = 0;
+const TTS_DEBOUNCE_MS = 1500;  // 相同内容1.5秒内不重复
+
 // ============================================================
 // 核心语音函数
 // ============================================================
@@ -25,20 +31,59 @@ function speak(text, options = {}) {
         return;
     }
 
-    // 只在有内容播报时才取消
-    if (speechSynthesis.speaking) {
-        speechSynthesis.cancel();
+    const now = Date.now();
+    const trimmedText = text.trim();
+
+    // 防抖：相同内容1.5秒内不重复播报
+    if (trimmedText === lastSpokenText && (now - lastSpokenTime) < TTS_DEBOUNCE_MS) {
+        return;
     }
 
+    // 如果正在播放，不取消，而是排队等待
+    if (speechSynthesis.speaking) {
+        // 检查队列中是否已有相同内容
+        if (ttsQueue.includes(trimmedText)) {
+            return;
+        }
+        ttsQueue.push(trimmedText);
+        return;
+    }
+
+    // 执行播报
+    executeSpeak(trimmedText);
+}
+
+function executeSpeak(text) {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'zh-CN';
     utterance.rate = 1.0;
 
-    utterance.onerror = (e) => {
-        console.warn('TTS error:', e.error);
+    utterance.onend = () => {
+        // 播报完成后，播放队列中的下一条
+        processQueue();
     };
 
+    utterance.onerror = (e) => {
+        console.warn('TTS error:', e.error);
+        processQueue();
+    };
+
+    lastSpokenText = text;
+    lastSpokenTime = Date.now();
     speechSynthesis.speak(utterance);
+}
+
+function processQueue() {
+    if (ttsQueue.length === 0) return;
+
+    // 取出队列中的下一条（先进先出）
+    const nextText = ttsQueue.shift();
+    if (nextText && nextText !== lastSpokenText) {
+        executeSpeak(nextText);
+    } else {
+        // 如果相同，继续处理队列
+        processQueue();
+    }
 }
 
 function speakScreenText(elementId) {
