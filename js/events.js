@@ -181,6 +181,11 @@ function executePositionStep() {
     const eyeHint = document.getElementById('position-eye-hint');
     const startBtn = document.getElementById('start-position-btn');
 
+    // TTS语音提示
+    if (TTS_CONFIG.enabled) {
+        speak(TTS_PROMPTS.position.closeEyes);
+    }
+
     // 显示闭眼提示
     eyeHint.style.display = 'block';
 
@@ -192,6 +197,9 @@ function executePositionStep() {
     const timer = setInterval(() => {
         count--;
         countdown.textContent = count;
+        if (TTS_CONFIG.enabled && count > 0 && count <= 3) {
+            speak(String(count));
+        }
         if (count <= 0) {
             clearInterval(timer);
             countdown.style.display = 'none';
@@ -200,6 +208,9 @@ function executePositionStep() {
             startBtn.textContent = '采集位置';
             startBtn.disabled = false;
             state.positionIsRunning = false; // 等待采集
+            if (TTS_CONFIG.enabled) {
+                speak(TTS_PROMPTS.position.openEyes);
+            }
         }
     }, 1000);
 }
@@ -470,9 +481,13 @@ function stopDetection() {
 function init() {
     resizeCanvas();
     initInput();
+    initTTS();
     animate();
     updateProgress();
     renderCollectedPoints();
+
+    // TTS切换按钮
+    document.getElementById('tts-toggle').addEventListener('click', toggleTTS);
 
     // 模式按钮
     document.querySelectorAll('.mode-btn').forEach(btn => {

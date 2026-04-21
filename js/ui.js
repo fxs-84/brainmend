@@ -474,5 +474,34 @@ function showResults() {
     // 显示康复建议
     showRehabSuggestions(suggestions);
 
+    // 显示图表
+    const chartsDiv = document.getElementById('report-charts');
+    const radarCanvas = document.getElementById('radar-chart');
+    const romCanvas = document.getElementById('rom-chart');
+
+    const hasScores = positionScore > 0 || stabilityScore > 0 || romScore > 0 || coordinationScore > 0;
+    const hasROM = state.mode === 'rom' && state.romResults && Object.keys(state.romResults).length > 0;
+
+    if (hasScores || hasROM) {
+        chartsDiv.style.display = 'block';
+        if (hasScores) {
+            radarCanvas.style.display = 'block';
+            drawRadarChart(radarCanvas, { position: positionScore, stability: stabilityScore, rom: romScore, coordination: coordinationScore }, 180);
+        }
+        if (hasROM) {
+            romCanvas.style.display = 'block';
+            drawROMChart(romCanvas, state.romResults, 280, 100);
+        }
+    } else {
+        chartsDiv.style.display = 'none';
+        radarCanvas.style.display = 'none';
+        romCanvas.style.display = 'none';
+    }
+
+    // 语音播报结果
+    if (TTS_CONFIG.enabled) {
+        speakResults({ position: positionScore, stability: stabilityScore, rom: romScore, coordination: coordinationScore });
+    }
+
     document.getElementById('result-modal').classList.add('show');
 }

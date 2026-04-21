@@ -4,93 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>颈椎检测康复训练游戏</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        :root {
-            --primary: #00D9A5;
-            --secondary: #0086FF;
-            --bg-dark: #0a0f1a;
-            --bg-panel: #111827;
-            --text: #E5E7EB;
-            --text-muted: #9CA3AF;
-            --danger: #EF4444;
-            --warning: #F59E0B;
-            --success: #10B981;
-        }
-        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-dark); color: var(--text); overflow: hidden; height: 100vh; }
-        #app { display: flex; flex-direction: column; height: 100vh; }
-        header { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background: var(--bg-panel); border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .logo { font-size: 14px; font-weight: 700; color: var(--primary); }
-        .header-info { font-size: 11px; color: var(--text-muted); }
-        main { flex: 1; display: flex; position: relative; }
-        #detection-area { flex: 1; position: relative; background: radial-gradient(circle at center, #1a1f2e 0%, var(--bg-dark) 100%); overflow: hidden; }
-        #crosshair-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; }
-        #side-panel { width: 260px; min-width: 260px; background: var(--bg-panel); border-left: 1px solid rgba(255,255,255,0.1); padding: 6px; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; position: relative; z-index: 1000; }
-        .panel-title { font-size: 9px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
-        .data-card { background: rgba(255,255,255,0.03); border-radius: 8px; padding: 6px; }
-        .data-row { display: flex; justify-content: space-between; align-items: center; padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .data-row:last-child { border-bottom: none; }
-        .data-label { font-size: 10px; color: var(--text-muted); }
-        .data-value { font-size: 12px; font-weight: 600; font-family: 'Consolas', monospace; }
-        .crosshair-display { text-align: center; padding: 2px; }
-        .crosshair-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
-        .crosshair-item { background: rgba(0,0,0,0.3); border-radius: 6px; padding: 2px; }
-        .crosshair-item-label { font-size: 9px; color: var(--text-muted); margin-bottom: 1px; }
-        .crosshair-item-value { font-size: 14px; font-weight: 700; font-family: 'Consolas', monospace; }
-        .progress-ring-container { display: flex; justify-content: center; padding: 4px 0; }
-        .progress-ring { position: relative; width: 80px; height: 80px; }
-        .progress-ring svg { transform: rotate(-90deg); }
-        .progress-ring-bg { fill: none; stroke: rgba(255,255,255,0.1); stroke-width: 10; }
-        .progress-ring-fill { fill: none; stroke: var(--primary); stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset 0.3s ease, stroke 0.3s ease; }
-        .progress-ring-fill.warning { stroke: var(--warning); }
-        .progress-ring-fill.success { stroke: var(--success); }
-        .progress-ring-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
-        .progress-ring-value { font-size: 18px; font-weight: 700; font-family: 'Consolas', monospace; }
-        .progress-ring-label { font-size: 9px; color: var(--text-muted); }
-        .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
-        .mode-btn { padding: 5px 3px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: var(--text); border-radius: 6px; cursor: pointer; font-size: 10px; transition: all 0.2s; text-align: center; }
-        .mode-btn:hover { border-color: var(--primary); background: rgba(0, 217, 165, 0.1); }
-        .mode-btn.active { border-color: var(--primary); background: var(--primary); color: var(--bg-dark); }
-        .mode-btn .icon { font-size: 12px; display: block; margin-bottom: 1px; }
-        .back-btn { width: 100%; padding: 8px; background: transparent; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; color: var(--text); font-size: 11px; cursor: pointer; margin-bottom: 8px; text-align: left; }
-        .back-btn:hover { background: rgba(255,255,255,0.05); border-color: var(--primary); }
-        .action-btn { width: 100%; padding: 10px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border: none; border-radius: 8px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
-        .action-btn:hover { opacity: 0.9; }
-        .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        #status-bar { display: flex; justify-content: space-between; align-items: center; padding: 6px 16px; background: var(--bg-panel); border-top: 1px solid rgba(255,255,255,0.1); font-size: 11px; }
-        .status-item { display: flex; align-items: center; gap: 6px; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); }
-        .status-dot.connected { background: var(--success); }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); justify-content: center; align-items: center; z-index: 1000; }
-        .modal.show { display: flex; }
-        .modal-content { background: var(--bg-panel); border-radius: 16px; padding: 24px; width: 90%; max-width: 400px; border: 1px solid rgba(255,255,255,0.1); }
-        .modal-title { font-size: 20px; font-weight: 700; text-align: center; margin-bottom: 4px; }
-        .modal-subtitle { font-size: 12px; color: var(--text-muted); text-align: center; margin-bottom: 20px; }
-        .result-grid { display: flex; flex-direction: column; gap: 12px; }
-        .result-item { background: rgba(255,255,255,0.03); border-radius: 8px; padding: 10px; }
-        .result-item-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
-        .result-item-value { font-size: 24px; font-weight: 700; font-family: 'Consolas', monospace; }
-        .result-item-bar { height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 6px; overflow: hidden; }
-        .result-item-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
-        .modal-btn { width: 100%; padding: 12px; margin-top: 16px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border: none; border-radius: 8px; color: white; font-size: 14px; font-weight: 600; cursor: pointer; }
-        #trajectory-card { display: none; }
-        .collect-btn { width: 100%; padding: 8px; background: var(--warning); border: none; border-radius: 6px; color: white; font-size: 11px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; margin-top: 5px; }
-        .collect-btn:hover { opacity: 0.9; }
-        .collect-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .collected-list { max-height: 120px; overflow-y: auto; margin-top: 5px; }
-        .collected-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 6px; background: rgba(255,255,255,0.03); border-radius: 4px; margin-bottom: 3px; font-size: 10px; }
-        .collected-item .label { color: var(--text-muted); }
-        .collected-item .value { font-family: 'Consolas', monospace; color: var(--primary); }
-        .collected-item .delete-btn { background: none; border: none; color: var(--danger); cursor: pointer; padding: 2px 4px; font-size: 10px; }
-        .rom-guide-active { border: 2px solid var(--primary); background: rgba(0, 217, 165, 0.1); }
-        .rom-step-done { background: rgba(16, 185, 129, 0.2); }
-    </style>
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <div id="app">
         <header>
             <div class="logo">颈椎康复训练</div>
-            <div class="header-info">陀螺仪模式</div>
+            <div class="header-info">
+                <button id="toggle-input-mode" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">鼠标模式</button>
+                <button id="open-gyro-modal" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">蓝牙连接</button>
+                <button id="tts-toggle" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-left: 5px;">语音关闭</button>
+            </div>
         </header>
         <main>
             <div id="detection-area"><canvas id="crosshair-canvas"></canvas></div>
@@ -153,8 +77,15 @@
                 <!-- 协调性检测视图 -->
                 <div id="view-coordination" style="display: none;">
                     <button class="back-btn" id="back-btn-coordination">← 返回</button>
-                    <div class="panel-title">轨迹选择</div>
+                    <div class="panel-title">检测模式</div>
                     <div class="data-card">
+                        <div style="display: flex; gap: 4px;">
+                            <button class="coord-mode-btn active" data-mode="single" id="coord-mode-single" style="flex: 1; padding: 8px; border: 1px solid rgba(255,255,255,0.2); background: var(--primary); color: var(--bg-dark); border-radius: 4px; cursor: pointer; font-size: 11px;">单轨迹检测</button>
+                            <button class="coord-mode-btn" data-mode="full" id="coord-mode-full" style="flex: 1; padding: 8px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 11px;">全轨迹检测(5项)</button>
+                        </div>
+                    </div>
+                    <div class="panel-title" id="coord-trajectory-title">轨迹选择</div>
+                    <div class="data-card" id="coord-trajectory-card">
                         <div style="display: flex; flex-wrap: wrap; gap: 4px;">
                             <button class="traj-btn active" data-traj="horizontal" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: var(--primary); color: var(--bg-dark); border-radius: 4px; cursor: pointer; font-size: 10px;">水平</button>
                             <button class="traj-btn" data-traj="vertical" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直</button>
@@ -162,6 +93,34 @@
                             <button class="traj-btn" data-traj="vertical_right" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直右</button>
                             <button class="traj-btn" data-traj="figure8" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">8字</button>
                         </div>
+                    </div>
+                    <div class="panel-title" id="coord-current-trajectory" style="display: none;">当前轨迹: <span id="coord-current-traj-name">-</span></div>
+                    <div class="panel-title">实时评分</div>
+                    <div class="data-card" id="coord-scores">
+                        <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <span class="data-label">跟踪</span>
+                            <span class="data-value" id="coord-tracking-score" style="color: var(--primary)">0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <span class="data-label">轨迹</span>
+                            <span class="data-value" id="coord-trajectory-score" style="color: var(--secondary)">0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <span class="data-label">平稳</span>
+                            <span class="data-value" id="coord-smoothness-score" style="color: var(--warning)">0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 3px 0;">
+                            <span class="data-label">误差</span>
+                            <span class="data-value" id="coord-error" style="color: var(--danger)">0.0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 3px 0;">
+                            <span class="data-label">偏离</span>
+                            <span class="data-value" id="coord-deviation">0.0</span>
+                        </div>
+                    </div>
+                    <div id="coord-full-progress" style="display: none; margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px;">
+                        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">全轨迹检测进度</div>
+                        <div id="coord-full-progress-text" style="font-size: 11px;">0/5 已完成</div>
                     </div>
                     <button class="action-btn" id="action-btn-coord">开始检测</button>
                 </div>
@@ -184,7 +143,7 @@
                 </div>
 
                 <!-- 位置觉检测视图 -->
-                <div id="view-position" style="flex-direction: column; flex: 1; gap: 5px;">
+                <div id="view-position" style="display: none; flex-direction: column; flex: 1; gap: 5px;">
                     <button class="back-btn" id="back-btn-position">← 返回</button>
                     <div class="panel-title">检测引导</div>
                     <div class="data-card" id="position-guide">
@@ -219,10 +178,10 @@
         </main>
         <div id="status-bar">
             <div class="status-item">
-                <div class="status-dot" id="device-status"></div>
-                <span id="device-text">模拟模式</span>
+                <div class="status-dot" id="status-dot"></div>
+                <span id="connection-status">等待连接...</span>
             </div>
-            <div class="status-item"><span id="current-time">00:00</span></div>
+            <div class="status-item"><span id="current-time">--:--</span></div>
         </div>
     </div>
 
@@ -238,1488 +197,135 @@
         </div>
     </div>
 
-    <!-- Result Modal -->
+    <!-- 结果弹窗 -->
     <div class="modal" id="result-modal">
-        <div class="modal-content">
+        <div class="modal-content" style="max-width: 480px; max-height: 90vh; overflow-y: auto;">
             <div class="modal-title">检测完成</div>
             <div class="modal-subtitle">您的颈椎健康评估报告</div>
-            <div class="result-grid">
+
+            <!-- 综合评分 -->
+            <div id="report-overall" style="text-align: center; margin: 15px 0; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 12px;">
+                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px;">综合评分</div>
+                <div id="overall-score" style="font-size: 48px; font-weight: 700; line-height: 1;">--</div>
+                <div id="overall-level" style="font-size: 14px; margin-top: 5px;">-</div>
+            </div>
+
+            <!-- 详细评分 -->
+            <div class="result-grid" style="margin-bottom: 15px;">
                 <div class="result-item">
-                    <div class="result-item-label">位置觉得分</div>
-                    <div class="result-item-value" id="result-position" style="color: var(--primary)">0</div>
-                    <div class="result-item-bar"><div class="result-item-bar-fill" id="bar-position" style="width: 0%; background: var(--primary)"></div></div>
+                    <div class="result-item-label">位置觉</div>
+                    <div class="result-item-value" id="result-position" style="color: var(--primary);">--</div>
+                    <div class="result-item-bar"><div class="result-item-bar-fill" id="bar-position" style="width: 0%; background: var(--primary);"></div></div>
                 </div>
                 <div class="result-item">
-                    <div class="result-item-label">稳定性得分</div>
-                    <div class="result-item-value" id="result-stability" style="color: var(--secondary)">0</div>
-                    <div class="result-item-bar"><div class="result-item-bar-fill" id="bar-stability" style="width: 0%; background: var(--secondary)"></div></div>
+                    <div class="result-item-label">稳定性</div>
+                    <div class="result-item-value" id="result-stability" style="color: var(--secondary);">--</div>
+                    <div class="result-item-bar"><div class="result-item-bar-fill" id="bar-stability" style="width: 0%; background: var(--secondary);"></div></div>
                 </div>
                 <div class="result-item">
-                    <div class="result-item-label">活动范围得分</div>
-                    <div class="result-item-value" id="result-rom" style="color: var(--warning)">0</div>
-                    <div class="result-item-bar"><div class="result-item-bar-fill" id="bar-rom" style="width: 0%; background: var(--warning)"></div></div>
+                    <div class="result-item-label">活动范围</div>
+                    <div class="result-item-value" id="result-rom" style="color: var(--warning);">--</div>
+                    <div class="result-item-bar"><div class="result-item-bar-fill" id="bar-rom" style="width: 0%; background: var(--warning);"></div></div>
                 </div>
                 <div class="result-item">
-                    <div class="result-item-label">综合评分</div>
-                    <div class="result-item-value" id="result-coordination" style="color: #EC4899">0</div>
-                    <div class="result-item-bar"><div class="result-item-bar-fill" id="bar-coordination" style="width: 0%; background: #EC4899"></div></div>
+                    <div class="result-item-label">协调性</div>
+                    <div class="result-item-value" id="result-coordination" style="color: var(--success);">--</div>
+                    <div class="result-item-bar"><div class="result-item-bar-fill" id="bar-coordination" style="width: 0%; background: var(--success);"></div></div>
                 </div>
             </div>
+
+            <!-- 图表区域 -->
+            <div id="report-charts" style="display: none; margin-bottom: 15px; padding: 12px; background: rgba(0,0,0,0.15); border-radius: 8px;">
+                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">可视化报告</div>
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;">
+                    <canvas id="radar-chart" style="display: none;"></canvas>
+                    <canvas id="rom-chart" style="display: none;"></canvas>
+                </div>
+            </div>
+
+            <!-- 详细数据区域 -->
+            <div id="report-details" style="display: none; margin-bottom: 15px; padding: 12px; background: rgba(0,0,0,0.15); border-radius: 8px;">
+                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">详细数据</div>
+                <div id="report-details-content"></div>
+            </div>
+
+            <!-- 前庭功能评估 -->
+            <div id="vestibular-assessment" style="display: none; margin-bottom: 15px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">前庭功能间接评估</div>
+                <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;" id="vestibular-result">-</div>
+                <div style="font-size: 10px; color: var(--text-muted);" id="vestibular-recommendation">-</div>
+            </div>
+
+            <!-- 康复建议 -->
+            <div id="rehab-suggestions" style="display: none; margin-bottom: 15px; padding: 12px; background: rgba(34, 197, 94, 0.1); border-radius: 8px; border: 1px solid rgba(34, 197, 94, 0.3);">
+                <div style="font-size: 11px; color: var(--success); margin-bottom: 8px;">康复建议</div>
+                <div id="rehab-suggestions-content" style="font-size: 11px; line-height: 1.6; color: var(--text);"></div>
+            </div>
+
             <button class="modal-btn" id="close-modal">确定</button>
         </div>
     </div>
 
-<script>
-// ============================================================
-// CONFIG - 常量配置
-// ============================================================
-const CONFIG = {
-    // 缩放范围
-    MIN_ZOOM: 0.3,
-    MAX_ZOOM: 3,
-
-    // 检测参数
-    HOLD_THRESHOLD: 5,
-    HOLD_DURATION: 3,
-    DOT_RETURN_SPEED: 0.98,
-    ERROR_DECAY: 0.3,
-    FAIL_THRESHOLD: 25,
-
-    // 轨迹参数
-    INTEGRATED_DURATION: 20,
-    COORDINATION_DURATION: 5,
-    TRAJECTORY_SPEED: 0.3,
-
-    // 颈椎正常活动范围
-    // 前屈: 35-45°, 后伸: 35-45°, 旋转: 60-80°
-    EXPECTED_PITCH_RANGE: 80,      // 前屈+后伸总范围约70-90°
-    EXPECTED_YAW_RANGE: 140,        // 左右旋转各60-80°
-
-    // 轨迹幅度
-    HORIZONTAL_AMPLITUDE: 80,
-    VERTICAL_AMPLITUDE: 60,
-    FIGURE8_AMPLITUDE_X: 120,
-    FIGURE8_AMPLITUDE_Y: 70,
-
-    // 颜色
-    COLORS: {
-        TARGET: '#EF4444',
-        TARGET_GLOW: 'rgba(239, 68, 68, 0.8)',
-        TARGET_GLOW_MID: 'rgba(239, 68, 68, 0.3)',
-        POSITION: '#00D9A5',
-        POSITION_GLOW: 'rgba(0, 217, 165, 0.8)',
-        POSITION_GLOW_MID: 'rgba(0, 217, 165, 0.3)',
-        TRAIL: 'rgba(0, 217, 165, 0.3)',
-        GRID: 'rgba(255, 255, 255, 0.03)',
-        CROSSHAIR: 'rgba(255, 255, 255, 0.4)',
-        RING_OUTER: 'rgba(255, 255, 255, 0.15)',
-        RING_INNER: 'rgba(255, 255, 255, 0.1)'
-    },
-
-    // ROM检测步骤
-    ROM_STEPS: [
-        { name: '前屈', instruction: '请低头到最大范围', axis: 'pitch', extreme: 'min', normal: 45 },
-        { name: '后伸', instruction: '请抬头到最大范围', axis: 'pitch', extreme: 'max', normal: 45 },
-        { name: '左旋', instruction: '请头向左转到最大范围', axis: 'yaw', extreme: 'min', normal: 80 },
-        { name: '右旋', instruction: '请头向右转到最大范围', axis: 'yaw', extreme: 'max', normal: 80 },
-        { name: '左屈', instruction: '请头向左屈到最大范围', axis: 'roll', extreme: 'min', normal: 45 },
-        { name: '右屈', instruction: '请头向右屈到最大范围', axis: 'roll', extreme: 'max', normal: 45 }
-    ],
-
-    // 位置觉检测步骤（本体感觉）
-    POSITION_STEPS: [
-        { name: '右旋', instruction: '请闭眼，头向右转到最大范围', targetAxis: 'yaw', targetExtreme: 'max' },
-        { name: '左旋', instruction: '请闭眼，头向左转到最大范围', targetAxis: 'yaw', targetExtreme: 'min' },
-        { name: '后伸', instruction: '请闭眼，抬头到最大范围', targetAxis: 'pitch', targetExtreme: 'max' },
-        { name: '前屈', instruction: '请闭眼，低头到最大范围', targetAxis: 'pitch', targetExtreme: 'min' },
-        { name: '右屈', instruction: '请闭眼，头向右屈到最大范围', targetAxis: 'roll', targetExtreme: 'max' },
-        { name: '左屈', instruction: '请闭眼，头向左屈到最大范围', targetAxis: 'roll', targetExtreme: 'min' }
-    ]
-};
-
-// ============================================================
-// STATE - 应用状态
-// ============================================================
-const createState = () => ({
-    // 当前模式
-    mode: 'integrated',
-    isRunning: false,
-
-    // 陀螺仪数据
-    pitch: 0,
-    yaw: 0,
-    roll: 0,
-
-    // 光点位置
-    dotX: 0,
-    dotY: 0,
-
-    // 角度偏移量（归零用）
-    pitchOffset: 0,
-    yawOffset: 0,
-    rollOffset: 0,
-
-    // 采集的ROM点
-    collectedPoints: [],
-
-    // ROM检测状态
-    romStepIndex: 0,
-    romResults: {},
-    romIsWaitingForZero: false,
-
-    // 位置觉检测状态
-    positionStepIndex: 0,
-    positionResults: [],
-    positionIsRunning: false,
-    positionInitialPitch: 0,
-    positionInitialYaw: 0,
-    positionInitialRoll: 0,
-
-    // 角度系数（动态计算以匹配实际显示范围）
-    yawCoefficient: 0.8,
-    pitchCoefficient: 0.53,
-
-    // 检测状态
-    holdTime: 0,
-    error: 0,
-
-    // 综合检测结果
-    integratedResults: {
-        positionScore: 0,
-        stabilityScore: 0,
-        romScore: 0
-    },
-
-    // 进度
-    progress: 0,
-    testDuration: CONFIG.INTEGRATED_DURATION,
-
-    // 缩放
-    zoomFactor: 1,
-
-    // 评分结果
-    results: {
-        position: 0,
-        stability: 0,
-        rom: 0,
-        coordination: 0
-    },
-
-    // 轨迹类型
-    trajectoryType: 'horizontal',
-
-    // 轨迹
-    trail: [],
-    maxTrailLength: 200,
-
-    // ROM 范围
-    romRange: { pitch: { min: 0, max: 0 }, yaw: { min: 0, max: 0 } },
-
-    // 十字准星偏移
-    crosshairOffsetX: 0,
-    crosshairOffsetY: 0,
-    isDraggingCrosshair: false,
-    lastDragX: 0,
-    lastDragY: 0,
-
-    // 误差追踪
-    lastError: 0,
-    coordFailTime: 0
-});
-
-const state = createState();
-
-// ============================================================
-// CANVAS - 画布和尺寸
-// ============================================================
-const canvas = document.getElementById('crosshair-canvas');
-const ctx = canvas.getContext('2d');
-let centerX, centerY, crosshairSize, ringRadius;
-
-function resizeCanvas() {
-    const container = document.getElementById('detection-area');
-    const rect = container.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
-    canvas.style.width = rect.width + 'px';
-    canvas.style.height = rect.height + 'px';
-    centerX = canvas.width / 2;
-    centerY = canvas.height / 2;
-    crosshairSize = Math.min(canvas.width, canvas.height) * 0.5 * state.zoomFactor;
-    ringRadius = crosshairSize * 0.35;
-}
-
-// ============================================================
-// DRAWING - 绘图函数
-// ============================================================
-
-// 绘制背景网格
-function drawGrid() {
-    ctx.strokeStyle = CONFIG.COLORS.GRID;
-    ctx.lineWidth = 1;
-    const gridStep = 50;
-    for (let x = 0; x < canvas.width; x += gridStep) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-    }
-    for (let y = 0; y < canvas.height; y += gridStep) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
-    }
-}
-
-// 绘制静态元素（十字准星背景）
-function drawStaticElements() {
-    const actualCenterX = centerX + state.crosshairOffsetX;
-    const actualCenterY = centerY + state.crosshairOffsetY;
-
-    // 外部参考环
-    ctx.beginPath();
-    ctx.arc(actualCenterX, actualCenterY, ringRadius, 0, Math.PI * 2);
-    ctx.strokeStyle = CONFIG.COLORS.RING_OUTER;
-    ctx.lineWidth = 3;
-    ctx.setLineDash([10, 10]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // 内部环
-    ctx.beginPath();
-    ctx.arc(actualCenterX, actualCenterY, ringRadius * 0.5, 0, Math.PI * 2);
-    ctx.strokeStyle = CONFIG.COLORS.RING_INNER;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // 水平线（与左右垂直线相交）
-    const leftX = actualCenterX - crosshairSize / 2 + 15;
-    const rightX = actualCenterX + crosshairSize / 2 - 15;
-    ctx.beginPath();
-    ctx.moveTo(leftX, actualCenterY);
-    ctx.lineTo(rightX, actualCenterY);
-    ctx.strokeStyle = CONFIG.COLORS.CROSSHAIR;
-    ctx.lineWidth = 10;
-    ctx.stroke();
-
-    // 中心垂直线（比外圆直径短很多）
-    const vLineLength = ringRadius * 0.85;
-    ctx.beginPath();
-    ctx.moveTo(actualCenterX, actualCenterY - vLineLength);
-    ctx.lineTo(actualCenterX, actualCenterY + vLineLength);
-    ctx.strokeStyle = CONFIG.COLORS.CROSSHAIR;
-    ctx.lineWidth = 10;
-    ctx.stroke();
-
-    // 左右标记线
-    ctx.beginPath();
-    ctx.moveTo(leftX, actualCenterY - vLineLength);
-    ctx.lineTo(leftX, actualCenterY + vLineLength);
-    ctx.strokeStyle = CONFIG.COLORS.CROSSHAIR;
-    ctx.lineWidth = 10;
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(rightX, actualCenterY - vLineLength);
-    ctx.lineTo(rightX, actualCenterY + vLineLength);
-    ctx.strokeStyle = CONFIG.COLORS.CROSSHAIR;
-    ctx.lineWidth = 10;
-    ctx.stroke();
-
-    // 角落标记
-    const markSize = 15;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.lineWidth = 5;
-
-    // 上
-    ctx.beginPath();
-    ctx.moveTo(actualCenterX - markSize, actualCenterY - crosshairSize / 2 + 10);
-    ctx.lineTo(actualCenterX + markSize, actualCenterY - crosshairSize / 2 + 10);
-    ctx.stroke();
-    // 下
-    ctx.beginPath();
-    ctx.moveTo(actualCenterX - markSize, actualCenterY + crosshairSize / 2 - 10);
-    ctx.lineTo(actualCenterX + markSize, actualCenterY + crosshairSize / 2 - 10);
-    ctx.stroke();
-    // 左
-    ctx.beginPath();
-    ctx.moveTo(actualCenterX - crosshairSize / 2 + 10, actualCenterY - markSize);
-    ctx.lineTo(actualCenterX - crosshairSize / 2 + 10, actualCenterY + markSize);
-    ctx.stroke();
-    // 右
-    ctx.beginPath();
-    ctx.moveTo(actualCenterX + crosshairSize / 2 - 10, actualCenterY - markSize);
-    ctx.lineTo(actualCenterX + crosshairSize / 2 - 10, actualCenterY + markSize);
-    ctx.stroke();
-}
-
-// 绘制轨迹路径
-function drawTrajectory(actualCenterX, actualCenterY, scale) {
-    const isCoordOrIntegrated = state.mode === 'coordination' || state.mode === 'integrated';
-    if (!isCoordOrIntegrated) return;
-
-    const isFigure8 = state.mode === 'integrated' || state.trajectoryType === 'figure8';
-    const isHorizontal = state.trajectoryType === 'horizontal';
-    const isVertical = state.trajectoryType === 'vertical';
-    const isVerticalLeft = state.trajectoryType === 'vertical_left';
-    const isVerticalRight = state.trajectoryType === 'vertical_right';
-
-    // 垂直左右不画轨迹线
-    if (isVerticalLeft || isVerticalRight) return;
-
-    ctx.beginPath();
-    for (let i = 0; i <= 200; i++) {
-        const tParam = (i / 200) * Math.PI * 2;
-        let pathX, pathY;
-
-        if (isFigure8) {
-            pathX = actualCenterX + Math.sin(tParam) * scale * CONFIG.FIGURE8_AMPLITUDE_X;
-            pathY = actualCenterY - Math.sin(tParam) * Math.cos(tParam) * scale * CONFIG.FIGURE8_AMPLITUDE_Y;
-        } else if (isHorizontal) {
-            pathX = actualCenterX + Math.sin(tParam) * scale * CONFIG.HORIZONTAL_AMPLITUDE;
-            pathY = actualCenterY;
-        } else if (isVertical) {
-            pathX = actualCenterX;
-            pathY = actualCenterY - Math.cos(tParam) * scale * CONFIG.VERTICAL_AMPLITUDE;
-        } else {
-            pathX = actualCenterX + Math.sin(tParam) * scale * CONFIG.HORIZONTAL_AMPLITUDE;
-            pathY = actualCenterY;
-        }
-
-        if (i === 0) {
-            ctx.moveTo(pathX, pathY);
-        } else {
-            ctx.lineTo(pathX, pathY);
-        }
-    }
-    ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
-    ctx.lineWidth = 10;
-    ctx.stroke();
-}
-
-// 绘制红色目标点
-function drawTargetDot(actualCenterX, actualCenterY, scale, targetX, targetY) {
-    const showTarget = state.mode === 'stability' || state.mode === 'coordination' || state.mode === 'integrated';
-    if (!showTarget) return;
-
-    const tX = actualCenterX + targetX * scale;
-    const tY = actualCenterY - targetY * scale;
-    const dotRadius = 12;
-
-    // 光晕
-    const gradient = ctx.createRadialGradient(tX, tY, 0, tX, tY, dotRadius * 2);
-    gradient.addColorStop(0, CONFIG.COLORS.TARGET_GLOW);
-    gradient.addColorStop(0.5, CONFIG.COLORS.TARGET_GLOW_MID);
-    gradient.addColorStop(1, 'rgba(239, 68, 68, 0)');
-    ctx.beginPath();
-    ctx.arc(tX, tY, dotRadius * 2, 0, Math.PI * 2);
-    ctx.fillStyle = gradient;
-    ctx.fill();
-
-    // 圆形
-    ctx.beginPath();
-    ctx.arc(tX, tY, dotRadius, 0, Math.PI * 2);
-    ctx.fillStyle = CONFIG.COLORS.TARGET;
-    ctx.fill();
-
-    // 边框
-    ctx.beginPath();
-    ctx.arc(tX, tY, dotRadius, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-}
-
-// 绘制绿色位置点
-function drawPositionDot(actualCenterX, actualCenterY, scale, dotX, dotY) {
-    const pX = actualCenterX + dotX * scale;
-    const pY = actualCenterY - dotY * scale;
-    const dotRadius = 12;
-
-    // 光晕
-    const gradient = ctx.createRadialGradient(pX, pY, 0, pX, pY, dotRadius * 2);
-    gradient.addColorStop(0, CONFIG.COLORS.POSITION_GLOW);
-    gradient.addColorStop(0.5, CONFIG.COLORS.POSITION_GLOW_MID);
-    gradient.addColorStop(1, 'rgba(0, 217, 165, 0)');
-    ctx.beginPath();
-    ctx.arc(pX, pY, dotRadius * 2, 0, Math.PI * 2);
-    ctx.fillStyle = gradient;
-    ctx.fill();
-
-    // 圆形
-    ctx.beginPath();
-    ctx.arc(pX, pY, dotRadius, 0, Math.PI * 2);
-    ctx.fillStyle = CONFIG.COLORS.POSITION;
-    ctx.fill();
-
-    // 边框
-    ctx.beginPath();
-    ctx.arc(pX, pY, dotRadius, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-}
-
-// 绘制轨迹
-function drawTrail(actualCenterX, actualCenterY) {
-    if (state.trail.length < 2) return;
-
-    const scale = ringRadius / 100;
-    ctx.beginPath();
-    for (let i = 0; i < state.trail.length; i++) {
-        const point = state.trail[i];
-        const x = actualCenterX + point.x * scale;
-        const y = actualCenterY - point.y * scale;
-        if (i === 0) {
-            ctx.moveTo(x, y);
-        } else {
-            ctx.lineTo(x, y);
-        }
-    }
-    ctx.strokeStyle = CONFIG.COLORS.TRAIL;
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.stroke();
-}
-
-// 主绘制函数
-function drawCrosshair() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const actualCenterX = centerX + state.crosshairOffsetX;
-    const actualCenterY = centerY + state.crosshairOffsetY;
-    const scale = ringRadius / 100;
-
-    drawGrid();
-    drawStaticElements();
-    drawTrajectory(actualCenterX, actualCenterY, scale);
-    drawTargetDot(actualCenterX, actualCenterY, scale, window.targetX, window.targetY);
-    drawPositionDot(actualCenterX, actualCenterY, scale, state.dotX, state.dotY);
-    drawTrail(actualCenterX, actualCenterY);
-}
-
-// ============================================================
-// DETECTION - 检测逻辑
-// ============================================================
-
-// 综合检测
-function updateIntegrated(elapsed) {
-    // 暂时让红点静止在中心
-    window.targetX = 0;
-    window.targetY = 0;
-    state.progress = elapsed / CONFIG.INTEGRATED_DURATION;
-
-    // 追踪 ROM
-    state.romRange.pitch.min = Math.min(state.romRange.pitch.min, state.pitch);
-    state.romRange.pitch.max = Math.max(state.romRange.pitch.max, state.pitch);
-    state.romRange.yaw.min = Math.min(state.romRange.yaw.min, state.yaw);
-    state.romRange.yaw.max = Math.max(state.romRange.yaw.max, state.yaw);
-
-    // 计算误差
-    const trackingError = Math.sqrt((state.dotX - window.targetX) ** 2 + (state.dotY - window.targetY) ** 2);
-
-    // 位置觉得分
-    state.integratedResults.positionScore = Math.max(0, 100 - trackingError);
-
-    // 稳定性得分
-    if (!state.lastError) state.lastError = trackingError;
-    const errorDelta = Math.abs(trackingError - state.lastError);
-    state.lastError = trackingError;
-    state.integratedResults.stabilityScore = Math.max(0, 100 - errorDelta * 10);
-
-    // ROM 得分
-    const pitchRange = state.romRange.pitch.max - state.romRange.pitch.min;
-    const yawRange = state.romRange.yaw.max - state.romRange.yaw.min;
-    state.integratedResults.romScore = Math.min(100,
-        ((pitchRange / CONFIG.EXPECTED_PITCH_RANGE) + (yawRange / CONFIG.EXPECTED_YAW_RANGE)) / 2 * 100
-    );
-}
-
-// 位置觉检测
-function updatePosition() {
-    if (state.error <= CONFIG.HOLD_THRESHOLD) {
-        state.holdTime += 1 / 60;
-    } else {
-        state.holdTime = Math.max(0, state.holdTime - CONFIG.ERROR_DECAY);
-    }
-    state.results.position = Math.min(100, (state.holdTime / CONFIG.HOLD_DURATION) * 100);
-}
-
-// 稳定性检测
-function updateStability(elapsed) {
-    const time = elapsed * 0.5;
-    window.targetX = Math.sin(time) * 70;
-    window.targetY = Math.cos(time) * 70;
-
-    const error = Math.sqrt((state.dotX - window.targetX) ** 2 + (state.dotY - window.targetY) ** 2);
-    state.results.stability = Math.max(0, 100 - error);
-}
-
-// ROM 检测
-function updateROM() {
-    state.romRange.pitch.min = Math.min(state.romRange.pitch.min, state.pitch);
-    state.romRange.pitch.max = Math.max(state.romRange.pitch.max, state.pitch);
-    state.romRange.yaw.min = Math.min(state.romRange.yaw.min, state.yaw);
-    state.romRange.yaw.max = Math.max(state.romRange.yaw.max, state.yaw);
-
-    const pitchRange = state.romRange.pitch.max - state.romRange.pitch.min;
-    const yawRange = state.romRange.yaw.max - state.romRange.yaw.min;
-
-    state.results.rom = Math.min(100,
-        ((pitchRange / CONFIG.EXPECTED_PITCH_RANGE) + (yawRange / CONFIG.EXPECTED_YAW_RANGE)) / 2 * 100
-    );
-}
-
-// 协调性检测
-function updateCoordination(elapsed) {
-    const smoothT = elapsed * CONFIG.TRAJECTORY_SPEED;
-
-    if (state.trajectoryType === 'horizontal') {
-        window.targetX = Math.sin(smoothT) * CONFIG.HORIZONTAL_AMPLITUDE;
-        window.targetY = 0;
-        state.progress = Math.min(1, smoothT / (2 * Math.PI) / 2);
-    } else if (state.trajectoryType === 'vertical') {
-        window.targetX = 0;
-        window.targetY = Math.sin(smoothT) * CONFIG.VERTICAL_AMPLITUDE;
-        state.progress = Math.min(1, smoothT / (2 * Math.PI) / 2);
-    } else if (state.trajectoryType === 'vertical_left') {
-        const verticalOffset = (crosshairSize / 2 - 15) / (ringRadius / 100);
-        window.targetX = -verticalOffset;
-        window.targetY = Math.sin(smoothT) * CONFIG.VERTICAL_AMPLITUDE;
-        state.progress = Math.min(1, smoothT / (2 * Math.PI) / 2);
-    } else if (state.trajectoryType === 'vertical_right') {
-        const verticalOffset = (crosshairSize / 2 - 15) / (ringRadius / 100);
-        window.targetX = verticalOffset;
-        window.targetY = Math.sin(smoothT) * CONFIG.VERTICAL_AMPLITUDE;
-        state.progress = Math.min(1, smoothT / (2 * Math.PI) / 2);
-    } else {
-        // figure8
-        window.targetX = Math.sin(smoothT) * CONFIG.FIGURE8_AMPLITUDE_X;
-        window.targetY = Math.sin(smoothT) * Math.cos(smoothT) * CONFIG.FIGURE8_AMPLITUDE_Y;
-        state.progress = Math.min(1, smoothT / (4 * Math.PI) / 2);
-    }
-
-    const coordError = Math.sqrt((state.dotX - window.targetX) ** 2 + (state.dotY - window.targetY) ** 2);
-    if (coordError > CONFIG.FAIL_THRESHOLD) {
-        state.coordFailTime = (state.coordFailTime || 0) + 1 / 60;
-    } else {
-        state.coordFailTime = Math.max(0, (state.coordFailTime || 0) - CONFIG.ERROR_DECAY);
-    }
-    state.results.coordination = state.coordFailTime < 1 ? 100 : Math.max(0, 100 - state.coordFailTime * 10);
-}
-
-// ============================================================
-// UI - 界面更新
-// ============================================================
-
-function updateDataDisplay() {
-    const displayPitch = state.pitch - state.pitchOffset;
-    const displayYaw = state.yaw - state.yawOffset;
-    const displayRoll = state.roll - state.rollOffset;
-    document.getElementById('pitch-value').textContent = displayPitch.toFixed(1) + '°';
-    document.getElementById('yaw-value').textContent = displayYaw.toFixed(1) + '°';
-    document.getElementById('roll-value').textContent = displayRoll.toFixed(1) + '°';
-    state.error = Math.sqrt(state.dotX ** 2 + state.dotY ** 2);
-    document.getElementById('error-value').textContent = state.error.toFixed(1) + '°';
-    document.getElementById('dot-x').textContent = Math.round(state.dotX);
-    document.getElementById('dot-y').textContent = Math.round(state.dotY);
-}
-
-function zeroPosition() {
-    state.pitchOffset = state.pitch;
-    state.yawOffset = state.yaw;
-    state.rollOffset = state.roll;
-
-    // ROM检测模式：romStepIndex=0未开始, 1-6进行中, 7完成
-    // 只有采集后才能归零进入下一步
-    if (state.mode === 'rom') {
-        if (state.romStepIndex === 0) {
-            // 第一次归零：开始检测
-            state.romStepIndex = 1;
-            state.romIsWaitingForZero = false;
-            updateROMGuide();
-        } else if (state.romStepIndex >= 1 && state.romStepIndex <= 6 && state.romIsWaitingForZero === false) {
-            // 已开始但还未采集就归零：忽略
-        } else if (state.romStepIndex >= 1 && state.romStepIndex <= 6 && state.romIsWaitingForZero) {
-            // 已采集，现在归零进入下一步
-            state.romIsWaitingForZero = false;
-            if (state.romStepIndex >= 6) {
-                state.romStepIndex = 7;
-            } else {
-                state.romStepIndex++;
-            }
-            updateROMGuide();
-        }
-    }
-
-    // 位置觉检测模式
-    if (state.mode === 'position') {
-        console.log('归零检查: stepIndex=', state.positionStepIndex, 'isRunning=', state.positionIsRunning);
-        if (state.positionStepIndex === 0) {
-            // 第一次归零：记录初始位置并开始检测
-            state.positionInitialPitch = state.pitch;
-            state.positionInitialYaw = state.yaw;
-            state.positionInitialRoll = state.roll;
-            state.positionStepIndex = 1;
-            state.positionIsRunning = true;
-            console.log('位置觉检测开始, step:', state.positionStepIndex);
-            updatePositionGuide();
-        } else if (state.positionStepIndex > 0 && state.positionIsRunning === 'waiting_for_zero') {
-            // 采集后的归零：记录新的初始位置，进入下一步
-            state.positionInitialPitch = state.pitch;
-            state.positionInitialYaw = state.yaw;
-            state.positionInitialRoll = state.roll;
-            state.positionIsRunning = true;
-            console.log('位置觉归零进入下一步, step:', state.positionStepIndex, '->', state.positionStepIndex + 1);
-            updatePositionGuide();
-        }
-    }
-}
-
-function collectPoint() {
-    // ROM检测完成时，显示结果
-    if (state.mode === 'rom' && state.romStepIndex > 6) {
-        showROMResults();
-        return;
-    }
-
-    // ROM检测时，如果还未开始（romStepIndex=0），提示先归零
-    if (state.mode === 'rom' && state.romStepIndex === 0) {
-        alert('请先点击"归零"按钮开始检测');
-        return;
-    }
-
-    // ROM检测时，如果已采集等待归零，不处理
-    if (state.mode === 'rom' && state.romIsWaitingForZero) {
-        return;
-    }
-
-    const displayPitch = state.pitch - state.pitchOffset;
-    const displayYaw = state.yaw - state.yawOffset;
-    const displayRoll = state.roll - state.rollOffset;
-    const point = {
-        id: Date.now(),
-        dotX: state.dotX,
-        dotY: state.dotY,
-        pitch: displayPitch,
-        yaw: displayYaw,
-        roll: displayRoll,
-        timestamp: new Date().toLocaleTimeString()
-    };
-    state.collectedPoints.push(point);
-
-    // ROM检测模式：采集后等待归零进入下一步
-    if (state.mode === 'rom' && state.romStepIndex >= 1 && state.romStepIndex <= 6) {
-        const step = CONFIG.ROM_STEPS[state.romStepIndex - 1];
-        state.romResults[step.name] = point[step.axis];
-        state.romIsWaitingForZero = true;
-        updateROMGuide();
-    }
-
-    // 在romResults设置后再更新显示
-    if (state.mode === 'rom') {
-        showROMInlineResults();
-    }
-}
-
-function showROMInlineResults() {
-    const resultsDiv = document.getElementById('rom-results');
-    const countDiv = document.getElementById('rom-collect-count');
-
-    if (Object.keys(state.romResults).length === 0) {
-        resultsDiv.innerHTML = `
-            <div id="rom-collect-count" style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">已采集 0/6</div>
-            <div style="font-size: 10px; color: var(--text-muted);">暂无结果</div>
-        `;
-        return;
-    }
-
-    let html = `<div id="rom-collect-count" style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">已采集 ${Object.keys(state.romResults).length}/6</div>`;
-    for (let i = 0; i < CONFIG.ROM_STEPS.length; i++) {
-        const step = CONFIG.ROM_STEPS[i];
-        const value = state.romResults[step.name];
-        if (value !== undefined) {
-            const absValue = Math.abs(value);
-            const percentage = Math.min(100, (absValue / step.normal) * 100);
-            const status = absValue >= step.normal * 0.8 ? '正常' : absValue >= step.normal * 0.5 ? '轻度' : '受限';
-            const color = absValue >= step.normal * 0.8 ? 'var(--success)' : absValue >= step.normal * 0.5 ? 'var(--warning)' : 'var(--danger)';
-            html += `
-                <div style="padding: 2px 0;">
-                    <span style="font-size: 10px;">${step.name}:</span>
-                    <span style="font-size: 10px; color: ${color};">${value.toFixed(1)}° ${status}</span>
+    <!-- 陀螺仪蓝牙连接弹窗 -->
+    <div class="modal" id="gyro-modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-title">蓝牙陀螺仪连接</div>
+            <div style="margin: 15px 0;">
+                <!-- 连接状态 -->
+                <div id="gyro-status" style="text-align: center; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 8px; margin-bottom: 15px;">
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">连接状态</div>
+                    <div id="gyro-status-text" style="font-size: 14px; font-weight: 600;">未连接</div>
+                    <div id="gyro-device-name" style="font-size: 11px; color: var(--text-muted); margin-top: 4px;"></div>
+                    <div id="gyro-battery" style="font-size: 11px; margin-top: 4px;"></div>
                 </div>
-            `;
-        }
-    }
 
-    resultsDiv.innerHTML = html;
-}
-
-function showROMResults() {
-    const results = [];
-    for (let i = 0; i < CONFIG.ROM_STEPS.length; i++) {
-        const step = CONFIG.ROM_STEPS[i];
-        const value = state.romResults[step.name];
-        const absValue = Math.abs(value);
-        const percentage = Math.min(100, (absValue / step.normal) * 100);
-        const status = absValue >= step.normal * 0.8 ? '正常' : absValue >= step.normal * 0.5 ? '轻度受限' : '明显受限';
-        results.push({
-            name: step.name,
-            value: value.toFixed(1),
-            normal: step.normal,
-            percentage: percentage.toFixed(0),
-            status: status
-        });
-    }
-
-    let html = '<div style="max-height: 300px; overflow-y: auto;">';
-    results.forEach(r => {
-        const color = r.status === '正常' ? 'var(--success)' : r.status === '轻度受限' ? 'var(--warning)' : 'var(--danger)';
-        html += `
-            <div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 10px; margin-bottom: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <span style="font-size: 12px; font-weight: 600;">${r.name}</span>
-                    <span style="font-size: 12px; color: ${color}; font-weight: 600;">${r.status}</span>
+                <!-- 设备列表 -->
+                <div style="margin-bottom: 15px;">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">可用设备</div>
+                    <div id="gyro-device-list" style="max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.15); border-radius: 6px; padding: 8px;">
+                        <div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px;">点击"扫描设备"开始搜索</div>
+                    </div>
                 </div>
-                <div style="font-size: 18px; font-family: Consolas, monospace; margin-bottom: 4px;">
-                    ${r.value}° <span style="font-size: 10px; color: var(--text-muted);">/ 正常${r.normal}°</span>
+
+                <!-- UUID配置 -->
+                <div style="margin-bottom: 15px;">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">服务UUID (留空使用默认)</div>
+                    <input type="text" id="gyro-service-uuid" placeholder="180D" style="width: 100%; padding: 8px; background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: var(--text); font-size: 11px; box-sizing: border-box;">
+                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">常用: 180D(心率) 180F(电池) 181A(环境) 自定义陀螺仪请填入对应UUID</div>
                 </div>
-                <div style="height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden;">
-                    <div style="height: 100%; width: ${r.percentage}%; background: ${color}; border-radius: 2px;"></div>
+
+                <!-- 操作按钮 -->
+                <div style="display: flex; gap: 10px;">
+                    <button id="gyro-scan-btn" style="flex: 1; padding: 10px; background: var(--primary); color: var(--bg-dark); border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">扫描设备</button>
+                    <button id="gyro-disconnect-btn" style="flex: 1; padding: 10px; background: var(--danger); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; display: none;">断开连接</button>
+                </div>
+
+                <!-- 调试信息 -->
+                <div id="gyro-debug" style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 6px; font-family: Consolas, monospace; font-size: 10px; max-height: 100px; overflow-y: auto; display: none;">
+                    <div style="color: var(--text-muted); margin-bottom: 4px;">调试信息:</div>
+                    <div id="gyro-debug-content"></div>
                 </div>
             </div>
-        `;
-    });
-    html += '</div>';
-
-    document.getElementById('result-position').parentElement.innerHTML = html;
-    document.getElementById('close-modal').textContent = '重新检测';
-    document.getElementById('result-position').textContent = 'ROM';
-    document.getElementById('close-modal').onclick = () => {
-        closeModal();
-        state.romStepIndex = 0;
-        state.romResults = {};
-        state.romIsWaitingForZero = false;
-        state.collectedPoints = [];
-        showROMInlineResults();
-        updateROMGuide();
-        document.getElementById('close-modal').textContent = '确定';
-        document.getElementById('close-modal').onclick = closeModal;
-    };
-    document.getElementById('result-modal').classList.add('show');
-}
-
-function deleteCollectedPoint(id) {
-    state.collectedPoints = state.collectedPoints.filter(p => p.id !== id);
-    renderCollectedPoints();
-}
-
-function renderCollectedPoints() {
-    const list = document.getElementById('collected-list');
-    if (!list) return;
-    if (state.collectedPoints.length === 0) {
-        list.innerHTML = '<div style="font-size: 10px; color: var(--text-muted); text-align: center; padding: 8px;">暂无采集点</div>';
-        return;
-    }
-    list.innerHTML = state.collectedPoints.map((p, i) => `
-        <div class="collected-item">
-            <span class="label">点${i + 1}</span>
-            <span class="value">P:${p.pitch.toFixed(0)}° Y:${p.yaw.toFixed(0)}° R:${p.roll.toFixed(0)}°</span>
-            <button class="delete-btn" onclick="deleteCollectedPoint(${p.id})">×</button>
+            <button class="modal-btn" id="close-gyro-modal">关闭</button>
         </div>
-    `).join('');
-}
+    </div>
 
-function updateProgress() {
-    const progressRing = document.getElementById('progress-ring-fill');
-    const progressText = document.getElementById('progress-text');
-    if (!progressRing || !progressText) return;
-    const circumference = 2 * Math.PI * 35;
-    const offset = circumference - state.progress * circumference;
-    progressRing.style.strokeDashoffset = offset;
-    progressText.textContent = Math.round(state.progress * 100) + '%';
-
-    progressRing.classList.remove('warning', 'success');
-    if (state.progress >= 1) {
-        progressRing.classList.add('success');
-    } else if (state.progress >= 0.5) {
-        progressRing.classList.add('warning');
-    }
-}
-
-function showResults() {
-    let positionScore, stabilityScore, romScore;
-
-    if (state.mode === 'integrated') {
-        positionScore = state.integratedResults.positionScore;
-        stabilityScore = state.integratedResults.stabilityScore;
-        romScore = state.integratedResults.romScore;
-    } else {
-        positionScore = state.results.position;
-        stabilityScore = state.results.stability;
-        romScore = state.results.rom;
-    }
-
-    const overall = Math.round((positionScore + stabilityScore + romScore) / 3);
-
-    document.getElementById('result-position').textContent = Math.round(positionScore);
-    document.getElementById('bar-position').style.width = positionScore + '%';
-    document.getElementById('result-stability').textContent = Math.round(stabilityScore);
-    document.getElementById('bar-stability').style.width = stabilityScore + '%';
-    document.getElementById('result-rom').textContent = Math.round(romScore);
-    document.getElementById('bar-rom').style.width = romScore + '%';
-    document.getElementById('result-coordination').textContent = overall;
-    document.getElementById('bar-coordination').style.width = overall + '%';
-
-    document.getElementById('result-modal').classList.add('show');
-}
-
-// ============================================================
-// INPUT - 输入处理
-// ============================================================
-
-let isDraggingDot = false;
-let spacePressed = false;
-
-function updateDotPosition(e) {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const actualCenterX = centerX + state.crosshairOffsetX;
-    const actualCenterY = centerY + state.crosshairOffsetY;
-
-    const offsetX = x - actualCenterX;
-    const offsetY = actualCenterY - y;
-
-    const scale = 100 / ringRadius;
-
-    // 限制在垂直线长度范围内（对应后伸/前屈 ±45°）
-    const vLineLength = ringRadius * 0.85;
-    const clampedOffsetY = Math.max(-vLineLength, Math.min(vLineLength, offsetY));
-    state.dotY = clampedOffsetY * scale;
-
-    // 限制在水平线长度范围内（对应旋转 ±80°）
-    const hLineLength = (crosshairSize / 2 - 15);
-    const clampedOffsetX = Math.max(-hLineLength, Math.min(hLineLength, offsetX));
-    state.dotX = clampedOffsetX * scale;
-
-    // 动态计算角度系数，确保最大位移对应 ±80°/±45°
-    state.yawCoefficient = 80 / (hLineLength * scale);
-    state.pitchCoefficient = 45 / (vLineLength * scale);
-
-    state.trail.push({ x: state.dotX, y: state.dotY });
-    if (state.trail.length > state.maxTrailLength) {
-        state.trail.shift();
-    }
-
-    // 角度映射：使用动态系数确保最大位移对应 ±80°/±45°
-    state.yaw = state.dotX * state.yawCoefficient;
-    state.pitch = -state.dotY * state.pitchCoefficient;
-    state.roll = 0; // 模拟数据暂无roll，真实陀螺仪会提供
-
-    updateDataDisplay();
-}
-
-function returnToCenter() {
-    state.dotX *= (1 - CONFIG.DOT_RETURN_SPEED);
-    state.dotY *= (1 - CONFIG.DOT_RETURN_SPEED);
-    state.yaw = state.dotX * state.yawCoefficient;
-    state.pitch = -state.dotY * state.pitchCoefficient;
-    state.roll = 0;
-}
-
-function initInput() {
-    canvas.addEventListener('contextmenu', e => e.preventDefault());
-
-    canvas.addEventListener('mousedown', e => {
-        if (e.button === 0 && !spacePressed) {
-            isDraggingDot = true;
-            updateDotPosition(e);
-        } else if (e.button === 2 || spacePressed) {
-            state.isDraggingCrosshair = true;
-            state.lastDragX = e.clientX;
-            state.lastDragY = e.clientY;
-        }
-    });
-
-    canvas.addEventListener('mouseup', e => {
-        if (e.button === 0) {
-            isDraggingDot = false;
-            returnToCenter();
+    <script src="js/config.js"></script>
+    <script src="js/state.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/drawing.js"></script>
+    <script src="js/detection.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/input.js"></script>
+    <script src="js/tts.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/events.js"></script>
+    <script>
+        if (document.readyState === 'complete') {
+            setTimeout(init, 100);
         } else {
-            state.isDraggingCrosshair = false;
+            window.addEventListener('load', () => setTimeout(init, 100));
         }
-    });
-
-    canvas.addEventListener('mouseleave', () => {
-        isDraggingDot = false;
-        state.isDraggingCrosshair = false;
-    });
-
-    canvas.addEventListener('mousemove', e => {
-        if (isDraggingDot) {
-            updateDotPosition(e);
-        } else if (state.isDraggingCrosshair) {
-            const dx = e.clientX - state.lastDragX;
-            const dy = e.clientY - state.lastDragY;
-            state.crosshairOffsetX += dx;
-            state.crosshairOffsetY += dy;
-            state.lastDragX = e.clientX;
-            state.lastDragY = e.clientY;
-        }
-    });
-
-    canvas.addEventListener('touchstart', e => {
-        e.preventDefault();
-        if (e.touches.length === 1) {
-            isDraggingDot = true;
-            updateDotPosition(e.touches[0]);
-        }
-    });
-
-    canvas.addEventListener('touchmove', e => {
-        e.preventDefault();
-        if (e.touches.length === 1 && isDraggingDot) {
-            updateDotPosition(e.touches[0]);
-        }
-    });
-
-    canvas.addEventListener('touchend', () => {
-        isDraggingDot = false;
-        returnToCenter();
-    });
-
-    document.addEventListener('keydown', e => {
-        if (e.code === 'Space' && !e.repeat) {
-            e.preventDefault();
-            spacePressed = true;
-        } else if (e.code === 'ArrowUp') {
-            e.preventDefault();
-            state.crosshairOffsetY -= 10;
-        } else if (e.code === 'ArrowDown') {
-            e.preventDefault();
-            state.crosshairOffsetY += 10;
-        } else if (e.code === 'ArrowLeft') {
-            e.preventDefault();
-            state.crosshairOffsetX -= 10;
-        } else if (e.code === 'ArrowRight') {
-            e.preventDefault();
-            state.crosshairOffsetX += 10;
-        } else if (e.code === 'KeyR') {
-            state.crosshairOffsetX = 0;
-            state.crosshairOffsetY = 0;
-        }
-    });
-
-    document.addEventListener('keyup', e => {
-        if (e.code === 'Space') {
-            spacePressed = false;
-        }
-    });
-}
-
-// ============================================================
-// EVENTS - 事件处理
-// ============================================================
-
-function setMode(mode) {
-    state.mode = mode;
-    document.querySelectorAll('.mode-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.mode === mode);
-    });
-
-    const trajCard = document.getElementById('trajectory-card');
-    trajCard.style.display = mode === 'coordination' ? 'block' : 'none';
-
-    // 显示对应模式的视图
-    document.getElementById('view-mode-select').style.display = mode === 'mode-select' ? 'block' : 'none';
-    document.getElementById('view-integrated').style.display = mode === 'integrated' ? 'block' : 'none';
-    document.getElementById('view-coordination').style.display = mode === 'coordination' ? 'block' : 'none';
-    document.getElementById('view-rom').style.display = mode === 'rom' ? 'flex' : 'none';
-    document.getElementById('view-position').style.display = mode === 'position' ? 'flex' : 'none';
-
-    // ROM检测初始化
-    if (mode === 'rom') {
-        state.romStepIndex = 0;
-        state.romResults = {};
-        state.romIsWaitingForZero = false;
-        state.collectedPoints = [];
-        showROMInlineResults();
-        updateROMGuide();
-    }
-
-    // 位置觉检测初始化
-    if (mode === 'position') {
-        state.positionStepIndex = 0;
-        state.positionResults = [];
-        state.positionIsRunning = false;
-        updatePositionGuide();
-    }
-
-    state.progress = 0;
-    state.holdTime = 0;
-    state.integratedPhase = 0;
-    updateProgress();
-    state.trail = [];
-    state.lastError = 0;
-    state.collectedPoints = [];
-    renderCollectedPoints();
-    state.pitchOffset = 0;
-    state.yawOffset = 0;
-    state.rollOffset = 0;
-
-    if (mode === 'integrated' || mode === 'coordination') {
-        window.targetX = 0;
-        window.targetY = 0;
-    }
-}
-
-function updateROMGuide() {
-    const romGuide = document.getElementById('rom-guide');
-    const instruction = document.getElementById('rom-instruction');
-    const progress = document.getElementById('rom-progress');
-    const collectBtn = document.getElementById('collect-btn');
-
-    if (state.romStepIndex === 0) {
-        instruction.textContent = '请先归零';
-        progress.textContent = '步骤 0/6';
-        romGuide.classList.remove('rom-guide-active');
-        collectBtn.textContent = '📍 采集当前点';
-        collectBtn.disabled = true;
-    } else if (state.romStepIndex <= 6) {
-        const step = CONFIG.ROM_STEPS[state.romStepIndex - 1];
-        if (state.romIsWaitingForZero) {
-            instruction.textContent = '请归零进入下一步';
-            instruction.style.background = 'rgba(0,217,165,0.1)';
-            instruction.style.color = 'var(--primary)';
-        } else {
-            instruction.textContent = step.instruction;
-            instruction.style.background = 'rgba(239,68,68,0.1)';
-            instruction.style.color = 'var(--danger)';
-        }
-        progress.textContent = `步骤 ${state.romStepIndex}/6`;
-        romGuide.classList.add('rom-guide-active');
-        collectBtn.disabled = state.romIsWaitingForZero;
-        collectBtn.textContent = state.romIsWaitingForZero ? '等待归零' : '📍 采集当前点';
-    } else {
-        instruction.textContent = '检测完成';
-        progress.textContent = '已完成';
-        romGuide.classList.remove('rom-guide-active');
-        collectBtn.textContent = '查看结果';
-        collectBtn.disabled = false;
-    }
-}
-
-function updatePositionGuide() {
-    const guide = document.getElementById('position-guide');
-    const instruction = document.getElementById('position-instruction');
-    const progress = document.getElementById('position-progress');
-    const countdown = document.getElementById('position-countdown');
-    const eyeHint = document.getElementById('position-eye-hint');
-    const startBtn = document.getElementById('start-position-btn');
-
-    console.log('updatePositionGuide called, step:', state.positionStepIndex);
-    countdown.style.display = 'none';
-    eyeHint.style.display = 'none';
-    startBtn.onclick = null; // 重置onclick
-
-    if (state.positionStepIndex === 0) {
-        instruction.textContent = '请先归零';
-        instruction.style.background = 'rgba(0,217,165,0.1)';
-        instruction.style.color = 'var(--primary)';
-        progress.textContent = '步骤 0/6';
-        startBtn.textContent = '开始检测';
-        startBtn.disabled = false;
-    } else if (state.positionStepIndex <= 6) {
-        const step = CONFIG.POSITION_STEPS[state.positionStepIndex - 1];
-        instruction.textContent = step.instruction;
-        instruction.style.background = 'rgba(239,68,68,0.1)';
-        instruction.style.color = 'var(--danger)';
-        progress.textContent = `步骤 ${state.positionStepIndex}/6`;
-        startBtn.textContent = '>>> 开始执行 <<<';
-        startBtn.disabled = false;
-        startBtn.style.fontWeight = 'bold';
-        startBtn.style.fontSize = '14px';
-        startBtn.style.display = 'block';
-        startBtn.style.visibility = 'visible';
-        console.log('按钮文字已设置为: >>> 开始执行 <<<, actual:', startBtn.textContent, 'display:', startBtn.style.display);
-        // 强制重新渲染
-        startBtn.offsetHeight;
-    } else {
-        instruction.textContent = '检测完成';
-        instruction.style.background = 'rgba(16,185,129,0.1)';
-        instruction.style.color = 'var(--success)';
-        progress.textContent = '已完成';
-        startBtn.textContent = '重新检测';
-        startBtn.disabled = false;
-        showPositionResults();
-    }
-}
-
-function startPositionDetection() {
-    // 此函数已弃用，位置觉检测由 zeroPosition 处理
-}
-
-function executePositionStep() {
-    const step = CONFIG.POSITION_STEPS[state.positionStepIndex - 1];
-    const instruction = document.getElementById('position-instruction');
-    const countdown = document.getElementById('position-countdown');
-    const eyeHint = document.getElementById('position-eye-hint');
-    const startBtn = document.getElementById('start-position-btn');
-
-    // 显示闭眼提示
-    eyeHint.style.display = 'block';
-
-    // 开始5秒倒计时
-    let count = 5;
-    countdown.style.display = 'block';
-    countdown.textContent = count;
-
-    const timer = setInterval(() => {
-        count--;
-        countdown.textContent = count;
-        if (count <= 0) {
-            clearInterval(timer);
-            countdown.style.display = 'none';
-            eyeHint.style.display = 'none';
-            instruction.textContent = '请回到初始位置，然后睁眼';
-            startBtn.textContent = '采集位置';
-            startBtn.disabled = false;
-            state.positionIsRunning = false; // 等待采集
-        }
-    }, 1000);
-}
-
-function collectPositionPoint() {
-    // 计算与初始位置的偏移
-    const errorPitch = Math.abs(state.pitch - state.positionInitialPitch);
-    const errorYaw = Math.abs(state.yaw - state.positionInitialYaw);
-    const errorRoll = Math.abs(state.roll - state.positionInitialRoll);
-
-    const step = CONFIG.POSITION_STEPS[state.positionStepIndex - 1];
-    state.positionResults.push({
-        name: step.name,
-        errorPitch: errorPitch,
-        errorYaw: errorYaw,
-        errorRoll: errorRoll,
-        totalError: Math.sqrt(errorPitch * errorPitch + errorYaw * errorYaw + errorRoll * errorRoll)
-    });
-
-    state.positionStepIndex++;
-
-    if (state.positionStepIndex > 6) {
-        updatePositionGuide();
-    } else {
-        // 提示归零
-        const instruction = document.getElementById('position-instruction');
-        const startBtn = document.getElementById('start-position-btn');
-        instruction.textContent = '请睁眼归零，然后进入下一步';
-        instruction.style.background = 'rgba(0,217,165,0.1)';
-        instruction.style.color = 'var(--primary)';
-        startBtn.textContent = '归零';
-        startBtn.disabled = false;
-        state.positionIsRunning = 'waiting_for_zero'; // 等待归零状态
-    }
-
-    // 更新结果面板
-    showPositionResults();
-}
-
-function showPositionResults() {
-    const resultsDiv = document.getElementById('position-results');
-
-    if (state.positionResults.length === 0) {
-        resultsDiv.innerHTML = `
-            <div id="collect-count" style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">已采集 0/6</div>
-            <div style="font-size: 10px; color: var(--text-muted);">暂无结果</div>
-        `;
-        return;
-    }
-
-    let html = `<div id="collect-count" style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">已采集 ${state.positionResults.length}/6</div>`;
-    state.positionResults.forEach(r => {
-        const status = r.totalError < 5 ? '正常' : r.totalError < 10 ? '轻度' : '明显';
-        const color = r.totalError < 5 ? 'var(--success)' : r.totalError < 10 ? 'var(--warning)' : 'var(--danger)';
-        html += `
-            <div style="padding: 2px 0;">
-                <span style="font-size: 10px;">${r.name}:</span>
-                <span style="font-size: 10px; color: ${color};">${r.totalError.toFixed(1)}° ${status}</span>
-            </div>
-        `;
-    });
-
-    resultsDiv.innerHTML = html;
-}
-
-function startDetection() {
-    if (state.isRunning) return;
-
-    state.isRunning = true;
-    state.progress = 0;
-    state.holdTime = 0;
-    state.results[state.mode] = 0;
-    state.testDuration = state.mode === 'integrated' ? CONFIG.INTEGRATED_DURATION : CONFIG.COORDINATION_DURATION;
-
-    state.romRange = { pitch: { min: state.pitch, max: state.pitch }, yaw: { min: state.yaw, max: state.yaw } };
-    state.integratedResults = { positionScore: 0, stabilityScore: 0, romScore: 0 };
-    state.collectedPoints = [];
-    renderCollectedPoints();
-
-    document.getElementById('action-btn').textContent = '检测中...';
-    document.getElementById('action-btn').disabled = true;
-
-    const startTime = Date.now();
-
-    function update() {
-        if (!state.isRunning) return;
-
-        const elapsed = (Date.now() - startTime) / 1000;
-
-        switch (state.mode) {
-            case 'integrated':
-                updateIntegrated(elapsed);
-                break;
-            case 'position':
-                updatePosition();
-                break;
-            case 'stability':
-                updateStability(elapsed);
-                break;
-            case 'rom':
-                updateROM();
-                break;
-            case 'coordination':
-                updateCoordination(elapsed);
-                break;
-        }
-
-        updateProgress();
-
-        if (state.progress >= 1) {
-            stopDetection();
-        } else {
-            requestAnimationFrame(update);
-        }
-    }
-
-    requestAnimationFrame(update);
-}
-
-function stopDetection() {
-    state.isRunning = false;
-    state.trail = [];
-    window.targetX = 0;
-    window.targetY = 0;
-    document.getElementById('action-btn').textContent = '开始检测';
-    document.getElementById('action-btn').disabled = false;
-
-    const trajCard = document.getElementById('trajectory-card');
-    trajCard.style.display = 'none';
-
-    showResults();
-}
-
-// ============================================================
-// ANIMATION LOOP
-// ============================================================
-
-function animate() {
-    drawCrosshair();
-    updateDataDisplay();
-
-    if (!isDraggingDot) {
-        state.dotX *= CONFIG.DOT_RETURN_SPEED;
-        state.dotY *= CONFIG.DOT_RETURN_SPEED;
-        state.yaw = state.dotX * state.yawCoefficient;
-        state.pitch = -state.dotY * state.pitchCoefficient;
-        state.roll = 0;
-
-        if (state.isRunning) {
-            state.trail.push({ x: state.dotX, y: state.dotY });
-            if (state.trail.length > state.maxTrailLength) {
-                state.trail.shift();
-            }
-        }
-    }
-
-    requestAnimationFrame(animate);
-}
-
-// ============================================================
-// INIT - 初始化
-// ============================================================
-
-function init() {
-    resizeCanvas();
-    initInput();
-    animate();
-    updateProgress();
-    renderCollectedPoints();
-
-    // 模式按钮
-    document.querySelectorAll('.mode-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (state.isRunning) return;
-            setMode(btn.dataset.mode);
-        });
-    });
-
-    // 轨迹按钮
-    document.querySelectorAll('.traj-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (state.isRunning) return;
-            state.trajectoryType = btn.dataset.traj;
-            document.querySelectorAll('.traj-btn').forEach(b => {
-                b.style.background = b === btn ? 'var(--primary)' : 'transparent';
-                b.style.color = b === btn ? 'var(--bg-dark)' : 'var(--text)';
-            });
-
-            // 垂直左右跳转 - 使用与垂直线匹配的位置
-            const verticalOffset = (crosshairSize / 2 - 15) / (ringRadius / 100);
-            if (state.trajectoryType === 'vertical_left') {
-                window.targetX = -verticalOffset;
-                window.targetY = 0;
-            } else if (state.trajectoryType === 'vertical_right') {
-                window.targetX = verticalOffset;
-                window.targetY = 0;
-            }
-        });
-    });
-
-    // 采集按钮
-    document.getElementById('collect-btn').addEventListener('click', collectPoint);
-
-    // 归零按钮
-    document.getElementById('zero-btn').addEventListener('click', zeroPosition);
-    document.getElementById('zero-btn-position').addEventListener('click', zeroPosition);
-
-    // 返回按钮
-    document.getElementById('back-btn-integrated').addEventListener('click', () => setMode('mode-select'));
-    document.getElementById('back-btn-coordination').addEventListener('click', () => setMode('mode-select'));
-    document.getElementById('back-btn-rom').addEventListener('click', () => setMode('mode-select'));
-    document.getElementById('back-btn-position').addEventListener('click', () => setMode('mode-select'));
-
-    // 位置觉检测开始按钮
-    const startPosBtn = document.getElementById('start-position-btn');
-    console.log('startPosBtn found:', startPosBtn);
-    console.log('startPosBtn initial text:', startPosBtn.textContent);
-    startPosBtn.addEventListener('click', () => {
-        console.log('start-position-btn clicked, positionStepIndex:', state.positionStepIndex, 'isRunning:', state.positionIsRunning);
-        if (state.positionStepIndex === 0) {
-            // 等待用户先归零
-        } else if (state.positionStepIndex >= 1 && state.positionStepIndex <= 6) {
-            if (state.positionIsRunning === true) {
-                executePositionStep();
-            } else if (state.positionIsRunning === false) {
-                collectPositionPoint();
-            } else if (state.positionIsRunning === 'waiting_for_zero') {
-                console.log('calling zeroPosition from startPosBtn');
-                zeroPosition();
-            }
-        } else {
-            // 重新开始
-            state.positionStepIndex = 0;
-            state.positionResults = [];
-            document.getElementById('position-results').innerHTML = '<div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px;">暂无结果</div>';
-            updatePositionGuide();
-        }
-    });
-
-    // 位置觉归零按钮
-    const zeroBtnPos = document.getElementById('zero-btn-position');
-    zeroBtnPos.addEventListener('click', () => {
-        console.log('zero-btn-position clicked');
-        zeroPosition();
-    });
-
-    // 缩放滑块
-    const zoomSlider = document.getElementById('zoom-slider');
-    const zoomValue = document.getElementById('zoom-value');
-    zoomSlider.addEventListener('input', e => {
-        state.zoomFactor = e.target.value / 100;
-        zoomValue.textContent = e.target.value + '%';
-        resizeCanvas();
-    });
-
-    // 鼠标滚轮缩放
-    canvas.addEventListener('wheel', e => {
-        e.preventDefault();
-        const zoomDelta = e.deltaY > 0 ? -0.1 : 0.1;
-        state.zoomFactor = Math.max(CONFIG.MIN_ZOOM, Math.min(CONFIG.MAX_ZOOM, state.zoomFactor + zoomDelta));
-        zoomSlider.value = state.zoomFactor * 100;
-        zoomValue.textContent = Math.round(state.zoomFactor * 100) + '%';
-        resizeCanvas();
-    }, { passive: false });
-
-    // 开始检测按钮（综合检测）
-    document.getElementById('action-btn').addEventListener('click', () => {
-        if (state.isRunning) return;
-        setMode('integrated');
-        startDetection();
-    });
-
-    // 开始检测按钮（协调性检测）
-    document.getElementById('action-btn-coord').addEventListener('click', () => {
-        if (state.isRunning) return;
-        setMode('coordination');
-        startDetection();
-    });
-
-    // 轨迹卡片拖动
-    const trajCard = document.getElementById('trajectory-card');
-    let isDragging = false;
-    let dragOffsetX = 0, dragOffsetY = 0;
-
-    trajCard.addEventListener('mousedown', e => {
-        if (e.target.classList.contains('traj-btn')) return;
-        isDragging = true;
-        dragOffsetX = e.clientX - trajCard.offsetLeft;
-        dragOffsetY = e.clientY - trajCard.offsetTop;
-        trajCard.style.cursor = 'grabbing';
-    });
-
-    document.addEventListener('mousemove', e => {
-        if (!isDragging) return;
-        const x = Math.max(0, Math.min(window.innerWidth - trajCard.offsetWidth, e.clientX - dragOffsetX));
-        const y = Math.max(0, Math.min(window.innerHeight - trajCard.offsetHeight, e.clientY - dragOffsetY));
-        trajCard.style.left = x + 'px';
-        trajCard.style.bottom = 'auto';
-        trajCard.style.top = y + 'px';
-    });
-
-    document.addEventListener('mouseup', () => {
-        isDragging = false;
-        trajCard.style.cursor = 'move';
-    });
-
-    // 关闭弹窗
-    function closeModal() {
-        document.getElementById('result-modal').classList.remove('show');
-    }
-    document.getElementById('close-modal').addEventListener('click', closeModal);
-
-    // 时钟
-    setInterval(() => {
-        const now = new Date();
-        document.getElementById('current-time').textContent =
-            now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-    }, 1000);
-
-    window.addEventListener('resize', resizeCanvas);
-}
-
-// 全局 target 变量
-window.targetX = 0;
-window.targetY = 0;
-
-if (document.readyState === 'complete') {
-    setTimeout(init, 100);
-} else {
-    window.addEventListener('load', () => setTimeout(init, 100));
-}
-</script>
+    </script>
 </body>
 </html>
