@@ -20,6 +20,37 @@ function zeroPosition() {
     state.yawOffset = state.yaw;
     state.rollOffset = state.roll;
 
+    // TTS语音提示
+    if (state.mode === 'rom') {
+        if (state.romStepIndex === 0) {
+            // 第一次归零：开始检测
+            ttsROM('stepIntro', 1, CONFIG.ROM_STEPS[0].name);
+        } else if (state.romStepIndex >= 1 && state.romStepIndex <= 6 && state.romIsWaitingForZero) {
+            // 已采集，归零进入下一步
+            const nextStep = state.romStepIndex >= 6 ? 7 : state.romStepIndex + 1;
+            if (nextStep <= 6) {
+                speakDelayed(TTS_PROMPTS.rom.nextStep, 300);
+                ttsDelayed(ttsROM, 'stepIntro', nextStep, 800, CONFIG.ROM_STEPS[nextStep - 1].name);
+            } else {
+                speakDelayed(TTS_PROMPTS.rom.complete, 300);
+            }
+        }
+    } else if (state.mode === 'position') {
+        if (state.positionStepIndex === 0) {
+            // 第一次归零：开始检测
+            ttsPosition('stepIntro', 1, CONFIG.POSITION_STEPS[0].name);
+        } else if (state.positionStepIndex > 0 && state.positionIsRunning === 'waiting_for_zero') {
+            // 采集后的归零
+            const nextStep = state.positionStepIndex >= 6 ? 7 : state.positionStepIndex + 1;
+            if (nextStep <= 6) {
+                speakDelayed(TTS_PROMPTS.position.nextStep, 300);
+                ttsDelayed(ttsPosition, 'stepIntro', nextStep, 800, CONFIG.POSITION_STEPS[nextStep - 1].name);
+            } else {
+                speakDelayed(TTS_PROMPTS.position.complete, 300);
+            }
+        }
+    }
+
     // ROM检测模式：romStepIndex=0未开始, 1-6进行中, 7完成
     // 只有采集后才能归零进入下一步
     if (state.mode === 'rom') {
@@ -102,6 +133,7 @@ function collectPoint() {
         state.romResults[step.name] = point[step.axis];
         state.romIsWaitingForZero = true;
         updateROMGuide();
+        ttsROM('collect');
     }
 
     // 在romResults设置后再更新显示
@@ -500,7 +532,15 @@ function showResults() {
 
     // 语音播报结果
     if (TTS_CONFIG.enabled) {
-        speakResults({ position: positionScore, stability: stabilityScore, rom: romScore, coordination: coordinationScore });
+        if (state.mode === 'integrated') {
+            speakResultsIntegrated({ position: positionScore, stability: stabilityScore, rom: romScore, coordination: coordinationScore });
+        } else if (state.mode === 'coordination') {
+            speakResultsCoordination(coordinationScore);
+        } else if (state.mode === 'rom') {
+            speakResultsROM(state.romResults);
+        } else if (state.mode === 'position') {
+            speakResultsPosition(state.positionResults);
+        }
     }
 
     document.getElementById('result-modal').classList.add('show');

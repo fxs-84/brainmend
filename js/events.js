@@ -34,6 +34,9 @@ function setMode(mode) {
         state.positionResults = [];
         state.positionIsRunning = false;
         updatePositionGuide();
+        if (TTS_CONFIG.enabled) {
+            ttsPosition('start');
+        }
     }
 
     // 协调性检测初始化
@@ -182,9 +185,7 @@ function executePositionStep() {
     const startBtn = document.getElementById('start-position-btn');
 
     // TTS语音提示
-    if (TTS_CONFIG.enabled) {
-        speak(TTS_PROMPTS.position.closeEyes);
-    }
+    ttsPosition('closeEyes');
 
     // 显示闭眼提示
     eyeHint.style.display = 'block';
@@ -197,8 +198,9 @@ function executePositionStep() {
     const timer = setInterval(() => {
         count--;
         countdown.textContent = count;
-        if (TTS_CONFIG.enabled && count > 0 && count <= 3) {
-            speak(String(count));
+        // TTS倒计时
+        if (count > 0 && count <= 3) {
+            ttsPosition('countdown', 0, '', count);
         }
         if (count <= 0) {
             clearInterval(timer);
@@ -208,9 +210,7 @@ function executePositionStep() {
             startBtn.textContent = '采集位置';
             startBtn.disabled = false;
             state.positionIsRunning = false; // 等待采集
-            if (TTS_CONFIG.enabled) {
-                speak(TTS_PROMPTS.position.openEyes);
-            }
+            ttsPosition('openEyes');
         }
     }, 1000);
 }
@@ -229,6 +229,9 @@ function collectPositionPoint() {
         errorRoll: errorRoll,
         totalError: Math.sqrt(errorPitch * errorPitch + errorYaw * errorYaw + errorRoll * errorRoll)
     });
+
+    // TTS语音提示
+    ttsPosition('collect');
 
     state.positionStepIndex++;
 
@@ -306,6 +309,18 @@ function startDetection() {
     state.progress = 0;
     state.holdTime = 0;
     state.results[state.mode] = 0;
+
+    // TTS语音提示
+    if (state.mode === 'integrated') {
+        ttsIntegrated('start');
+    } else if (state.mode === 'coordination') {
+        ttsCoordination('start');
+        ttsDelayed(ttsCoordination, 'trajectory', state.trajectoryType, 1000);
+    } else if (state.mode === 'rom') {
+        ttsROM('start');
+    } else if (state.mode === 'position') {
+        ttsPosition('start');
+    }
 
     // 确定协调性检测的时长和轨迹
     if (state.mode === 'coordination') {
@@ -547,12 +562,15 @@ function init() {
     startPosBtn.addEventListener('click', () => {
         if (state.positionStepIndex === 0) {
             // 等待用户先归零
+            speak('请先归零到中心位置');
         } else if (state.positionStepIndex >= 1 && state.positionStepIndex <= 6) {
             if (state.positionIsRunning === true) {
+                ttsPosition('moveToLimit');
                 executePositionStep();
             } else if (state.positionIsRunning === false) {
                 collectPositionPoint();
             } else if (state.positionIsRunning === 'waiting_for_zero') {
+                ttsPosition('returnZero');
                 zeroPosition();
             }
         } else {
@@ -561,6 +579,7 @@ function init() {
             state.positionResults = [];
             document.getElementById('position-results').innerHTML = '<div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px;">暂无结果</div>';
             updatePositionGuide();
+            ttsPosition('start');
         }
     });
 
