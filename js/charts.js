@@ -35,7 +35,7 @@ function drawRadarChart(canvas, scores, size = 200) {
     ctx.scale(dpr, dpr);
 
     const center = size / 2;
-    const maxRadius = size * 0.4;
+    const maxRadius = size * 0.38;
     const labels = ['位置觉', '稳定性', '活动范围', '协调性'];
     const values = [
         scores.position || 0,
@@ -64,11 +64,11 @@ function drawRadarChart(canvas, scores, size = 200) {
         ctx.lineWidth = 1;
         ctx.stroke();
 
-        // 标签
-        const labelRadius = maxRadius + 20;
+        // 标签 - 调整位置确保完整显示
+        const labelRadius = maxRadius + 18;
         const labelX = center + Math.cos(angle) * labelRadius;
         const labelY = center + Math.sin(angle) * labelRadius;
-        ctx.font = '11px sans-serif';
+        ctx.font = '10px sans-serif';
         ctx.fillStyle = CHART_COLORS.text;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';

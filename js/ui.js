@@ -512,7 +512,7 @@ function showResults() {
         chartsDiv.style.display = 'block';
         if (hasScores) {
             radarCanvas.style.display = 'block';
-            drawRadarChart(radarCanvas, { position: positionScore, stability: stabilityScore, rom: romScore, coordination: coordinationScore }, 180);
+            drawRadarChart(radarCanvas, { position: positionScore, stability: stabilityScore, rom: romScore, coordination: coordinationScore }, 200);
         }
         if (hasROM) {
             romCanvas.style.display = 'block';
