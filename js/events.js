@@ -309,17 +309,6 @@ function startDetection() {
     state.results[state.mode] = 0;
     state.lastAnnouncedProgress = -1;
 
-    // TTS：提前播报，不等待
-    if (state.mode === 'integrated' || state.mode === 'coordination') {
-        const btn = state.mode === 'coordination'
-            ? document.getElementById('action-btn-coord')
-            : document.getElementById('action-btn');
-        if (btn && btn.textContent) {
-            // 使用立即调用，不等待
-            speak(btn.textContent);
-        }
-    }
-
     // 确定协调性检测的时长和轨迹
     if (state.mode === 'coordination') {
         if (state.coordMode === 'full') {
@@ -674,6 +663,10 @@ function init() {
         }
 
         setMode('coordination');
+        // TTS在模式切换前播报，避免延迟
+        if (TTS_CONFIG.enabled) {
+            speak('协调性检测开始');
+        }
         startDetection();
     });
 
