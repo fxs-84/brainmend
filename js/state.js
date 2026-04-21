@@ -57,6 +57,7 @@ const createState = () => ({
 
     // 进度
     progress: 0,
+    lastAnnouncedProgress: -1,  // TTS播报进度追踪
     testDuration: CONFIG.INTEGRATED_DURATION,
 
     // 缩放

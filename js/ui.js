@@ -20,35 +20,13 @@ function zeroPosition() {
     state.yawOffset = state.yaw;
     state.rollOffset = state.roll;
 
-    // TTS语音提示
+    // TTS：读屏幕上的文字
     if (state.mode === 'rom') {
-        if (state.romStepIndex === 0) {
-            // 第一次归零：开始检测
-            ttsROM('stepIntro', 1, CONFIG.ROM_STEPS[0].name);
-        } else if (state.romStepIndex >= 1 && state.romStepIndex <= 6 && state.romIsWaitingForZero) {
-            // 已采集，归零进入下一步
-            const nextStep = state.romStepIndex >= 6 ? 7 : state.romStepIndex + 1;
-            if (nextStep <= 6) {
-                speakDelayed(TTS_PROMPTS.rom.nextStep, 300);
-                ttsDelayed(ttsROM, 'stepIntro', nextStep, 800, CONFIG.ROM_STEPS[nextStep - 1].name);
-            } else {
-                speakDelayed(TTS_PROMPTS.rom.complete, 300);
-            }
-        }
+        const instruction = document.getElementById('rom-instruction');
+        if (instruction) speak(instruction.textContent);
     } else if (state.mode === 'position') {
-        if (state.positionStepIndex === 0) {
-            // 第一次归零：开始检测
-            ttsPosition('stepIntro', 1, CONFIG.POSITION_STEPS[0].name);
-        } else if (state.positionStepIndex > 0 && state.positionIsRunning === 'waiting_for_zero') {
-            // 采集后的归零
-            const nextStep = state.positionStepIndex >= 6 ? 7 : state.positionStepIndex + 1;
-            if (nextStep <= 6) {
-                speakDelayed(TTS_PROMPTS.position.nextStep, 300);
-                ttsDelayed(ttsPosition, 'stepIntro', nextStep, 800, CONFIG.POSITION_STEPS[nextStep - 1].name);
-            } else {
-                speakDelayed(TTS_PROMPTS.position.complete, 300);
-            }
-        }
+        const instruction = document.getElementById('position-instruction');
+        if (instruction) speak(instruction.textContent);
     }
 
     // ROM检测模式：romStepIndex=0未开始, 1-6进行中, 7完成
@@ -133,7 +111,9 @@ function collectPoint() {
         state.romResults[step.name] = point[step.axis];
         state.romIsWaitingForZero = true;
         updateROMGuide();
-        ttsROM('collect');
+        // TTS：读屏幕上的文字
+        const instruction = document.getElementById('rom-instruction');
+        if (instruction) speak(instruction.textContent);
     }
 
     // 在romResults设置后再更新显示
@@ -264,6 +244,20 @@ function updateProgress() {
         progressRing.classList.add('success');
     } else if (state.progress >= 0.5) {
         progressRing.classList.add('warning');
+        // 中途提示（只在50%时播报一次）
+        if (TTS_CONFIG.enabled && state.lastAnnouncedProgress < 0.5) {
+            if (state.mode === 'integrated' || state.mode === 'coordination') {
+                speak('继续跟踪');
+            }
+        }
+    }
+
+    // 记录已播报的进度
+    if (state.progress >= 0.5 && state.lastAnnouncedProgress < 0.5) {
+        state.lastAnnouncedProgress = 0.5;
+    }
+    if (state.progress >= 1 && state.lastAnnouncedProgress < 1) {
+        state.lastAnnouncedProgress = 1;
     }
 }
 
