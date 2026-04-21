@@ -207,11 +207,16 @@ function executePositionStep() {
     let count = 5;
     countdown.style.display = 'block';
     countdown.textContent = count;
+    // 倒计时开始时播报
+    speak(String(count));
 
     const timer = setInterval(() => {
         count--;
         countdown.textContent = count;
-        // 不再TTS播报倒计时数字，用户可以看到屏幕上的倒计时
+        // TTS播报倒计时数字
+        if (count > 0) {
+            speak(String(count));
+        }
         if (count <= 0) {
             clearInterval(timer);
             countdown.style.display = 'none';
@@ -220,8 +225,8 @@ function executePositionStep() {
             startBtn.textContent = '采集位置';
             startBtn.disabled = false;
             state.positionIsRunning = false; // 等待采集
-            // 倒计时结束时播报一次结果提示
-            speak(instruction.textContent);
+            // 倒计时结束时播报提示
+            speak('回到初始位置，等待采集');
         }
     }, 1000);
 }
@@ -241,15 +246,15 @@ function collectPositionPoint() {
         totalError: Math.sqrt(errorPitch * errorPitch + errorYaw * errorYaw + errorRoll * errorRoll)
     });
 
-    // TTS语音提示
-    ttsPosition('collect');
+    // 采集后播报"请睁眼"
+    speak('请睁眼');
 
     state.positionStepIndex++;
 
     if (state.positionStepIndex > 6) {
         updatePositionGuide();
     } else {
-        // 提示归零
+        // 提示归零进入下一步
         const instruction = document.getElementById('position-instruction');
         const startBtn = document.getElementById('start-position-btn');
         instruction.textContent = '请睁眼归零，然后进入下一步';
@@ -563,17 +568,16 @@ function init() {
         const instruction = document.getElementById('position-instruction');
 
         if (state.positionStepIndex === 0) {
-            // 等待用户先归零
-            speak(instruction.textContent);
+            // 等待用户先归零 - updatePositionGuide已播报过，无需重复
         } else if (state.positionStepIndex >= 1 && state.positionStepIndex <= 6) {
             if (state.positionIsRunning === true) {
-                speak(instruction.textContent);
+                // 直接执行倒计时，executePositionStep中已有TTS
                 executePositionStep();
             } else if (state.positionIsRunning === false) {
-                speak('请采集位置');
+                // 采集位置
                 collectPositionPoint();
             } else if (state.positionIsRunning === 'waiting_for_zero') {
-                speak('请睁眼归零');
+                // 归零进入下一步
                 zeroPosition();
             }
         } else {
@@ -582,7 +586,6 @@ function init() {
             state.positionResults = [];
             document.getElementById('position-results').innerHTML = '<div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px;">暂无结果</div>';
             updatePositionGuide();
-            speak(instruction.textContent);
         }
     });
 
