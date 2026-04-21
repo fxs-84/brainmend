@@ -679,11 +679,10 @@ function init() {
         }
 
         setMode('coordination');
-        // TTS在模式切换前播报，避免延迟
-        if (TTS_CONFIG.enabled) {
-            speak('协调性检测开始');
-        }
-        startDetection();
+        // TTS播报完成后再开始检测，确保语音先于光点移动
+        speakWithCallback('协调性检测开始', () => {
+            startDetection();
+        });
     });
 
     // 轨迹卡片拖动

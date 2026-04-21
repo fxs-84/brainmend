@@ -86,6 +86,56 @@ function processQueue() {
     }
 }
 
+/**
+ * 播报语音并在完成后执行回调
+ * @param {string} text - 要播报的文本
+ * @param {function} callback - 播报完成后的回调
+ */
+function speakWithCallback(text, callback) {
+    if (!TTS_CONFIG.enabled) {
+        // TTS未启用，直接执行回调
+        if (callback) callback();
+        return;
+    }
+
+    if (!text || typeof text !== 'string') {
+        if (callback) callback();
+        return;
+    }
+
+    if (!('speechSynthesis' in window)) {
+        console.warn('Web Speech API not supported');
+        if (callback) callback();
+        return;
+    }
+
+    const trimmedText = text.trim();
+
+    // 如果正在播放，先取消当前播放
+    if (speechSynthesis.speaking) {
+        speechSynthesis.cancel();
+    }
+
+    const utterance = new SpeechSynthesisUtterance(trimmedText);
+    utterance.lang = 'zh-CN';
+    utterance.rate = 1.0;
+
+    utterance.onend = () => {
+        lastSpokenText = trimmedText;
+        lastSpokenTime = Date.now();
+        if (callback) callback();
+    };
+
+    utterance.onerror = (e) => {
+        console.warn('TTS error:', e.error);
+        if (callback) callback();
+    };
+
+    lastSpokenText = trimmedText;
+    lastSpokenTime = Date.now();
+    speechSynthesis.speak(utterance);
+}
+
 function speakScreenText(elementId) {
     const el = document.getElementById(elementId);
     if (el && el.textContent) {
