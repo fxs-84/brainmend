@@ -17,6 +17,7 @@ function setMode(mode) {
     document.getElementById('view-coordination').style.display = mode === 'coordination' ? 'block' : 'none';
     document.getElementById('view-rom').style.display = mode === 'rom' ? 'flex' : 'none';
     document.getElementById('view-position').style.display = mode === 'position' ? 'flex' : 'none';
+    document.getElementById('view-game').style.display = mode === 'game' ? 'flex' : 'none';
 
     // ROM检测初始化
     if (mode === 'rom') {
@@ -44,6 +45,11 @@ function setMode(mode) {
         state.coordCurrentTrajectoryIndex = 0;
         state.coordMode = 'single';
         updateCoordinationModeUI();
+    }
+
+    // 游戏模式初始化
+    if (mode === 'game') {
+        initGame();
     }
 
     state.progress = 0;
@@ -495,6 +501,29 @@ function stopDetection() {
 }
 
 // ============================================================
+// GAME - 游戏模块
+// ============================================================
+
+function initGame() {
+    const canvas = document.getElementById('game-canvas');
+    if (!canvas) return;
+
+    // 创建游戏引擎
+    if (!window.gameEngine) {
+        window.gameEngine = new GameModule.GameEngine(canvas);
+        window.gameEngine.init();
+    }
+
+    // 显示游戏选择界面
+    if (window.gameUI) {
+        window.gameUI.showSelectPanel();
+    } else {
+        window.gameUI = new GameModule.GameUI(window.gameEngine);
+        window.gameUI.showSelectPanel();
+    }
+}
+
+// ============================================================
 // INIT - 初始化
 // ============================================================
 
@@ -561,6 +590,12 @@ function init() {
     document.getElementById('back-btn-coordination').addEventListener('click', () => setMode('mode-select'));
     document.getElementById('back-btn-rom').addEventListener('click', () => setMode('mode-select'));
     document.getElementById('back-btn-position').addEventListener('click', () => setMode('mode-select'));
+    document.getElementById('back-btn-game').addEventListener('click', () => {
+        if (window.gameEngine) {
+            window.gameEngine.cleanup();
+        }
+        setMode('mode-select');
+    });
 
     // 位置觉检测开始按钮
     const startPosBtn = document.getElementById('start-position-btn');
