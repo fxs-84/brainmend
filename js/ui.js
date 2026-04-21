@@ -235,6 +235,166 @@ function updateProgress() {
     }
 }
 
+// ============================================================
+// 结果计算辅助函数
+// ============================================================
+
+/**
+ * 计算数组平均值
+ */
+function avg(arr) {
+    return arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+}
+
+/**
+ * 获取颜色类名
+ */
+function getScoreColorClass(score) {
+    return score >= 80 ? 'var(--success)' : score >= 60 ? 'var(--warning)' : 'var(--danger)';
+}
+
+/**
+ * 获取评级文字
+ */
+function getScoreLevelText(score) {
+    return score >= 80 ? '良好' : score >= 60 ? '一般' : '需关注';
+}
+
+/**
+ * 构建协调性详细数据 HTML
+ */
+function buildCoordinationDetails(tracking, trajectory, smoothness) {
+    return `
+        <div style="margin-bottom: 6px;">
+            <span style="color: var(--text-muted);">跟踪得分:</span>
+            <span style="color: var(--primary);">${Math.round(tracking)}分</span>
+            <span style="color: var(--text-muted); font-size: 9px;">(误差越小越好)</span>
+        </div>
+        <div style="margin-bottom: 6px;">
+            <span style="color: var(--text-muted);">轨迹得分:</span>
+            <span style="color: var(--secondary);">${Math.round(trajectory)}分</span>
+            <span style="color: var(--text-muted); font-size: 9px;">(偏离轨迹越少越好)</span>
+        </div>
+        <div style="margin-bottom: 6px;">
+            <span style="color: var(--text-muted);">平稳得分:</span>
+            <span style="color: var(--warning);">${Math.round(smoothness)}分</span>
+            <span style="color: var(--text-muted); font-size: 9px;">(运动越匀速越好)</span>
+        </div>
+    `;
+}
+
+/**
+ * 构建 ROM 详细数据 HTML
+ */
+function buildROMDetails() {
+    let html = '<div style="font-size: 10px;">';
+    for (const step of CONFIG.ROM_STEPS) {
+        const value = state.romResults[step.name];
+        if (value !== undefined) {
+            const absValue = Math.abs(value);
+            const status = absValue >= step.normal * 0.8 ? '正常' : absValue >= step.normal * 0.5 ? '轻度受限' : '明显受限';
+            const color = getScoreColorClass((absValue / step.normal) * 100);
+            html += `<div style="margin-bottom: 4px;">
+                <span>${step.name}:</span>
+                <span style="color: ${color};">${value.toFixed(1)}° ${status}</span>
+                <span style="color: var(--text-muted);">(正常${step.normal}°)</span>
+            </div>`;
+        }
+    }
+    return html + '</div>';
+}
+
+/**
+ * 构建位置觉详细数据 HTML
+ */
+function buildPositionDetails() {
+    let html = '<div style="font-size: 10px;">';
+    state.positionResults.forEach(r => {
+        const cls = classifyJPS(r.totalError);
+        html += `<div style="margin-bottom: 4px;">
+            <span>${r.name}:</span>
+            <span style="color: ${cls.color};">${r.totalError.toFixed(1)}° (${cls.level})</span>
+        </div>`;
+    });
+    const avgError = avg(state.positionResults.map(r => r.totalError));
+    const overallCls = classifyJPS(avgError);
+    return html + `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.1);">
+        <span>平均误差:</span>
+        <span style="color: ${overallCls.color}; font-weight: 600;">${avgError.toFixed(1)}° (${overallCls.level})</span>
+    </div></div>`;
+}
+
+/**
+ * 更新评分显示条
+ */
+function updateScoreBars(position, stability, rom, coordination) {
+    const overall = Math.round((position + stability + rom + coordination) / 4);
+
+    const overallScore = document.getElementById('overall-score');
+    const overallLevel = document.getElementById('overall-level');
+    overallScore.textContent = overall;
+    overallScore.style.color = getScoreColorClass(overall);
+    overallLevel.textContent = getScoreLevelText(overall);
+    overallLevel.style.color = getScoreColorClass(overall);
+
+    document.getElementById('result-position').textContent = Math.round(position);
+    document.getElementById('bar-position').style.width = position + '%';
+    document.getElementById('result-stability').textContent = Math.round(stability);
+    document.getElementById('bar-stability').style.width = stability + '%';
+    document.getElementById('result-rom').textContent = Math.round(rom);
+    document.getElementById('bar-rom').style.width = rom + '%';
+    document.getElementById('result-coordination').textContent = Math.round(coordination);
+    document.getElementById('bar-coordination').style.width = coordination + '%';
+}
+
+/**
+ * 显示前庭评估结果
+ */
+function showVestibularResult(coordinationScore) {
+    let vestibularAssessment;
+
+    if (state.mode === 'integrated') {
+        vestibularAssessment = getVestibularAssessmentFromIntegrated();
+    } else if (state.mode === 'coordination') {
+        vestibularAssessment = evaluateVestibularFunction({
+            jpsAvgError: 0,
+            coordinationScore: coordinationScore,
+            stabilityScore: 0
+        });
+    } else if (state.mode === 'position') {
+        const avgJpsError = avg(state.positionResults.map(r => r.totalError));
+        vestibularAssessment = evaluateVestibularFunction({
+            jpsAvgError: avgJpsError,
+            coordinationScore: 0,
+            stabilityScore: 0
+        });
+    }
+
+    const vestibularDiv = document.getElementById('vestibular-assessment');
+    if (vestibularAssessment) {
+        vestibularDiv.style.display = 'block';
+        document.getElementById('vestibular-result').textContent = vestibularAssessment.assessment;
+        document.getElementById('vestibular-result').style.color = vestibularAssessment.color;
+        document.getElementById('vestibular-recommendation').textContent = vestibularAssessment.recommendation;
+    } else {
+        vestibularDiv.style.display = 'none';
+    }
+}
+
+/**
+ * 显示康复建议
+ */
+function showRehabSuggestions(suggestions) {
+    const rehabDiv = document.getElementById('rehab-suggestions');
+    if (suggestions.length > 0) {
+        rehabDiv.style.display = 'block';
+        document.getElementById('rehab-suggestions-content').innerHTML =
+            suggestions.map(s => `<div style="margin-bottom: 4px;">• ${s}</div>`).join('');
+    } else {
+        rehabDiv.style.display = 'none';
+    }
+}
+
 function showResults() {
     let positionScore, stabilityScore, romScore, coordinationScore;
     let detailsHtml = '';
@@ -248,31 +408,12 @@ function showResults() {
     } else if (state.mode === 'coordination') {
         const scores = state.coordScores;
         if (scores && scores.tracking && scores.tracking.length > 0) {
-            const avgTracking = scores.tracking.reduce((a, b) => a + b, 0) / scores.tracking.length;
-            const avgTrajectory = scores.trajectory.reduce((a, b) => a + b, 0) / scores.trajectory.length;
-            const avgSmoothness = scores.smoothness.reduce((a, b) => a + b, 0) / scores.smoothness.length;
+            const avgTracking = avg(scores.tracking);
+            const avgTrajectory = avg(scores.trajectory);
+            const avgSmoothness = avg(scores.smoothness);
             coordinationScore = avgTracking * 0.4 + avgTrajectory * 0.3 + avgSmoothness * 0.3;
+            detailsHtml = buildCoordinationDetails(avgTracking, avgTrajectory, avgSmoothness);
 
-            // 协调性详细数据
-            detailsHtml = `
-                <div style="margin-bottom: 6px;">
-                    <span style="color: var(--text-muted);">跟踪得分:</span>
-                    <span style="color: var(--primary);">${Math.round(avgTracking)}分</span>
-                    <span style="color: var(--text-muted); font-size: 9px;">(误差越小越好)</span>
-                </div>
-                <div style="margin-bottom: 6px;">
-                    <span style="color: var(--text-muted);">轨迹得分:</span>
-                    <span style="color: var(--secondary);">${Math.round(avgTrajectory)}分</span>
-                    <span style="color: var(--text-muted); font-size: 9px;">(偏离轨迹越少越好)</span>
-                </div>
-                <div style="margin-bottom: 6px;">
-                    <span style="color: var(--text-muted);">平稳得分:</span>
-                    <span style="color: var(--warning);">${Math.round(avgSmoothness)}分</span>
-                    <span style="color: var(--text-muted); font-size: 9px;">(运动越匀速越好)</span>
-                </div>
-            `;
-
-            // 根据得分给建议
             if (avgTracking < 60) suggestions.push('加强头部追踪训练，可使用激光笔引导');
             if (avgTrajectory < 60) suggestions.push('建议进行平衡板训练，提升运动控制');
             if (avgSmoothness < 60) suggestions.push('需要进行颈部柔韧性训练，减少运动顿挫');
@@ -285,28 +426,10 @@ function showResults() {
         stabilityScore = 0;
         romScore = 0;
     } else if (state.mode === 'rom' && state.romResults && Object.keys(state.romResults).length > 0) {
-        // ROM详细数据
-        detailsHtml = '<div style="font-size: 10px;">';
-        for (let i = 0; i < CONFIG.ROM_STEPS.length; i++) {
-            const step = CONFIG.ROM_STEPS[i];
-            const value = state.romResults[step.name];
-            if (value !== undefined) {
-                const absValue = Math.abs(value);
-                const pct = Math.min(100, (absValue / step.normal) * 100);
-                const status = absValue >= step.normal * 0.8 ? '正常' : absValue >= step.normal * 0.5 ? '轻度受限' : '明显受限';
-                const color = absValue >= step.normal * 0.8 ? 'var(--success)' : absValue >= step.normal * 0.5 ? 'var(--warning)' : 'var(--danger)';
-                detailsHtml += `<div style="margin-bottom: 4px;">
-                    <span>${step.name}:</span>
-                    <span style="color: ${color};">${value.toFixed(1)}° ${status}</span>
-                    <span style="color: var(--text-muted);">(正常${step.normal}°)</span>
-                </div>`;
-            }
-        }
-        detailsHtml += '</div>';
+        detailsHtml = buildROMDetails();
 
-        // ROM建议
         const romValues = Object.values(state.romResults).map(v => Math.abs(v));
-        const romAvg = romValues.reduce((a, b) => a + b, 0) / romValues.length;
+        const romAvg = avg(romValues);
         romScore = Math.min(100, (romAvg / 45) * 100);
         if (romAvg < 35) suggestions.push('颈椎活动度明显受限，建议进行牵引治疗');
         else if (romAvg < 45) suggestions.push('活动度轻度受限，建议每日进行颈部伸展练习');
@@ -316,23 +439,9 @@ function showResults() {
         stabilityScore = 0;
         coordinationScore = 0;
     } else if (state.mode === 'position' && state.positionResults && state.positionResults.length > 0) {
-        // 位置觉详细数据
-        detailsHtml = '<div style="font-size: 10px;">';
-        state.positionResults.forEach(r => {
-            const cls = classifyJPS(r.totalError);
-            detailsHtml += `<div style="margin-bottom: 4px;">
-                <span>${r.name}:</span>
-                <span style="color: ${cls.color};">误差${r.totalError.toFixed(1)}° (${cls.level})</span>
-            </div>`;
-        });
-        const avgJpsError = state.positionResults.reduce((sum, r) => sum + r.totalError, 0) / state.positionResults.length;
-        const overallCls = classifyJPS(avgJpsError);
-        detailsHtml += `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.1);">
-            <span>平均误差:</span>
-            <span style="color: ${overallCls.color}; font-weight: 600;">${avgJpsError.toFixed(1)}° (${overallCls.level})</span>
-        </div></div>`;
+        detailsHtml = buildPositionDetails();
 
-        // 位置觉建议
+        const avgJpsError = avg(state.positionResults.map(r => r.totalError));
         if (avgJpsError >= 6) suggestions.push('本体感觉明显减退，建议进行哑铃负重颈部训练');
         else if (avgJpsError >= 4.5) suggestions.push('本体感觉轻度障碍，建议进行眼球追踪训练');
         else suggestions.push('本体感觉正常，建议保持当前训练强度');
@@ -348,25 +457,7 @@ function showResults() {
         coordinationScore = 0;
     }
 
-    const overall = Math.round((positionScore + stabilityScore + romScore + coordinationScore) / 4);
-
-    // 更新综合评分显示
-    const overallScore = document.getElementById('overall-score');
-    const overallLevel = document.getElementById('overall-level');
-    overallScore.textContent = overall;
-    overallScore.style.color = overall >= 80 ? 'var(--success)' : overall >= 60 ? 'var(--warning)' : 'var(--danger)';
-    overallLevel.textContent = overall >= 80 ? '良好' : overall >= 60 ? '一般' : '需关注';
-    overallLevel.style.color = overall >= 80 ? 'var(--success)' : overall >= 60 ? 'var(--warning)' : 'var(--danger)';
-
-    // 更新评分
-    document.getElementById('result-position').textContent = Math.round(positionScore);
-    document.getElementById('bar-position').style.width = positionScore + '%';
-    document.getElementById('result-stability').textContent = Math.round(stabilityScore);
-    document.getElementById('bar-stability').style.width = stabilityScore + '%';
-    document.getElementById('result-rom').textContent = Math.round(romScore);
-    document.getElementById('bar-rom').style.width = romScore + '%';
-    document.getElementById('result-coordination').textContent = Math.round(coordinationScore);
-    document.getElementById('bar-coordination').style.width = coordinationScore + '%';
+    updateScoreBars(positionScore, stabilityScore, romScore, coordinationScore);
 
     // 显示详细数据
     const detailsDiv = document.getElementById('report-details');
@@ -378,47 +469,10 @@ function showResults() {
         detailsDiv.style.display = 'none';
     }
 
-    // 计算前庭功能间接评估
-    let vestibularAssessment;
-    if (state.mode === 'integrated') {
-        vestibularAssessment = getVestibularAssessmentFromIntegrated();
-    } else if (state.mode === 'coordination') {
-        vestibularAssessment = evaluateVestibularFunction({
-            jpsAvgError: 0,
-            coordinationScore: coordinationScore,
-            stabilityScore: 0
-        });
-    } else if (state.mode === 'position' && state.positionResults && state.positionResults.length > 0) {
-        const avgJpsError = state.positionResults.reduce((sum, r) => sum + r.totalError, 0) / state.positionResults.length;
-        vestibularAssessment = evaluateVestibularFunction({
-            jpsAvgError: avgJpsError,
-            coordinationScore: 0,
-            stabilityScore: 0
-        });
-    }
-
-    // 显示前庭评估结果
-    const vestibularDiv = document.getElementById('vestibular-assessment');
-    const vestibularResult = document.getElementById('vestibular-result');
-    const vestibularRec = document.getElementById('vestibular-recommendation');
-    if (vestibularAssessment) {
-        vestibularDiv.style.display = 'block';
-        vestibularResult.textContent = vestibularAssessment.assessment;
-        vestibularResult.style.color = vestibularAssessment.color;
-        vestibularRec.textContent = vestibularAssessment.recommendation;
-    } else {
-        vestibularDiv.style.display = 'none';
-    }
+    showVestibularResult(coordinationScore);
 
     // 显示康复建议
-    const rehabDiv = document.getElementById('rehab-suggestions');
-    const rehabContent = document.getElementById('rehab-suggestions-content');
-    if (suggestions.length > 0) {
-        rehabDiv.style.display = 'block';
-        rehabContent.innerHTML = suggestions.map(s => '<div style="margin-bottom: 4px;">• ' + s + '</div>').join('');
-    } else {
-        rehabDiv.style.display = 'none';
-    }
+    showRehabSuggestions(suggestions);
 
     document.getElementById('result-modal').classList.add('show');
 }
