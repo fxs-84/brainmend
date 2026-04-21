@@ -25,20 +25,15 @@ function speak(text, options = {}) {
         return;
     }
 
-    // 取消之前的播报
+    // 直接取消，不等待
     speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'zh-CN';
-    utterance.rate = options.rate || TTS_CONFIG.rate;
+    // 使用较快语速减少延迟感知
+    utterance.rate = 1.0;
     utterance.pitch = options.pitch || TTS_CONFIG.pitch;
     utterance.volume = options.volume || TTS_CONFIG.volume;
-
-    // 尝试选择中文语音
-    const chineseVoice = cachedVoices.find(v => v.lang.includes('zh') || v.lang.includes('CN'));
-    if (chineseVoice) {
-        utterance.voice = chineseVoice;
-    }
 
     utterance.onerror = (e) => {
         console.warn('TTS error:', e.error);

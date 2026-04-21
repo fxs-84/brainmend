@@ -309,12 +309,13 @@ function startDetection() {
     state.results[state.mode] = 0;
     state.lastAnnouncedProgress = -1;
 
-    // TTS：读屏幕上的文字
+    // TTS：提前播报，不等待
     if (state.mode === 'integrated' || state.mode === 'coordination') {
         const btn = state.mode === 'coordination'
             ? document.getElementById('action-btn-coord')
             : document.getElementById('action-btn');
         if (btn && btn.textContent) {
+            // 使用立即调用，不等待
             speak(btn.textContent);
         }
     }
