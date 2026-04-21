@@ -75,6 +75,21 @@ function initTTS() {
     loadVoices();
     speechSynthesis.onvoiceschanged = loadVoices;
 
+    // TTS预热：页面加载时预热语音合成器，让首次播报更快
+    setTimeout(() => {
+        speechSynthesis.cancel();
+        const warmup = new SpeechSynthesisUtterance(' ');
+        warmup.lang = 'zh-CN';
+        warmup.rate = 1.0;
+        warmup.volume = 0;
+        warmup.onend = warmup.onerror = () => {
+            // 预热完成，恢复设置
+            TTS_CONFIG.enabled = localStorage.getItem('tts_enabled') === 'true';
+            updateTTSButtonUI();
+        };
+        speechSynthesis.speak(warmup);
+    }, 100);
+
     // 从localStorage恢复设置
     const savedEnabled = localStorage.getItem('tts_enabled');
     if (savedEnabled !== null) {
