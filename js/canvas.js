@@ -1,0 +1,57 @@
+// ============================================================
+// CANVAS - 画布和尺寸
+// ============================================================
+const canvas = document.getElementById('crosshair-canvas');
+const ctx = canvas.getContext('2d');
+let centerX, centerY, crosshairSize, ringRadius;
+
+function resizeCanvas() {
+    const container = document.getElementById('detection-area');
+    const rect = container.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    centerX = canvas.width / 2;
+    centerY = canvas.height / 2;
+    crosshairSize = Math.min(canvas.width, canvas.height) * 0.5 * state.zoomFactor;
+    ringRadius = crosshairSize * 0.35;
+}
+
+// ============================================================
+// ANIMATION LOOP
+// ============================================================
+
+function animate() {
+    drawCrosshair();
+    updateDataDisplay();
+
+    // 鼠标模式下：非拖动时缓慢回到中心
+    if (!state.useGyroscope && !isDraggingDot) {
+        state.dotX *= CONFIG.DOT_RETURN_SPEED;
+        state.dotY *= CONFIG.DOT_RETURN_SPEED;
+        state.yaw = state.dotX * state.yawCoefficient;
+        state.pitch = -state.dotY * state.pitchCoefficient;
+        state.roll = 0;
+    }
+
+    // 检测过程中保存完整轨迹
+    if (state.isRunning) {
+        state.trail.push({ x: state.dotX, y: state.dotY });
+        if (state.trail.length > state.maxTrailLength) {
+            state.trail.shift();
+        }
+        // 保存到完整轨迹
+        state.fullTrail.push({ x: state.dotX, y: state.dotY, timestamp: Date.now() });
+        if (state.fullTrail.length > state.maxFullTrailLength) {
+            state.fullTrail.shift();
+        }
+    }
+
+    requestAnimationFrame(animate);
+}
+
+// ============================================================
+// GLOBAL TARGET (已迁移到 state.targetX/Y)
+// 保留用于初始化，由 state.targetX/Y 使用
+// ============================================================

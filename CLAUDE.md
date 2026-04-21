@@ -89,6 +89,40 @@ state.positionIsRunning       // 位置觉: true=运行中, false=未开始, 'wa
 - Yaw: `yawCoefficient = 80 / (hLineLength * scale)`
 - Pitch: `pitchCoefficient = 45 / (vLineLength * scale)`
 
+## 强制工作流
+
+> 本规则强制执行，以确保代码质量和安全。
+
+### Agent 调用规则
+
+在以下场景，**必须自动调用**对应 agent，**无需用户提醒**：
+
+| 场景 | 必须调用的 Agent | 说明 |
+|------|----------------|------|
+| 新功能开发或 bug 修复前 | `tdd-guide` | 遵循 TDD 流程，先写测试 |
+| 每次代码修改完成后 | `code-reviewer` | 代码审查，发现问题 |
+| 涉及用户输入/认证/支付/蓝牙 | `security-reviewer` | 安全审查，防止漏洞 |
+| 复杂功能/架构决策 | `planner` | 规划后再实现 |
+| 构建失败时 | `build-error-resolver` | 自动分析并修复 |
+
+### 调用时机
+
+- **TDD**: 开始写代码前调用，不是之后
+- **Code Review**: 每次有意义的代码修改后调用（不是每个小改动）
+- **Security Review**: 涉及敏感功能时必须调用
+- **提交前**: 必须确保已通过 code-review 和 security-review
+
+### 调用示例
+
+```
+用户: "添加一个用户登录功能"
+→ 我必须先调用 tdd-guide agent
+→ 然后实现功能
+→ 然后调用 code-reviewer agent
+→ 如果涉及认证，必须调用 security-reviewer agent
+→ 最后才提交
+```
+
 ## 开发阶段
 
 - [x] Phase 1 MVP: 模拟陀螺仪、3D可视化、综合检测、协调性检测、评分
