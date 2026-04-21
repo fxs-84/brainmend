@@ -20,15 +20,6 @@ function zeroPosition() {
     state.yawOffset = state.yaw;
     state.rollOffset = state.roll;
 
-    // TTS：读屏幕上的文字
-    if (state.mode === 'rom') {
-        const instruction = document.getElementById('rom-instruction');
-        if (instruction) speak(instruction.textContent);
-    } else if (state.mode === 'position') {
-        const instruction = document.getElementById('position-instruction');
-        if (instruction) speak(instruction.textContent);
-    }
-
     // ROM检测模式：romStepIndex=0未开始, 1-6进行中, 7完成
     // 只有采集后才能归零进入下一步
     if (state.mode === 'rom') {
@@ -110,10 +101,8 @@ function collectPoint() {
         const step = CONFIG.ROM_STEPS[state.romStepIndex - 1];
         state.romResults[step.name] = point[step.axis];
         state.romIsWaitingForZero = true;
+        // updateROMGuide中已有TTS播报"请归零进入下一步"
         updateROMGuide();
-        // TTS：读屏幕上的文字
-        const instruction = document.getElementById('rom-instruction');
-        if (instruction) speak(instruction.textContent);
     }
 
     // 在romResults设置后再更新显示

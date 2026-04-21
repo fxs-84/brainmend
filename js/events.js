@@ -108,27 +108,37 @@ function updateROMGuide() {
         romGuide.classList.remove('rom-guide-active');
         collectBtn.textContent = '📍 采集当前点';
         collectBtn.disabled = true;
+        // 进入界面时播报操作指引
+        speak('请先归零');
     } else if (state.romStepIndex <= 6) {
         const step = CONFIG.ROM_STEPS[state.romStepIndex - 1];
         if (state.romIsWaitingForZero) {
             instruction.textContent = '请归零进入下一步';
             instruction.style.background = 'rgba(0,217,165,0.1)';
             instruction.style.color = 'var(--primary)';
+            collectBtn.disabled = true;
+            collectBtn.textContent = '等待归零';
+            // 采集后播报下一步指引
+            speak('请归零进入下一步');
         } else {
             instruction.textContent = step.instruction;
             instruction.style.background = 'rgba(239,68,68,0.1)';
             instruction.style.color = 'var(--danger)';
+            collectBtn.disabled = false;
+            collectBtn.textContent = '📍 采集当前点';
+            // 显示操作指令时播报
+            speak(step.instruction);
         }
         progress.textContent = `步骤 ${state.romStepIndex}/6`;
         romGuide.classList.add('rom-guide-active');
-        collectBtn.disabled = state.romIsWaitingForZero;
-        collectBtn.textContent = state.romIsWaitingForZero ? '等待归零' : '📍 采集当前点';
     } else {
         instruction.textContent = '检测完成';
         progress.textContent = '已完成';
         romGuide.classList.remove('rom-guide-active');
         collectBtn.textContent = '查看结果';
         collectBtn.disabled = false;
+        // 检测完成时播报
+        speak('检测完成');
     }
 }
 
@@ -151,6 +161,8 @@ function updatePositionGuide() {
         progress.textContent = '步骤 0/6';
         startBtn.textContent = '开始检测';
         startBtn.disabled = false;
+        // 进入界面时播报操作指引
+        speak('请先归零');
     } else if (state.positionStepIndex <= 6) {
         const step = CONFIG.POSITION_STEPS[state.positionStepIndex - 1];
         instruction.textContent = step.instruction;
@@ -164,6 +176,8 @@ function updatePositionGuide() {
         startBtn.style.display = 'block';
         startBtn.style.visibility = 'visible';
         startBtn.offsetHeight;
+        // 显示操作指令时播报
+        speak(step.instruction);
     } else {
         instruction.textContent = '检测完成';
         instruction.style.background = 'rgba(16,185,129,0.1)';
@@ -172,6 +186,8 @@ function updatePositionGuide() {
         startBtn.textContent = '重新检测';
         startBtn.disabled = false;
         showPositionResults();
+        // 检测完成时播报
+        speak('检测完成');
     }
 }
 
@@ -182,8 +198,7 @@ function executePositionStep() {
     const eyeHint = document.getElementById('position-eye-hint');
     const startBtn = document.getElementById('start-position-btn');
 
-    // TTS：直接读屏幕上的文字（只在开始时播报一次）
-    speak(instruction.textContent);
+    // 闭眼提示已在updatePositionGuide时播报过，这里不再重复
 
     // 显示闭眼提示
     eyeHint.style.display = 'block';
