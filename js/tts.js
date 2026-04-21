@@ -25,8 +25,8 @@ function speak(text, options = {}) {
         return;
     }
 
-    // 停止当前播报
-    stopSpeaking();
+    // 取消之前的播报
+    speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'zh-CN';
