@@ -25,15 +25,14 @@ function speak(text, options = {}) {
         return;
     }
 
-    // 直接取消，不等待
-    speechSynthesis.cancel();
+    // 只在有内容播报时才取消
+    if (speechSynthesis.speaking) {
+        speechSynthesis.cancel();
+    }
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'zh-CN';
-    // 使用较快语速减少延迟感知
     utterance.rate = 1.0;
-    utterance.pitch = options.pitch || TTS_CONFIG.pitch;
-    utterance.volume = options.volume || TTS_CONFIG.volume;
 
     utterance.onerror = (e) => {
         console.warn('TTS error:', e.error);
