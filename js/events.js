@@ -16,9 +16,6 @@ function setMode(mode) {
         btn.classList.toggle('active', btn.dataset.mode === mode);
     });
 
-    const trajCard = document.getElementById('trajectory-card');
-    trajCard.style.display = mode === 'coordination' ? 'block' : 'none';
-
     // 显示对应模式的视图
     document.getElementById('view-mode-select').style.display = mode === 'mode-select' ? 'block' : 'none';
     document.getElementById('view-integrated').style.display = mode === 'integrated' ? 'block' : 'none';
@@ -502,9 +499,6 @@ function stopDetection() {
         document.getElementById('action-btn').disabled = false;
     }
 
-    const trajCard = document.getElementById('trajectory-card');
-    trajCard.style.display = 'none';
-
     showResults();
 }
 
@@ -613,29 +607,6 @@ function init() {
         btn.addEventListener('click', () => {
             if (state.isRunning) return;
             setMode(btn.dataset.mode);
-        });
-    });
-
-    // 轨迹按钮
-    document.querySelectorAll('.traj-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (state.isRunning) return;
-            state.trajectoryType = btn.dataset.traj;
-            document.querySelectorAll('.traj-btn').forEach(b => {
-                b.style.background = b === btn ? 'var(--primary)' : 'transparent';
-                b.style.color = b === btn ? 'var(--bg-dark)' : 'var(--text)';
-            });
-
-            // 垂直左右跳转 - 使用旋转45°位置（半规管测试角度）
-            const hLineLength = crosshairSize / 2 - 15;
-            const angle45Offset = hLineLength * 45 / 80;
-            if (state.trajectoryType === 'vertical_left') {
-                state.targetX = -angle45Offset;
-                state.targetY = 0;
-            } else if (state.trajectoryType === 'vertical_right') {
-                state.targetX = angle45Offset;
-                state.targetY = 0;
-            }
         });
     });
 
@@ -788,33 +759,6 @@ function init() {
         speakWithCallback('协调性检测开始', () => {
             startDetection();
         });
-    });
-
-    // 轨迹卡片拖动
-    const trajCard = document.getElementById('trajectory-card');
-    let isDragging = false;
-    let dragOffsetX = 0, dragOffsetY = 0;
-
-    trajCard.addEventListener('mousedown', e => {
-        if (e.target.classList.contains('traj-btn')) return;
-        isDragging = true;
-        dragOffsetX = e.clientX - trajCard.offsetLeft;
-        dragOffsetY = e.clientY - trajCard.offsetTop;
-        trajCard.style.cursor = 'grabbing';
-    });
-
-    document.addEventListener('mousemove', e => {
-        if (!isDragging) return;
-        const x = Math.max(0, Math.min(window.innerWidth - trajCard.offsetWidth, e.clientX - dragOffsetX));
-        const y = Math.max(0, Math.min(window.innerHeight - trajCard.offsetHeight, e.clientY - dragOffsetY));
-        trajCard.style.left = x + 'px';
-        trajCard.style.bottom = 'auto';
-        trajCard.style.top = y + 'px';
-    });
-
-    document.addEventListener('mouseup', () => {
-        isDragging = false;
-        trajCard.style.cursor = 'move';
     });
 
     // 关闭弹窗
