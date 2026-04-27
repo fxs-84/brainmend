@@ -701,10 +701,11 @@ function init() {
         zeroPosition();
     });
 
-    // 缩放滑块
+    // 缩放滑块（检测中禁止缩放）
     const zoomSlider = document.getElementById('zoom-slider');
     const zoomValue = document.getElementById('zoom-value');
     zoomSlider.addEventListener('input', e => {
+        if (state.isRunning) return;
         const newZoom = e.target.value / 100;
         const zoomRatio = newZoom / lastZoomFactor;
         state.targetX *= zoomRatio;
@@ -715,8 +716,9 @@ function init() {
         resizeCanvas();
     });
 
-    // 鼠标滚轮缩放
+    // 鼠标滚轮缩放（检测中禁止缩放）
     canvas.addEventListener('wheel', e => {
+        if (state.isRunning) return;
         e.preventDefault();
         const zoomDelta = e.deltaY > 0 ? -0.1 : 0.1;
         const newZoom = Math.max(CONFIG.MIN_ZOOM, Math.min(CONFIG.MAX_ZOOM, state.zoomFactor + zoomDelta));
