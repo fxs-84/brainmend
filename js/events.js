@@ -689,11 +689,24 @@ function init() {
     document.getElementById('zero-btn-coord').addEventListener('click', zeroPosition);
 
     // 返回按钮
-    document.getElementById('back-btn-integrated').addEventListener('click', () => setMode('mode-select'));
-    document.getElementById('back-btn-coordination').addEventListener('click', () => setMode('mode-select'));
-    document.getElementById('back-btn-rom').addEventListener('click', () => setMode('mode-select'));
-    document.getElementById('back-btn-position').addEventListener('click', () => setMode('mode-select'));
+    document.getElementById('back-btn-integrated').addEventListener('click', () => {
+        document.getElementById('result-modal').classList.remove('show');
+        setMode('mode-select');
+    });
+    document.getElementById('back-btn-coordination').addEventListener('click', () => {
+        document.getElementById('result-modal').classList.remove('show');
+        setMode('mode-select');
+    });
+    document.getElementById('back-btn-rom').addEventListener('click', () => {
+        document.getElementById('result-modal').classList.remove('show');
+        setMode('mode-select');
+    });
+    document.getElementById('back-btn-position').addEventListener('click', () => {
+        document.getElementById('result-modal').classList.remove('show');
+        setMode('mode-select');
+    });
     document.getElementById('back-btn-game').addEventListener('click', () => {
+        document.getElementById('result-modal').classList.remove('show');
         if (window.gameEngine) {
             window.gameEngine.cleanup();
         }
