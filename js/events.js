@@ -655,6 +655,7 @@ function init() {
     // 归零按钮
     document.getElementById('zero-btn').addEventListener('click', zeroPosition);
     document.getElementById('zero-btn-position').addEventListener('click', zeroPosition);
+    document.getElementById('zero-btn-coord').addEventListener('click', zeroPosition);
 
     // 返回按钮
     document.getElementById('back-btn-integrated').addEventListener('click', () => setMode('mode-select'));
