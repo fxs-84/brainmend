@@ -6,7 +6,7 @@ import { state } from './state.js';
 import { CONFIG } from './config.js';
 import { canvas, crosshairSize, ringRadius, resizeCanvas, animate } from './canvas.js';
 import { initInput } from './input.js';
-import { initTTS, toggleTTS } from './tts.js';
+import { initTTS, toggleTTS, speakWithCallback } from './tts.js';
 import { renderCollectedPoints, updateProgress, zeroPosition, collectPoint, showROMResults } from './ui.js';
 import { updateCoordination } from './detection.js';
 
@@ -368,6 +368,37 @@ function startDetection() {
     state.integratedResults = { positionScore: 0, stabilityScore: 0, romScore: 0 };
     state.collectedPoints = [];
     renderCollectedPoints();
+
+    // 启动协调性检测循环
+    if (state.mode === 'coordination' && state.coordMode === 'single') {
+        const btn = document.getElementById('action-btn-coord');
+        btn.textContent = '检测中...';
+        btn.disabled = true;
+
+        const startTime = Date.now();
+        function updateCoordLoop() {
+            if (!state.isRunning) return;
+            const elapsed = (Date.now() - startTime) / 1000;
+            updateCoordination(elapsed);
+            updateProgress();
+
+            if (state.progress >= 1) {
+                state.isRunning = false;
+                const scores = state.coordScores;
+                if (scores && scores.tracking.length > 0) {
+                    const avgTracking = scores.tracking.reduce((a, b) => a + b, 0) / scores.tracking.length;
+                    const avgTrajectory = scores.trajectory.reduce((a, b) => a + b, 0) / scores.trajectory.length;
+                    const avgSmoothness = scores.smoothness.reduce((a, b) => a + b, 0) / scores.smoothness.length;
+                    state.results.coordination = avgTracking * 0.4 + avgTrajectory * 0.3 + avgSmoothness * 0.3;
+                }
+                stopDetection();
+                return;
+            }
+            requestAnimationFrame(updateCoordLoop);
+        }
+        requestAnimationFrame(updateCoordLoop);
+        return;
+    }
 
     // 根据模式设置对应的按钮状态
     if (state.mode === 'coordination') {

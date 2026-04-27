@@ -383,4 +383,4 @@ function speakResultsPosition(positionResults) {
     speak(message);
 }
 
-export { initTTS, toggleTTS };
+export { initTTS, toggleTTS, speakWithCallback };
