@@ -49,6 +49,8 @@ function setMode(mode) {
         state.coordFullScores = [];
         state.coordCurrentTrajectoryIndex = 0;
         state.coordMode = 'single';
+        state.targetX = 0;
+        state.targetY = 0;
         updateCoordinationModeUI();
     }
 
@@ -616,6 +618,32 @@ function init() {
             if (state.isRunning) return;
             state.coordMode = btn.dataset.mode;
             updateCoordinationModeUI();
+        });
+    });
+
+    // 轨迹按钮
+    document.querySelectorAll('.traj-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (state.isRunning) return;
+            state.trajectoryType = btn.dataset.traj;
+            document.querySelectorAll('.traj-btn').forEach(b => {
+                b.style.background = b === btn ? 'var(--primary)' : 'transparent';
+                b.style.color = b === btn ? 'var(--bg-dark)' : 'var(--text)';
+            });
+
+            // 垂直左右跳转 - 使用旋转45°位置（半规管测试角度）
+            const hLineLength = crosshairSize / 2 - 15;
+            const angle45Offset = hLineLength * 45 / 80;
+            if (state.trajectoryType === 'vertical_left') {
+                state.targetX = -angle45Offset;
+                state.targetY = 0;
+            } else if (state.trajectoryType === 'vertical_right') {
+                state.targetX = angle45Offset;
+                state.targetY = 0;
+            } else {
+                state.targetX = 0;
+                state.targetY = 0;
+            }
         });
     });
 
