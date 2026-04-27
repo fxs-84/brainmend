@@ -45,8 +45,9 @@ function updatePosition() {
 // 稳定性检测
 function updateStability(elapsed) {
     const time = elapsed * 0.5;
-    state.targetX = Math.sin(time) * 70;
-    state.targetY = Math.cos(time) * 70;
+    const hLineLength = crosshairSize / 2 - 15;  // 使用zoom感知的像素范围
+    state.targetX = Math.sin(time) * hLineLength;
+    state.targetY = Math.cos(time) * hLineLength;
 
     const error = Math.sqrt((state.dotX - state.targetX) ** 2 + (state.dotY - state.targetY) ** 2);
     state.results.stability = Math.max(0, 100 - error);
