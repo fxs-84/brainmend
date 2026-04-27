@@ -10,6 +10,8 @@ import { initTTS, toggleTTS } from './tts.js';
 import { renderCollectedPoints, updateProgress, zeroPosition, collectPoint, showROMResults } from './ui.js';
 import { updateCoordination } from './detection.js';
 
+let lastZoomFactor = 1;
+
 function setMode(mode) {
     state.mode = mode;
     document.querySelectorAll('.mode-btn').forEach(btn => {
@@ -703,8 +705,13 @@ function init() {
     const zoomSlider = document.getElementById('zoom-slider');
     const zoomValue = document.getElementById('zoom-value');
     zoomSlider.addEventListener('input', e => {
-        state.zoomFactor = e.target.value / 100;
+        const newZoom = e.target.value / 100;
+        const zoomRatio = newZoom / lastZoomFactor;
+        state.targetX *= zoomRatio;
+        state.targetY *= zoomRatio;
+        state.zoomFactor = newZoom;
         zoomValue.textContent = e.target.value + '%';
+        lastZoomFactor = newZoom;
         resizeCanvas();
     });
 
@@ -712,9 +719,14 @@ function init() {
     canvas.addEventListener('wheel', e => {
         e.preventDefault();
         const zoomDelta = e.deltaY > 0 ? -0.1 : 0.1;
-        state.zoomFactor = Math.max(CONFIG.MIN_ZOOM, Math.min(CONFIG.MAX_ZOOM, state.zoomFactor + zoomDelta));
-        zoomSlider.value = state.zoomFactor * 100;
-        zoomValue.textContent = Math.round(state.zoomFactor * 100) + '%';
+        const newZoom = Math.max(CONFIG.MIN_ZOOM, Math.min(CONFIG.MAX_ZOOM, state.zoomFactor + zoomDelta));
+        const zoomRatio = newZoom / lastZoomFactor;
+        state.targetX *= zoomRatio;
+        state.targetY *= zoomRatio;
+        state.zoomFactor = newZoom;
+        zoomSlider.value = newZoom * 100;
+        zoomValue.textContent = Math.round(newZoom * 100) + '%';
+        lastZoomFactor = newZoom;
         resizeCanvas();
     }, { passive: false });
 
