@@ -10,20 +10,9 @@ export class SceneSpace extends SceneBase {
     constructor() {
         super();
         this.stars = [];
+        this.movementAxis = 'free'; // 'free' | 'vertical' | 'horizontal'
+        this.scrollDirection = 'down'; // 'down' | 'up' | 'left' | 'right'
         this.generateStars();
-    }
-
-    generateStars() {
-        this.stars = [];
-        for (let i = 0; i < 100; i++) {
-            this.stars.push({
-                x: Math.random(),
-                y: Math.random(),
-                size: Math.random() * 0.003 + 0.001,
-                speed: Math.random() * 0.2 + 0.05,
-                brightness: Math.random()
-            });
-        }
     }
 
     init(engine) {
@@ -34,12 +23,26 @@ export class SceneSpace extends SceneBase {
     update(dt) {
         super.update(dt);
 
-        // 更新星星位置
+        // 根据滚动方向更新星星
         for (const star of this.stars) {
-            star.y += star.speed * dt;
-            if (star.y > 1) {
-                star.y = 0;
-                star.x = Math.random();
+            switch (this.scrollDirection) {
+                case 'left':
+                    star.x -= star.speed * dt;
+                    if (star.x < 0) { star.x = 1; star.y = Math.random(); }
+                    break;
+                case 'right':
+                    star.x += star.speed * dt;
+                    if (star.x > 1) { star.x = 0; star.y = Math.random(); }
+                    break;
+                case 'up':
+                    star.y -= star.speed * dt;
+                    if (star.y < 0) { star.y = 1; star.x = Math.random(); }
+                    break;
+                case 'down':
+                default:
+                    star.y += star.speed * dt;
+                    if (star.y > 1) { star.y = 0; star.x = Math.random(); }
+                    break;
             }
         }
     }
@@ -72,8 +75,47 @@ export class SceneSpace extends SceneBase {
             'random': ['small', 'medium', 'large'][Math.floor(Math.random() * 3)]
         };
 
+        // 根据滚动方向设置障碍物初始位置和速度
+        let x, y, speedX, speedY;
+
+        switch (this.scrollDirection) {
+            case 'left':
+                // 障碍物从右侧出现，向左移动
+                x = 1.1;
+                y = Math.random() * 0.7 + 0.15;
+                speedX = -(0.1 + Math.random() * 0.1);
+                speedY = (Math.random() - 0.5) * 0.03;
+                break;
+            case 'right':
+                // 障碍物从左侧出现，向右移动
+                x = -0.1;
+                y = Math.random() * 0.7 + 0.15;
+                speedX = 0.1 + Math.random() * 0.1;
+                speedY = (Math.random() - 0.5) * 0.03;
+                break;
+            case 'up':
+                // 障碍物从下方出现，向上移动
+                x = Math.random() * 0.7 + 0.15;
+                y = 1.1;
+                speedX = (Math.random() - 0.5) * 0.03;
+                speedY = -(0.1 + Math.random() * 0.1);
+                break;
+            case 'down':
+            default:
+                // 障碍物从上方出现，向下移动（默认）
+                x = Math.random() * 0.7 + 0.15;
+                y = -0.1;
+                speedX = (Math.random() - 0.5) * 0.05;
+                speedY = 0.1 + Math.random() * 0.05;
+                break;
+        }
+
         return new ObstacleMeteor({
-            size: sizeMap[type] || 'medium'
+            size: sizeMap[type] || 'medium',
+            x: x,
+            y: y,
+            speedX: speedX,
+            speedY: speedY
         });
     }
 

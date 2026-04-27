@@ -89,6 +89,10 @@ state.positionIsRunning       // 位置觉: true=运行中, false=未开始, 'wa
 - Yaw: `yawCoefficient = 80 / (hLineLength * scale)`
 - Pitch: `pitchCoefficient = 45 / (vLineLength * scale)`
 
+## 重要原则
+
+> **禁止随意修改**：没有让修改的代码不要动。每一处修改必须由用户明确指示或确认，禁止基于推测擅自修改其他逻辑。
+
 ## 强制工作流
 
 > 本规则强制执行，以确保代码质量和安全。

@@ -11,6 +11,8 @@ export class SceneRoad extends SceneBase {
         super();
         this.roadLines = [];
         this.lineSpeed = 0.3;
+        this.movementAxis = 'free';
+        this.scrollDirection = 'down'; // 'down' | 'up' | 'left' | 'right'
         this.initRoadLines();
     }
 

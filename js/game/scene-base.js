@@ -8,6 +8,8 @@ export class SceneBase {
         this.obstacles = [];
         this.lastSpawnTime = 0;
         this.gameTime = 0;
+        this.movementAxis = 'free'; // 'free' | 'vertical' | 'horizontal'
+        this.scrollDirection = 'down'; // 'down' | 'up' | 'left' | 'right'
     }
 
     /**

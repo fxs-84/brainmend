@@ -101,6 +101,13 @@ export class GameUI {
                         ">
                             三轴 - 综合模式
                         </button>
+                        <button class="mode-btn" data-mode="shooting" style="
+                            padding: 10px; border: 2px solid transparent;
+                            border-radius: 6px; background: #1E293B; color: white;
+                            cursor: pointer; text-align: left;
+                        ">
+                            🎯 射击模式 - 消灭敌舰
+                        </button>
                     </div>
                 </div>
 
@@ -208,6 +215,13 @@ export class GameUI {
             const SceneClass = module[`Scene${sceneName.charAt(0).toUpperCase() + sceneName.slice(1)}`];
             if (SceneClass) {
                 const scene = new SceneClass();
+
+                // 射击模式特殊设置
+                if (this.selectedMode === 'shooting') {
+                    scene.movementAxis = 'shooting';
+                    scene.scrollDirection = 'down';
+                }
+
                 this.engine.setScene(scene);
             }
         }).catch(err => {

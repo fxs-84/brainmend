@@ -18,6 +18,10 @@ export class InputAdapter {
         // 运动模式
         this.motionMode = MotionMapper.MODES.TRIPLE;
 
+        // 射击状态
+        this.shootPressed = false;
+        this.shootHeld = false;  // 用于连续射击
+
         // 是否初始化
         this.initialized = false;
     }
@@ -79,6 +83,20 @@ export class InputAdapter {
             this.mouseX = (touch.clientX - rect.left) / rect.width;
             this.mouseY = (touch.clientY - rect.top) / rect.height;
         }, { passive: false });
+
+        // 点击射击
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0) {  // 左键
+                this.shootPressed = true;
+                this.shootHeld = true;
+            }
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (e.button === 0) {
+                this.shootHeld = false;
+            }
+        });
     }
 
     /**
@@ -109,6 +127,16 @@ export class InputAdapter {
                 case 'D':
                     this.mouseX = Math.min(1, this.mouseX + step);
                     break;
+                case ' ':
+                    this.shootPressed = true;
+                    this.shootHeld = true;
+                    break;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.key === ' ') {
+                this.shootHeld = false;
             }
         });
     }

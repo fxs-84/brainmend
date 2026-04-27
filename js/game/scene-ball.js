@@ -9,6 +9,7 @@ import { SceneBase } from './scene-base.js';
 export class SceneBall extends SceneBase {
     constructor() {
         super();
+        this.movementAxis = 'free';
     }
 
     renderBackground(ctx, width, height) {

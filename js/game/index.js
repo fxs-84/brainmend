@@ -12,6 +12,10 @@ export { CollisionDetector } from './collision.js';
 export { ScoringSystem } from './scoring.js';
 export { DifficultyManager } from './difficulty.js';
 
+// Cervical Ability Assessment
+export { HeadMotionRecorder } from './head-recorder.js';
+export { CervicalAbilityScorer } from './cervical-scorer.js';
+
 // Scenes
 export { SceneBase } from './scene-base.js';
 export { SceneSpace } from './scene-space.js';
