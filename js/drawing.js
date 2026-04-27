@@ -2,6 +2,10 @@
 // DRAWING - 绘图函数
 // ============================================================
 
+import { CONFIG } from './config.js';
+import { state } from './state.js';
+import { canvas, ctx, centerX, centerY, crosshairSize, ringRadius } from './canvas.js';
+
 // 绘制背景网格
 function drawGrid() {
     ctx.strokeStyle = CONFIG.COLORS.GRID;
@@ -247,3 +251,5 @@ function drawCrosshair() {
     drawPositionDot(actualCenterX, actualCenterY, scale, state.dotX, state.dotY);
     drawTrail(actualCenterX, actualCenterY);
 }
+
+export { drawCrosshair };

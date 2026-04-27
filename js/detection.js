@@ -2,6 +2,10 @@
 // DETECTION - 检测逻辑
 // ============================================================
 
+import { state } from './state.js';
+import { CONFIG } from './config.js';
+import { crosshairSize, ringRadius } from './canvas.js';
+
 // 综合检测
 function updateIntegrated(elapsed) {
     state.targetX = 0;
@@ -414,3 +418,5 @@ function getVestibularAssessmentFromIntegrated() {
         stabilityScore: stabilityScore
     });
 }
+
+export { updateIntegrated, updatePosition, updateStability, updateROM, updateCoordination };

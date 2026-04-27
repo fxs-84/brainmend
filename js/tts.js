@@ -20,6 +20,113 @@ let lastSpokenTime = 0;
 const TTS_DEBOUNCE_MS = 1500;  // 相同内容1.5秒内不重复
 
 // ============================================================
+// 音效系统 - 使用Web Audio API生成合成音效
+// ============================================================
+let audioContext = null;
+
+function initAudio() {
+    if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioContext;
+}
+
+// 爆炸音效
+function playExplosionSound() {
+    try {
+        const ctx = initAudio();
+        const now = ctx.currentTime;
+
+        // 创建爆炸噪音
+        const bufferSize = ctx.sampleRate * 0.3;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.1));
+        }
+
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        // 低通滤波器
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1000, now);
+        filter.frequency.exponentialRampToValueAtTime(100, now + 0.3);
+
+        // 增益 - 减弱到0.15
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+
+        noise.start(now);
+        noise.stop(now + 0.3);
+    } catch (e) {
+        console.warn('Audio error:', e);
+    }
+}
+
+// 射击音效
+function playShootSound() {
+    try {
+        const ctx = initAudio();
+        const now = ctx.currentTime;
+
+        // 创建高频短促音效
+        const oscillator = ctx.createOscillator();
+        oscillator.type = 'square';
+        oscillator.frequency.setValueAtTime(880, now);
+        oscillator.frequency.exponentialRampToValueAtTime(220, now + 0.1);
+
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.05, now);  // 减弱到0.05
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+
+        oscillator.start(now);
+        oscillator.stop(now + 0.1);
+    } catch (e) {
+        console.warn('Audio error:', e);
+    }
+}
+
+// 金币收集音效
+function playCoinSound() {
+    try {
+        const ctx = initAudio();
+        const now = ctx.currentTime;
+
+        const frequencies = [523, 659, 784];  // C5, E5, G5 和弦
+
+        frequencies.forEach((freq, i) => {
+            const osc = ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now);
+
+            const gain = ctx.createGain();
+            gain.gain.setValueAtTime(0, now + i * 0.05);
+            gain.gain.linearRampToValueAtTime(0.06, now + i * 0.05 + 0.02);  // 减弱到0.06
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(now + i * 0.05);
+            osc.stop(now + 0.3);
+        });
+    } catch (e) {
+        console.warn('Audio error:', e);
+    }
+}
+
+// ============================================================
 // 核心语音函数
 // ============================================================
 
@@ -275,3 +382,5 @@ function speakResultsPosition(positionResults) {
 
     speak(message);
 }
+
+export { initTTS, toggleTTS };

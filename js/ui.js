@@ -3,9 +3,18 @@
 // ============================================================
 
 function updateDataDisplay() {
-    const displayPitch = state.pitch - state.pitchOffset;
-    const displayYaw = state.yaw - state.yawOffset;
-    const displayRoll = state.roll - state.rollOffset;
+    let displayPitch, displayYaw, displayRoll;
+    if (state.useGyroscope) {
+        // 陀螺仪模式：偏移量已在 updateFromGyroscope 中减过
+        displayPitch = state.pitch;
+        displayYaw = state.yaw;
+        displayRoll = state.roll;
+    } else {
+        // 鼠标模式：需要手动减偏移
+        displayPitch = state.pitch - state.pitchOffset;
+        displayYaw = state.yaw - state.yawOffset;
+        displayRoll = state.roll - state.rollOffset;
+    }
     document.getElementById('pitch-value').textContent = displayPitch.toFixed(1) + '°';
     document.getElementById('yaw-value').textContent = displayYaw.toFixed(1) + '°';
     document.getElementById('roll-value').textContent = displayRoll.toFixed(1) + '°';
@@ -82,16 +91,23 @@ function collectPoint() {
         return;
     }
 
-    const displayPitch = state.pitch - state.pitchOffset;
-    const displayYaw = state.yaw - state.yawOffset;
-    const displayRoll = state.roll - state.rollOffset;
+    let dispPitch, dispYaw, dispRoll;
+    if (state.useGyroscope) {
+        dispPitch = state.pitch;
+        dispYaw = state.yaw;
+        dispRoll = state.roll;
+    } else {
+        dispPitch = state.pitch - state.pitchOffset;
+        dispYaw = state.yaw - state.yawOffset;
+        dispRoll = state.roll - state.rollOffset;
+    }
     const point = {
         id: Date.now(),
         dotX: state.dotX,
         dotY: state.dotY,
-        pitch: displayPitch,
-        yaw: displayYaw,
-        roll: displayRoll,
+        pitch: dispPitch,
+        yaw: dispYaw,
+        roll: dispRoll,
         timestamp: new Date().toLocaleTimeString()
     };
     state.collectedPoints.push(point);
@@ -528,3 +544,5 @@ function showResults() {
 
     document.getElementById('result-modal').classList.add('show');
 }
+
+export { renderCollectedPoints, updateDataDisplay, updateProgress, zeroPosition, collectPoint, showROMResults };

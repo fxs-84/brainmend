@@ -1,9 +1,16 @@
 // ============================================================
 // CANVAS - 画布和尺寸
 // ============================================================
-const canvas = document.getElementById('crosshair-canvas');
-const ctx = canvas.getContext('2d');
-let centerX, centerY, crosshairSize, ringRadius;
+
+import { state } from './state.js';
+import { CONFIG } from './config.js';
+import { isDraggingDot } from './input.js';
+import { drawCrosshair } from './drawing.js';
+import { updateDataDisplay } from './ui.js';
+
+export const canvas = document.getElementById('crosshair-canvas');
+export const ctx = canvas.getContext('2d');
+export let centerX, centerY, crosshairSize, ringRadius;
 
 function resizeCanvas() {
     const container = document.getElementById('detection-area');
@@ -55,3 +62,5 @@ function animate() {
 // GLOBAL TARGET (已迁移到 state.targetX/Y)
 // 保留用于初始化，由 state.targetX/Y 使用
 // ============================================================
+
+export { resizeCanvas, animate };

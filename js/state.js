@@ -1,6 +1,8 @@
 // ============================================================
 // STATE - 应用状态
 // ============================================================
+import { CONFIG } from './config.js';
+
 const createState = () => ({
     // 当前模式
     mode: 'integrated',
@@ -106,3 +108,9 @@ const createState = () => ({
 });
 
 const state = createState();
+
+// 导出给 ES 模块使用
+export { state };
+
+// 同时挂载到全局（兼容非模块脚本）
+window.state = state;

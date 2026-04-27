@@ -123,7 +123,10 @@
                         <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">全轨迹检测进度</div>
                         <div id="coord-full-progress-text" style="font-size: 11px;">0/5 已完成</div>
                     </div>
-                    <button class="action-btn" id="action-btn-coord">开始检测</button>
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                        <button class="collect-btn" id="zero-btn-coord" style="flex: 0.3; background: var(--secondary);">⟳ 归零</button>
+                        <button class="action-btn" id="action-btn-coord" style="flex: 1;">开始检测</button>
+                    </div>
                 </div>
 
                 <!-- ROM检测视图 -->
@@ -162,12 +165,12 @@
                     <button class="action-btn" id="start-position-btn" style="background: var(--warning); margin-top: 5px;">开始检测</button>
                 </div>
 
-                <!-- 游戏视图 -->
-                <div id="view-game" style="display: none; flex-direction: column; flex: 1; gap: 5px; min-height: 300px;">
-                    <button class="back-btn" id="back-btn-game">← 返回</button>
-                    <div class="panel-title">🎮 康复游戏</div>
-                    <div id="game-container" style="position: relative; min-height: 250px; height: 250px; background: #1a2744; border-radius: 8px; overflow: hidden; border: 2px solid #00D9A5;">
-                        <canvas id="game-canvas" width="400" height="250" style="width: 100%; height: 250px; display: block;"></canvas>
+                <!-- 游戏视图 - 使用主画布 -->
+                <div id="view-game" style="display: none;">
+                    <button class="back-btn" id="back-btn-game" style="position:absolute;top:10px;left:10px;z-index:100;">← 返回</button>
+                    <div id="game-hud" style="position:absolute;top:10px;right:10px;z-index:100;color:white;text-align:right;">
+                        <div id="game-score" style="font-size:18px;font-weight:bold;">分数: 0</div>
+                        <div id="game-level" style="font-size:12px;color:#9CA3AF;">难度: 1</div>
                     </div>
                 </div>
 
@@ -180,7 +183,7 @@
                 <div class="data-card">
                     <div class="data-row">
                         <span class="data-label">缩放</span>
-                        <input type="range" id="zoom-slider" min="50" max="200" value="100" style="width: 80px;">
+                        <input type="range" id="zoom-slider" min="50" max="500" value="100" style="width: 80px;">
                         <span class="data-value" id="zoom-value">100%</span>
                     </div>
                 </div>
@@ -320,23 +323,107 @@
         </div>
     </div>
 
-    <script src="js/config.js"></script>
-    <script src="js/state.js"></script>
-    <script src="js/canvas.js"></script>
-    <script src="js/drawing.js"></script>
-    <script src="js/detection.js"></script>
-    <script src="js/ui.js"></script>
-    <script src="js/input.js"></script>
-    <script src="js/tts.js"></script>
-    <script src="js/charts.js"></script>
-    <script src="js/game.js"></script>
-    <script src="js/events.js"></script>
-    <script>
-        if (document.readyState === 'complete') {
-            setTimeout(init, 100);
-        } else {
-            window.addEventListener('load', () => setTimeout(init, 100));
-        }
-    </script>
+    <!-- 游戏颈椎能力评估报告弹窗 -->
+    <div class="modal" id="game-report-modal" style="display: none;">
+        <div class="modal-content" style="max-width: 420px; max-height: 90vh; overflow-y: auto;">
+            <div style="text-align: center; margin-bottom: 15px;">
+                <div style="font-size: 18px; font-weight: bold; color: var(--primary);">太空躲避训练报告</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">颈椎能力评估</div>
+            </div>
+
+            <!-- 综合评级 -->
+            <div id="game-overall" style="text-align: center; margin: 15px 0; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 12px;">
+                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px;">综合评级</div>
+                <div id="game-grade" style="font-size: 42px; font-weight: 700; line-height: 1;">--</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">综合得分: <span id="game-overall-score">0</span>分</div>
+            </div>
+
+            <!-- 五维能力 -->
+            <div style="margin-bottom: 15px;">
+                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">颈椎能力评估</div>
+
+                <div style="margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 11px;">活动范围(ROM)</span>
+                        <span id="game-rom-score" style="font-size: 11px; font-weight: 600;">--</span>
+                    </div>
+                    <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                        <div id="game-rom-bar" style="height: 100%; width: 0%; background: #22c55e; transition: width 0.5s;"></div>
+                    </div>
+                    <div style="font-size: 9px; color: var(--text-muted); margin-top: 2px;">俯仰 <span id="game-pitch-range">0</span>° | 偏航 <span id="game-yaw-range">0</span>°</div>
+                </div>
+
+                <div style="margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 11px;">位置觉</span>
+                        <span id="game-proprioception-score" style="font-size: 11px; font-weight: 600;">--</span>
+                    </div>
+                    <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                        <div id="game-proprioception-bar" style="height: 100%; width: 0%; background: #84cc16; transition: width 0.5s;"></div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 11px;">稳定性</span>
+                        <span id="game-stability-score" style="font-size: 11px; font-weight: 600;">--</span>
+                    </div>
+                    <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                        <div id="game-stability-bar" style="height: 100%; width: 0%; background: #eab308; transition: width 0.5s;"></div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 11px;">协调性</span>
+                        <span id="game-coordination-score" style="font-size: 11px; font-weight: 600;">--</span>
+                    </div>
+                    <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                        <div id="game-coordination-bar" style="height: 100%; width: 0%; background: #8b5cf6; transition: width 0.5s;"></div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 11px;">反应速度</span>
+                        <span id="game-reaction-score" style="font-size: 11px; font-weight: 600;">--</span>
+                    </div>
+                    <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                        <div id="game-reaction-bar" style="height: 100%; width: 0%; background: #06b6d4; transition: width 0.5s;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 游戏数据 -->
+            <div style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.15); border-radius: 8px;">
+                <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 6px;">训练数据</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 10px;">
+                    <div>游戏时长: <span id="game-time">0</span>秒</div>
+                    <div>最终得分: <span id="game-final-score">0</span></div>
+                    <div>成功躲避: <span id="game-dodged">0</span>次</div>
+                    <div>擦肩而过: <span id="game-nearmiss">0</span>次</div>
+                </div>
+            </div>
+
+            <!-- 评估总结 -->
+            <div id="game-summary" style="margin-bottom: 15px; padding: 10px; background: rgba(34, 197, 94, 0.1); border-radius: 8px; border: 1px solid rgba(34, 197, 94, 0.2);">
+                <div style="font-size: 10px; color: var(--success); margin-bottom: 4px;">评估总结</div>
+                <div id="game-summary-text" style="font-size: 11px; line-height: 1.5;"></div>
+            </div>
+
+            <!-- 训练建议 -->
+            <div id="game-recommendations" style="margin-bottom: 15px; padding: 10px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                <div style="font-size: 10px; color: #60a5fa; margin-bottom: 4px;">训练建议</div>
+                <div id="game-recommendations-list" style="font-size: 10px; line-height: 1.6;"></div>
+            </div>
+
+            <div style="display: flex; gap: 8px;">
+                <button class="modal-btn" id="close-game-report" style="flex: 1;">返回菜单</button>
+                <button class="modal-btn" id="restart-game" style="flex: 1; background: var(--primary);">再来一次</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
 </body>
 </html>

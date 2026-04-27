@@ -2,6 +2,14 @@
 // EVENTS - 事件处理
 // ============================================================
 
+import { state } from './state.js';
+import { CONFIG } from './config.js';
+import { canvas, crosshairSize, ringRadius, resizeCanvas, animate } from './canvas.js';
+import { initInput } from './input.js';
+import { initTTS, toggleTTS } from './tts.js';
+import { renderCollectedPoints, updateProgress, zeroPosition, collectPoint, showROMResults } from './ui.js';
+import { updateCoordination } from './detection.js';
+
 function setMode(mode) {
     state.mode = mode;
     document.querySelectorAll('.mode-btn').forEach(btn => {
@@ -505,13 +513,18 @@ function stopDetection() {
 // ============================================================
 
 function initGame() {
-    const canvas = document.getElementById('game-canvas');
+    // 使用主画布
+    const canvas = document.getElementById('crosshair-canvas');
     if (!canvas) return;
+    if (!window.GameModule) return;
 
     // 创建游戏引擎
     if (!window.gameEngine) {
         window.gameEngine = new GameModule.GameEngine(canvas);
         window.gameEngine.init();
+
+        // 设置颈椎能力评估报告回调
+        window.gameEngine.onCervicalReport = showGameCervicalReport;
     }
 
     // 显示游戏选择界面
@@ -521,6 +534,63 @@ function initGame() {
         window.gameUI = new GameModule.GameUI(window.gameEngine);
         window.gameUI.showSelectPanel();
     }
+}
+
+/**
+ * 显示游戏颈椎能力评估报告
+ */
+function showGameCervicalReport(report) {
+    const modal = document.getElementById('game-report-modal');
+    if (!modal) return;
+
+    // 填充数据
+    document.getElementById('game-grade').textContent = report.overall.grade;
+    document.getElementById('game-grade').style.color = report.overall.score >= 70 ? '#22c55e' : report.overall.score >= 50 ? '#eab308' : '#ef4444';
+    document.getElementById('game-overall-score').textContent = report.overall.score;
+
+    // 五维能力
+    const abilities = ['rom', 'proprioception', 'stability', 'coordination', 'reaction'];
+    const barColors = ['#22c55e', '#84cc16', '#eab308', '#8b5cf6', '#06b6d4'];
+
+    abilities.forEach((ability, i) => {
+        const data = report.abilities[ability];
+        document.getElementById(`game-${ability}-score`).textContent = data.score + '分 ' + data.level.name;
+        document.getElementById(`game-${ability}-score`).style.color = data.level.color;
+        const bar = document.getElementById(`game-${ability}-bar`);
+        bar.style.width = data.score + '%';
+        bar.style.background = barColors[i];
+    });
+
+    // ROM详情
+    document.getElementById('game-pitch-range').textContent = report.abilities.rom.pitchRange;
+    document.getElementById('game-yaw-range').textContent = report.abilities.rom.yawRange;
+
+    // 游戏数据
+    document.getElementById('game-time').textContent = report.gameInfo.gameTime;
+    document.getElementById('game-final-score').textContent = Math.round(report.gameInfo.finalScore);
+    document.getElementById('game-dodged').textContent = report.gameInfo.obstaclesDodged;
+    document.getElementById('game-nearmiss').textContent = report.gameInfo.nearMisses;
+
+    // 总结
+    document.getElementById('game-summary-text').textContent = report.overall.summary;
+
+    // 建议
+    const recList = document.getElementById('game-recommendations-list');
+    recList.innerHTML = report.overall.recommendations.map(r => '• ' + r).join('<br>');
+
+    // 绑定按钮事件
+    document.getElementById('close-game-report').onclick = () => {
+        modal.style.display = 'none';
+        if (window.gameUI) window.gameUI.showSelectPanel();
+    };
+
+    document.getElementById('restart-game').onclick = () => {
+        modal.style.display = 'none';
+        if (window.gameUI) window.gameUI.startGame();
+    };
+
+    // 显示弹窗
+    modal.style.display = 'flex';
 }
 
 // ============================================================
@@ -862,9 +932,17 @@ function init() {
 
         try {
             const serviceUuid = document.getElementById('gyro-service-uuid').value.trim();
+            // 维特智能 WT9011DCL-BT50 专用服务UUID
+            const defaultServices = [
+                '0000ffe5-0000-1000-8000-00805f9a34fb', // 维特智能 BLE5.0 主服务
+                '0000ffe0-0000-1000-8000-00805f9b34fb', // 维特智能 旧版兼容
+            ];
+            const optionalServices = serviceUuid
+                ? [serviceUuid]
+                : defaultServices;
             const options = {
-                acceptAllDevices: !serviceUuid,
-                optionalServices: serviceUuid ? [serviceUuid] : undefined
+                acceptAllDevices: true,
+                optionalServices: optionalServices
             };
 
             logGyroDebug('请求设备...');
@@ -894,17 +972,43 @@ function init() {
         }
     });
 
+    // WT9011DCL-BT50 专用 UUID 常量
+    const WIT_SERVICE_UUID      = '0000ffe5-0000-1000-8000-00805f9a34fb';
+    const WIT_NOTIFY_UUID       = '0000ffe4-0000-1000-8000-00805f9a34fb'; // 数据通知特征
+    const WIT_WRITE_UUID        = '0000ffe9-0000-1000-8000-00805f9a34fb'; // 指令写入特征
+    // 备用旧版 UUID（部分固件版本）
+    const WIT_SERVICE_UUID_ALT  = '0000ffe0-0000-1000-8000-00805f9b34fb';
+    const WIT_NOTIFY_UUID_ALT   = '0000ffe1-0000-1000-8000-00805f9b34fb';
+
+    // 维特智能指令：开启欧拉角输出（寄存器0x02，值0x086）
+    // Bit 3 (0x08) = 欧拉角，0x7E = 基础输出(时间+加速度+角速度+磁场+接口+气压)
+    // 0x7E | 0x08 = 0x86 = 基础输出 + 欧拉角
+    const CMD_ENABLE_EULER = new Uint8Array([0xFF, 0xAA, 0x02, 0x86, 0x00]);
+    // 仅开启欧拉角输出（寄存器0x02，值0x08）
+    const CMD_EULER_ONLY = new Uint8Array([0xFF, 0xAA, 0x02, 0x08, 0x00]);
+    // 维特智能指令：读取欧拉角寄存器0x3D（寄存器0x27，值0x3D）
+    const CMD_READ_ANGLE   = new Uint8Array([0xFF, 0xAA, 0x27, 0x3D, 0x00]);
+    // 维特智能指令：设置安装方向为垂直（寄存器0x23，值0x01）
+    const CMD_SET_VERTICAL  = new Uint8Array([0xFF, 0xAA, 0x23, 0x01, 0x00]);
+
+    let gyroWriteCharacteristic = null;
+
     async function connectGyroscope() {
         if (!bluetoothDevice) return;
 
         updateGyroStatus('连接中...');
         gyroScanBtn.textContent = '连接中...';
         gyroScanBtn.disabled = true;
+        gyroWriteCharacteristic = null;
+        _reconnectAttempts = 0; // 重置重连计数
 
         try {
             logGyroDebug('正在连接GATT服务器...');
             gyroServer = await bluetoothDevice.gatt.connect();
             logGyroDebug('GATT连接成功');
+
+            // 等待服务稳定
+            await new Promise(resolve => setTimeout(resolve, 600));
 
             // 获取电池服务（如果可用）
             try {
@@ -918,54 +1022,138 @@ function init() {
                 logGyroDebug('电池服务不可用');
             }
 
-            // 获取陀螺仪服务
-            const serviceUuid = document.getElementById('gyro-service-uuid').value.trim() || '181a'; // 默认环境感知服务
-            logGyroDebug(`获取服务: ${serviceUuid}`);
-            const gyroService = await gyroServer.getPrimaryService(serviceUuid);
-            const characteristics = await gyroService.getCharacteristics();
-            logGyroDebug(`找到 ${characteristics.length} 个特征值`);
+            // 获取陀螺仪主服务（优先用户自定义 > 维特专用 > 旧版兼容）
+            const customUuid = document.getElementById('gyro-service-uuid').value.trim();
+            let gyroService = null;
+            let notifyUuid = null;
 
-            // 查找可读的特征值
-            let foundChar = null;
-            for (const char of characteristics) {
-                logGyroDebug(`特征值: ${char.uuid} (属性: ${char.properties.read ? 'R' : ''}${char.properties.notify ? 'N' : ''})`);
-                if (char.properties.notify || char.properties.read) {
-                    foundChar = char;
-                    break;
+            const tryGetService = async (svcUuid, notifyU) => {
+                try {
+                    const svc = await gyroServer.getPrimaryService(svcUuid);
+                    logGyroDebug(`服务连接成功: ${svcUuid}`);
+                    gyroService = svc;
+                    notifyUuid = notifyU;
+                    return true;
+                } catch (e) {
+                    logGyroDebug(`服务 ${svcUuid} 不可用`);
+                    return false;
+                }
+            };
+
+            if (customUuid) {
+                await tryGetService(customUuid, null);
+            } else {
+                // 先试维特专用 UUID
+                const ok = await tryGetService(WIT_SERVICE_UUID, WIT_NOTIFY_UUID);
+                if (!ok) {
+                    // 再试旧版兼容
+                    await tryGetService(WIT_SERVICE_UUID_ALT, WIT_NOTIFY_UUID_ALT);
                 }
             }
 
-            if (!foundChar) {
-                throw new Error('未找到可用的特征值');
+            if (!gyroService) {
+                // 最后尝试枚举所有服务
+                logGyroDebug('尝试枚举所有服务...');
+                const services = await gyroServer.getPrimaryServices();
+                logGyroDebug(`共发现 ${services.length} 个服务`);
+                for (const svc of services) {
+                    logGyroDebug(`服务: ${svc.uuid}`);
+                    try {
+                        const chars = await svc.getCharacteristics();
+                        for (const c of chars) {
+                            logGyroDebug(`  特征: ${c.uuid} (notify:${c.properties.notify} write:${c.properties.writeWithoutResponse || c.properties.write})`);
+                        }
+                        if (!gyroService) {
+                            gyroService = svc;
+                            notifyUuid = null;
+                        }
+                    } catch (e) {}
+                }
             }
 
-            gyroCharacteristic = foundChar;
-            logGyroDebug(`使用特征值: ${gyroCharacteristic.uuid}`);
+            if (!gyroService) throw new Error('未找到任何可用服务，请确认设备已开机并在范围内');
 
-            // 订阅通知（如果支持）
-            if (gyroCharacteristic.properties.notify) {
-                await gyroCharacteristic.startNotifications();
-                gyroCharacteristic.addEventListener('characteristicvaluechanged', handleGyroscopeData);
-                logGyroDebug('已订阅通知');
+            // 获取所有特征值
+            const chars = await gyroService.getCharacteristics();
+            logGyroDebug(`找到 ${chars.length} 个特征值`);
+
+            let notifyChar = null;
+            let writeChar = null;
+
+            for (const c of chars) {
+                logGyroDebug(`  特征: ${c.uuid} (N:${c.properties.notify} W:${c.properties.write || c.properties.writeWithoutResponse})`);
+                // 精确匹配维特通知特征
+                if (notifyUuid && c.uuid === notifyUuid) {
+                    notifyChar = c;
+                } else if (!notifyUuid && (c.properties.notify || c.properties.indicate)) {
+                    notifyChar = notifyChar || c;
+                }
+                // 匹配写入特征
+                if (c.uuid === WIT_WRITE_UUID || (!gyroWriteCharacteristic && (c.properties.write || c.properties.writeWithoutResponse))) {
+                    writeChar = c;
+                }
+            }
+
+            if (!notifyChar) throw new Error('未找到数据通知特征，请确认设备型号');
+
+            gyroCharacteristic = notifyChar;
+            gyroWriteCharacteristic = writeChar;
+            logGyroDebug(`通知特征: ${gyroCharacteristic.uuid}`);
+            if (gyroWriteCharacteristic) logGyroDebug(`写入特征: ${gyroWriteCharacteristic.uuid}`);
+
+            // 订阅数据通知
+            await gyroCharacteristic.startNotifications();
+            gyroCharacteristic.addEventListener('characteristicvaluechanged', handleGyroscopeData);
+            logGyroDebug('数据通知已订阅');
+
+            // 发送指令：开启角度数据输出
+            if (gyroWriteCharacteristic) {
+                try {
+                    // 发送解锁指令
+                    await gyroWriteCharacteristic.writeValue(new Uint8Array([0xFF, 0xAA, 0x69, 0x88, 0xB5]));
+                    logGyroDebug('已发送解锁指令');
+                    await new Promise(resolve => setTimeout(resolve, 200));
+
+                    // 设置输出内容：基础输出 + 欧拉角 (0x86)
+                    await gyroWriteCharacteristic.writeValue(CMD_ENABLE_EULER);
+                    logGyroDebug('已发送开启欧拉角输出指令(0x02+0x86)');
+                    await new Promise(resolve => setTimeout(resolve, 200));
+
+                    // 读取欧拉角寄存器0x3D
+                    await gyroWriteCharacteristic.writeValue(CMD_READ_ANGLE);
+                    logGyroDebug('已发送读取角度寄存器指令(0x27+0x3D)');
+                    await new Promise(resolve => setTimeout(resolve, 200));
+
+                    // 保存设置
+                    await gyroWriteCharacteristic.writeValue(new Uint8Array([0xFF, 0xAA, 0x00, 0x00, 0x00]));
+                    logGyroDebug('已发送保存设置指令');
+                    await new Promise(resolve => setTimeout(resolve, 300));
+
+                    // 启动主动查询模式：每100ms读取一次欧拉角
+                    startAnglePolling();
+
+                } catch (e) {
+                    logGyroDebug(`发送指令失败（不影响使用）: ${e.message}`);
+                }
             } else {
-                // 否则轮询读取
-                logGyroDebug('设备不支持通知，将使用轮询');
-                setInterval(async () => {
-                    if (gyroCharacteristic && gyroCharacteristic.service.device.gatt.connected) {
-                        try {
-                            const value = await gyroCharacteristic.readValue();
-                            handleGyroscopeData({ target: { value } });
-                        } catch (e) {}
-                    }
-                }, 50); // 20Hz
+                logGyroDebug('无写入特征，跳过初始化指令');
             }
+
+            // 正确初始化角度系数（鼠标模式下在 updateDotPosition 里动态算，陀螺仪模式需要提前设置）
+            const hLineLen = crosshairSize / 2 - 15;
+            const vLineLen = ringRadius * 0.85;
+            state.yawCoefficient = 80 / hLineLen;    // 水平 ±80° 对应 hLineLength 像素
+            state.pitchCoefficient = 45 / vLineLen;   // 垂直 ±45° 对应 vLineLength 像素
+            logGyroDebug(`角度系数已初始化: yaw=${state.yawCoefficient.toFixed(3)} pitch=${state.pitchCoefficient.toFixed(3)}`);
+            logGyroDebug(`画布尺寸: hLine=${hLineLen.toFixed(0)}px vLine=${vLineLen.toFixed(0)}px`);
 
             // 更新UI
             bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
             updateGyroStatus('已连接', bluetoothDevice.name || '未知设备');
             gyroDisconnectBtn.style.display = 'block';
             gyroScanBtn.style.display = 'none';
-            logGyroDebug('连接完成');
+            logGyroDebug('✅ 连接完成，等待角度数据...');
+            _reconnectAttempts = 0; // 重置重连计数
 
             // 自动切换到陀螺仪模式
             if (!state.useGyroscope) {
@@ -976,56 +1164,150 @@ function init() {
             }
 
         } catch (err) {
-            logGyroDebug(`连接失败: ${err.message}`);
+            logGyroDebug(`❌ 连接失败: ${err.message}`);
             updateGyroStatus('连接失败');
             gyroScanBtn.textContent = '扫描设备';
             gyroScanBtn.disabled = false;
         }
     }
 
+    // WT9011DCL-BT50 数据帧解析
+    // 帧格式（每包可能含多帧，每帧20字节）：
+    //   [0]   0x55        帧头
+    //   [1]   0x3D        角度帧标识
+    //   [2-3] AngX(int16) Roll  侧屈，小端序，÷32768×180°
+    //   [4-5] AngY(int16) Pitch 俯仰（点头），÷32768×180°
+    //   [6-7] AngZ(int16) Yaw  偏航（转头），÷32768×180°
+    //   [8-9] 温度（可忽略）
+    //   ...
+    // 其他帧类型（加速度0x51、角速度等）保留供调试
+
+    // 用于合并跨包分片的缓冲区
+    let _witBuf = new Uint8Array(0);
+    let _frameCount = 0;  // 帧计数器
+    let _eulerFrameCount = 0;  // 欧拉角帧计数
+    let _lastMagFrameTime = 0;  // 上次收到磁力计帧的时间
+
     function handleGyroscopeData(event) {
-        const value = event.target.value;
-        // 根据不同数据格式解析
-        // 这里需要根据实际陀螺仪的数据格式来解析
-        // 常见格式: 3个16位有符号整数(x, y, z) 或 3个浮点数
+        const incoming = new Uint8Array(event.target.value.buffer,
+                                        event.target.value.byteOffset,
+                                        event.target.value.byteLength);
 
-        try {
-            let yaw = 0, pitch = 0, roll = 0;
+        // 调试：每次收到数据都记录
+        const hexArr = [];
+        for (let j = 0; j < Math.min(incoming.length, 20); j++) {
+            hexArr.push(incoming[j].toString(16).padStart(2, '0'));
+        }
+        logGyroDebug(`⬇ 收到${incoming.length}字节: [${hexArr.join(' ')}]`);
 
-            // 尝试不同的数据格式
-            if (value.byteLength >= 6) {
-                // 格式1: 3个16位有符号整数 (常见格式)
-                const view = new DataView(value.buffer, value.byteOffset, value.byteLength);
-                pitch = view.getInt16(0, true) / 100; // 假设100度/秒为最大值
-                yaw = view.getInt16(2, true) / 100;
-                roll = view.getInt16(4, true) / 100;
-            } else if (value.byteLength >= 12) {
-                // 格式2: 3个32位浮点数
-                const view = new DataView(value.buffer, value.byteOffset, value.byteLength);
-                pitch = view.getFloat32(0, true);
-                yaw = view.getFloat32(4, true);
-                roll = view.getFloat32(8, true);
-            } else if (value.byteLength === 3) {
-                // 格式3: 3个8位有符号整数
-                pitch = value.getInt8(0);
-                yaw = value.getInt8(1);
-                roll = value.getInt8(2);
+        // 合并到缓冲区
+        const merged = new Uint8Array(_witBuf.length + incoming.length);
+        merged.set(_witBuf);
+        merged.set(incoming, _witBuf.length);
+        _witBuf = merged;
+
+        // 逐帧扫描（每帧20字节，帧头0x55）
+        let i = 0;
+        let parsedFrames = 0;
+        while (i < _witBuf.length) {
+            // 找帧头
+            if (_witBuf[i] !== 0x55) { i++; continue; }
+            // 不足一帧，留到下次
+            if (i + 20 > _witBuf.length) break;
+
+            const type = _witBuf[i + 1];
+            const view = new DataView(_witBuf.buffer, _witBuf.byteOffset + i);
+
+            // 0x3D 和 0x71 都可能是欧拉角帧（不同固件版本使用不同类型值）
+            if (type === 0x3D || type === 0x71) {
+                // 角度帧 - 使用小端序（字节低位在前）
+                // 维特智能协议（此固件版本）：
+                // 字节0-1: 帧头0x55 0x71
+                // 字节2-3: 保留/版本 (总是 3d 00)
+                // 字节4-5: 角度X (Pitch/俯仰/点头)  int16
+                // 字节6-7: 角度Y (Roll/侧屈)        int16
+                // 字节8-9: 角度Z (Yaw/偏航/旋转)    int16
+                // 字节10-11: 校验和
+                const angX = view.getInt16(8, true) / 32768 * 180; // Yaw   偏航/旋转
+                const angY = view.getInt16(4, true) / 32768 * 180; // Pitch 俯仰/点头
+                const angZ = view.getInt16(6, true) / 32768 * 180; // Roll  翻滚/侧屈
+                // 点头(Pitch)→上下，旋转(Yaw)→左右，侧屈(Roll)仅记录
+                window.updateFromGyroscope({ pitch: -angY, yaw: -angX, roll: angZ });
+                _frameCount++;
+                _eulerFrameCount++;
+                // 前50帧每帧都打印，之后每10帧打印一次
+                if (_frameCount <= 50 || _frameCount % 10 === 0) {
+                    logGyroDebug(`📐 角度帧#${_frameCount} (type=0x${type.toString(16)}): Pitch=${angY.toFixed(1)}° Yaw=${angZ.toFixed(1)}° Roll=${angX.toFixed(1)}° → dotX=${state.dotX.toFixed(0)} dotY=${state.dotY.toFixed(0)}`);
+                }
+                parsedFrames++;
+            } else if (type === 0x61) {
+                // 0x61 是磁力计帧（跳过不处理）
+                const hx = view.getInt16(2, true);
+                const hy = view.getInt16(4, true);
+                const hz = view.getInt16(6, true);
+                _lastMagFrameTime = Date.now();
+                if (_eulerFrameCount === 0 && _frameCount < 10) {
+                    logGyroDebug(`  磁力计帧 type=0x61: HX=${hx} HY=${hy} HZ=${hz}`);
+                }
+                // 如果前20帧都没有欧拉角，自动尝试切换到欧拉角输出模式
+                // _eulerFrameCount < 1 表示尚未收到任何欧拉角（-1表示切换失败后不再重试）
+                if (_frameCount >= 20 && _eulerFrameCount < 1 && gyroWriteCharacteristic) {
+                    logGyroDebug('⚠️ 20帧内未收到欧拉角帧，尝试切换到欧拉角输出模式...');
+                    gyroWriteCharacteristic.writeValue(new Uint8Array([0xFF, 0xAA, 0x69, 0x88, 0xB5])).then(() => {
+                        setTimeout(() => {
+                            gyroWriteCharacteristic.writeValue(CMD_EULER_ONLY);
+                            logGyroDebug('已发送仅欧拉角输出指令(0x02+0x08)');
+                        }, 100);
+                    }).catch(() => {});
+                    _eulerFrameCount = -1; // 只尝试一次
+                }
+            } else {
+                // 其他未知帧类型
+                if (_frameCount < 5) {
+                    logGyroDebug(`  跳过帧 type=0x${type.toString(16)}（非角度帧）`);
+                }
             }
 
-            // 调用陀螺仪更新函数
-            window.updateFromGyroscope({ yaw, pitch, roll });
+            i += 20; // 每帧固定20字节
+        }
 
-            // 调试显示前几个值
-            if (Math.random() < 0.02) {
-                logGyroDebug(`数据: yaw=${yaw.toFixed(1)} pitch=${pitch.toFixed(1)} roll=${roll.toFixed(1)}`);
-            }
+        if (parsedFrames === 0 && _frameCount < 3 && incoming.length > 0) {
+            logGyroDebug(`⚠️ 未收到欧拉角帧(0x55+0x3D/0x71)，只收到磁力计帧(0x61)或无有效数据`);
+        }
 
-        } catch (err) {
-            if (Math.random() < 0.1) {
-                logGyroDebug(`解析错误: ${err.message}`);
-            }
+        // 保留未处理的尾部数据
+        _witBuf = _witBuf.slice(i);
+    }
+
+    // 停止角度查询
+    function stopAnglePolling() {
+        if (_anglePollingTimer) {
+            clearInterval(_anglePollingTimer);
+            _anglePollingTimer = null;
+            logGyroDebug('已停止角度查询');
         }
     }
+
+    // 启动主动查询模式：每100ms读取一次欧拉角
+    let _anglePollingTimer = null;
+    function startAnglePolling() {
+        stopAnglePolling();
+        logGyroDebug('启动角度查询模式 (100ms周期)');
+        _anglePollingTimer = setInterval(async () => {
+            if (!gyroWriteCharacteristic || !bluetoothDevice?.gatt?.connected) {
+                stopAnglePolling();
+                return;
+            }
+            try {
+                await gyroWriteCharacteristic.writeValue(CMD_READ_ANGLE);
+            } catch (e) {
+                // 忽略写入错误
+            }
+        }, 100);
+    }
+
+    let _reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 3;
 
     function onDisconnected() {
         logGyroDebug('设备断开连接');
@@ -1036,6 +1318,26 @@ function init() {
         gyroScanBtn.disabled = false;
         gyroCharacteristic = null;
         gyroServer = null;
+        // 停止角度查询
+        stopAnglePolling();
+        // 重置帧计数
+        _witBuf = new Uint8Array(0);
+        _frameCount = 0;
+        _eulerFrameCount = 0;
+        _lastMagFrameTime = 0;
+
+        // 自动重连并重新配置
+        if (_reconnectAttempts < MAX_RECONNECT_ATTEMPTS && bluetoothDevice) {
+            _reconnectAttempts++;
+            logGyroDebug(`自动重连尝试 ${_reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}...`);
+            setTimeout(() => {
+                if (bluetoothDevice && !bluetoothDevice.gatt.connected) {
+                    connectGyroscope();
+                }
+            }, 1000);
+        } else {
+            _reconnectAttempts = 0;
+        }
     }
 
     // 断开连接
@@ -1046,3 +1348,5 @@ function init() {
         onDisconnected();
     });
 }
+
+export { init };

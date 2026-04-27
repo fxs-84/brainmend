@@ -2,8 +2,12 @@
 // INPUT - 输入处理
 // ============================================================
 
-let isDraggingDot = false;
-let spacePressed = false;
+import { state } from './state.js';
+import { canvas, crosshairSize, ringRadius } from './canvas.js';
+import { updateDataDisplay } from './ui.js';
+
+export let isDraggingDot = false;
+export let spacePressed = false;
 
 // 陀螺仪输入模式更新（供外部调用）
 function updateFromGyroscope(gyroData) {
@@ -259,3 +263,5 @@ function initInput() {
         }
     });
 }
+
+export { initInput };
