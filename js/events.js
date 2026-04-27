@@ -842,10 +842,7 @@ function init() {
         }
 
         setMode('coordination');
-        // TTS播报完成后再开始检测，确保语音先于光点移动
-        speakWithCallback('协调性检测开始', () => {
-            startDetection();
-        });
+        startDetection();
     });
 
     // 关闭弹窗
