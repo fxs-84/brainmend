@@ -608,7 +608,8 @@ export class GameEngine {
         // 检查是否是射击模式场景
         if (scene && scene.constructor.name === 'SceneSpaceShooting') {
             this.isShootingMode = true;
-            this.player.y = 0.9; // 玩家在屏幕最下方
+            this.player.x = 0.5;
+            this.player.y = 0.95; // 玩家在屏幕最下方
         } else {
             this.isShootingMode = false;
         }

@@ -143,8 +143,8 @@ export class EnemyFleet {
 
         ctx.save();
         ctx.translate(posX, posY);
-        // 翻转使舰船朝下（朝向玩家）
-        ctx.scale(1, -1);
+        // 旋转使舰船头朝下（朝向玩家）
+        ctx.rotate(Math.PI / 2);
 
         switch (this.type) {
             case 'fighter':
