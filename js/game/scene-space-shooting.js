@@ -351,6 +351,16 @@ export class SceneSpaceShooting extends SceneBase {
         return enemy;
     }
 
+    // 生成金币
+    spawnCoin() {
+        return new ObstacleCoin({
+            x: Math.random() * 0.6 + 0.2,
+            y: -0.1,
+            speedX: (Math.random() - 0.5) * 0.01,
+            speedY: 0.06 + Math.random() * 0.03
+        });
+    }
+
     renderBackground(ctx, width, height) {
         const minDim = Math.min(width, height);
 
