@@ -264,11 +264,6 @@ export class GameEngine {
         // 获取输入位置（归一化0-1）
         const inputPos = this.input.getPosition();
 
-        // 调试信息
-        if (this.gameTime < 1) {
-            console.log('Input pos:', inputPos, 'Input source:', this.input.inputSource);
-        }
-
         // 根据运动模式映射
         const mappedPos = this.currentScene
             ? this.currentScene.mapInputToPosition(inputPos, this.player)
