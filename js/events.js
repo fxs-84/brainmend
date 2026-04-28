@@ -610,12 +610,16 @@ function showGameCervicalReport(report) {
     // 绑定按钮事件
     document.getElementById('close-game-report').onclick = () => {
         modal.style.display = 'none';
-        if (window.gameUI) window.gameUI.showSelectPanel();
+        if (window.gameEngine) window.gameEngine.cleanup();
+        setMode('mode-select');
     };
 
     document.getElementById('restart-game').onclick = () => {
         modal.style.display = 'none';
-        if (window.gameUI) window.gameUI.startGame();
+        if (window.gameEngine) {
+            window.gameEngine.cleanup();
+            window.gameUI.startGame();
+        }
     };
 
     // 显示弹窗
@@ -640,11 +644,20 @@ function init() {
     // 模式按钮
     document.querySelectorAll('.mode-btn').forEach(btn => {
         btn.addEventListener('click', () => {
+            const targetMode = btn.dataset.mode;
+
+            // 如果当前是游戏模式，切换前清理游戏状态
+            if (state.mode === 'game' && targetMode !== 'game') {
+                if (window.gameEngine) {
+                    window.gameEngine.cleanup();
+                }
+            }
+
             // 游戏模式不受 isRunning 限制
-            if (btn.dataset.mode === 'game') {
-                setMode(btn.dataset.mode);
+            if (targetMode === 'game') {
+                setMode(targetMode);
             } else if (!state.isRunning) {
-                setMode(btn.dataset.mode);
+                setMode(targetMode);
             }
         });
     });
