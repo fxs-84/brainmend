@@ -157,10 +157,11 @@ export class InputAdapter {
      * 获取陀螺仪位置
      */
     getGyroscopePosition() {
-        // 从state获取陀螺仪数据（需要减去偏移量）
-        const pitch = (state.pitch - state.pitchOffset) / 45;  // 归一化到约-1到1
-        const yaw = (state.yaw - state.yawOffset) / 80;
-        const roll = (state.roll - state.rollOffset) / 45;
+        // state.pitch/yaw/roll 已经在 updateFromGyroscope 中减去偏移量
+        // 直接使用归一化
+        const pitch = state.pitch / 45;  // 归一化到约-1到1
+        const yaw = state.yaw / 80;
+        const roll = state.roll / 45;
 
         // 根据运动模式返回不同的坐标
         return MotionMapper.mapToGame({ pitch, yaw, roll }, this.motionMode);
