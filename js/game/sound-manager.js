@@ -38,7 +38,7 @@ export class SoundManager {
     }
 
     /**
-     * 播放子弹发射音效 - 尖锐的激光嗖声
+     * 播放子弹发射音效 - 清脆的激光射击声
      */
     async playShoot() {
         if (!this.isInitialized) return;
@@ -47,55 +47,36 @@ export class SoundManager {
         const ctx = this.audioContext;
         const now = ctx.currentTime;
 
-        // 创建短促的激光音效
+        // 主振荡器 - 快速下降频率的激光声
         const osc = ctx.createOscillator();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(880, now);
-        osc.frequency.exponentialRampToValueAtTime(220, now + 0.08);
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(1400, now);
+        osc.frequency.exponentialRampToValueAtTime(200, now + 0.06);
 
-        // 噪声层 - 增加质感
-        const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
-        const noiseData = noiseBuffer.getChannelData(0);
-        for (let i = 0; i < noiseBuffer.length; i++) {
-            const t = i / noiseBuffer.length;
-            const envelope = Math.exp(-t * 25);
-            noiseData[i] = (Math.random() * 2 - 1) * envelope;
-        }
+        // 副振荡器 - 增加共鸣感
+        const osc2 = ctx.createOscillator();
+        osc2.type = 'sawtooth';
+        osc2.frequency.setValueAtTime(2000, now);
+        osc2.frequency.exponentialRampToValueAtTime(300, now + 0.04);
 
-        const noiseSource = ctx.createBufferSource();
-        noiseSource.buffer = noiseBuffer;
+        // 增益包络 - 短促有力
+        const gainNode = ctx.createGain();
+        gainNode.gain.setValueAtTime(0.4, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.06);
 
-        // 高通滤波器 - 让声音更尖锐
-        const highpass = ctx.createBiquadFilter();
-        highpass.type = 'highpass';
-        highpass.frequency.value = 400;
+        const gainNode2 = ctx.createGain();
+        gainNode2.gain.setValueAtTime(0.15, now);
+        gainNode2.gain.exponentialRampToValueAtTime(0.01, now + 0.04);
 
-        // 增益包络
-        const oscGain = ctx.createGain();
-        oscGain.gain.setValueAtTime(0.3, now);
-        oscGain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
-
-        const noiseGain = ctx.createGain();
-        noiseGain.gain.setValueAtTime(0.15, now);
-        noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.06);
-
-        // 混音器
-        const mixer = ctx.createGain();
-        mixer.gain.value = 0.8;
-
-        osc.connect(oscGain);
-        oscGain.connect(mixer);
-
-        noiseSource.connect(highpass);
-        highpass.connect(noiseGain);
-        noiseGain.connect(mixer);
-
-        mixer.connect(this.masterGain);
+        osc.connect(gainNode);
+        osc2.connect(gainNode2);
+        gainNode.connect(this.masterGain);
+        gainNode2.connect(this.masterGain);
 
         osc.start(now);
-        osc.stop(now + 0.1);
-        noiseSource.start(now);
-        noiseSource.stop(now + 0.1);
+        osc.stop(now + 0.08);
+        osc2.start(now);
+        osc2.stop(now + 0.06);
     }
 
     /**
