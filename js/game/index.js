@@ -23,7 +23,13 @@ export { SceneRoad } from './scene-road.js';
 export { SceneBall } from './scene-ball.js';
 
 // Obstacles
-export { Obstacle, ObstacleMeteor, ObstacleVehicle, ObstacleBall } from './obstacle.js';
+export { Obstacle, ObstacleMeteor, ObstacleVehicle, ObstacleBall, ObstacleCoin } from './obstacle.js';
+export { ObstacleGate } from './obstacle.js';
+export { ObstacleWave } from './obstacle.js';
+export { ObstacleSpiral } from './obstacle.js';
+
+// Particles
+export { Particle, ParticleSystem } from './particle.js';
 
 // UI
 export { GameUI } from './ui-game.js';

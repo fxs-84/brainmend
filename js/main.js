@@ -17,7 +17,10 @@ import { SceneRoad } from './game/scene-road.js';
 import { SceneBall } from './game/scene-ball.js';
 
 // 障碍物
-import { Obstacle, ObstacleMeteor, ObstacleVehicle, ObstacleBall } from './game/obstacle.js';
+import { Obstacle, ObstacleMeteor, ObstacleVehicle, ObstacleBall, ObstacleCoin, ObstacleGate, ObstacleWave, ObstacleSpiral } from './game/obstacle.js';
+
+// 粒子系统
+import { Particle, ParticleSystem } from './game/particle.js';
 
 // 评估
 import { HeadMotionRecorder } from './game/head-recorder.js';
@@ -43,6 +46,12 @@ window.GameModule = {
     ObstacleMeteor,
     ObstacleVehicle,
     ObstacleBall,
+    ObstacleCoin,
+    ObstacleGate,
+    ObstacleWave,
+    ObstacleSpiral,
+    Particle,
+    ParticleSystem,
     HeadMotionRecorder,
     CervicalAbilityScorer,
     GameUI

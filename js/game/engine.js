@@ -51,6 +51,9 @@ export class GameEngine {
         // 障碍物列表
         this.obstacles = [];
 
+        // 粒子系统
+        this.particles = null;
+
         // 回调
         this.onScoreUpdate = null;
         this.onGameOver = null;
@@ -83,6 +86,10 @@ export class GameEngine {
         this.difficulty.reset();
         if (this.currentScene) {
             this.currentScene.cleanup();
+        }
+        // 重置粒子系统
+        if (this.particles) {
+            this.particles.clear();
         }
     }
 
@@ -261,9 +268,24 @@ export class GameEngine {
      * 碰撞检测
      */
     checkCollisions() {
-        for (const obstacle of this.obstacles) {
-            if (CollisionDetector.checkPlayerObstacle(this.player, obstacle, this.canvas)) {
-                // 碰撞发生
+        for (let i = this.obstacles.length - 1; i >= 0; i--) {
+            const obstacle = this.obstacles[i];
+
+            // 金币收集检测
+            if (obstacle.type === 'coin' && !obstacle.isCollected) {
+                if (CollisionDetector.checkPlayerObstacle(this.player, obstacle, this.canvas)) {
+                    obstacle.collect();
+                    this.scoring.onCoinCollected(100);
+                    // 触发场景的金币收集效果
+                    if (this.currentScene && this.currentScene.onCoinCollect) {
+                        this.currentScene.onCoinCollect(obstacle, this);
+                    }
+                    continue;
+                }
+            }
+
+            // 障碍物碰撞检测
+            if (obstacle.type !== 'coin' && CollisionDetector.checkPlayerObstacle(this.player, obstacle, this.canvas)) {
                 this.scoring.onCollision();
                 this.setState(GameState.GAMEOVER);
                 return;
@@ -282,18 +304,25 @@ export class GameEngine {
         // 清空画布
         ctx.clearRect(0, 0, width, height);
 
-        // 渲染背景
+        // 渲染背景（包含星空和粒子）
         if (this.currentScene) {
             this.currentScene.renderBackground(ctx, width, height);
         }
 
-        // 渲染障碍物
+        // 渲染障碍物（跳过已收集的金币）
         for (const obstacle of this.obstacles) {
-            obstacle.render(ctx);
+            if (obstacle.type !== 'coin' || !obstacle.isCollected) {
+                obstacle.render(ctx);
+            }
         }
 
         // 渲染玩家
         this.renderPlayer(ctx);
+
+        // 渲染粒子效果
+        if (this.currentScene && this.currentScene.particles) {
+            this.currentScene.particles.render(ctx);
+        }
 
         // 渲染HUD
         this.renderHUD(ctx);

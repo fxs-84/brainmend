@@ -485,3 +485,110 @@ export class ObstacleBall extends Obstacle {
         ctx.restore();
     }
 }
+
+// ============================================================
+// OBSTACLE COIN - 金币
+// ============================================================
+
+export class ObstacleCoin extends Obstacle {
+    constructor(config = {}) {
+        super({
+            x: config.x || Math.random() * 0.6 + 0.2,
+            y: config.y || -0.1,
+            radius: 0.025,
+            speedY: config.speedY || 0.12,
+            speedX: (Math.random() - 0.5) * 0.02,
+            type: 'coin',
+            color: '#FFD700',
+            ...config
+        });
+
+        this.rotationAngle = 0;
+        this.rotationSpeed = config.rotationSpeed || 5;
+        this.bobPhase = Math.random() * Math.PI * 2;
+        this.bobSpeed = 3;
+        this.bobAmplitude = 0.03;
+        this.baseY = this.y;
+        this.sparkleTimer = 0;
+        this.sparkleInterval = 0.1;
+        this.isCollected = false;
+    }
+
+    update(dt, speedMultiplier = 1) {
+        this.y += this.speedY * dt * speedMultiplier;
+        this.x += this.speedX * dt;
+        this.rotationAngle += this.rotationSpeed * dt;
+        this.bobPhase += this.bobSpeed * dt;
+        const bobOffset = Math.sin(this.bobPhase) * this.bobAmplitude;
+        this.renderY = this.y + bobOffset;
+        this.sparkleTimer += dt;
+    }
+
+    render(ctx) {
+        if (this.isCollected) return;
+
+        const pos = this.getPixelPosition(ctx.canvas.width, ctx.canvas.height);
+        const x = pos.x;
+        const y = this.renderY * ctx.canvas.height;
+        const radius = pos.radius;
+
+        ctx.save();
+        ctx.translate(x, y);
+
+        const scaleX = Math.abs(Math.cos(this.rotationAngle));
+        if (scaleX > 0.1) {
+            ctx.scale(Math.max(0.1, scaleX), 1);
+
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+            gradient.addColorStop(0, '#FFFACD');
+            gradient.addColorStop(0.3, '#FFD700');
+            gradient.addColorStop(0.7, '#FFA500');
+            gradient.addColorStop(1, '#FF8C00');
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            ctx.strokeStyle = '#DAA520';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.fillStyle = '#B8860B';
+            ctx.font = `bold ${radius * 1.2}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('$', 0, 0);
+        }
+
+        ctx.restore();
+
+        if (this.sparkleTimer > this.sparkleInterval) {
+            this.sparkleTimer = 0;
+            this.renderSparkle(ctx, x, y, radius);
+        }
+    }
+
+    renderSparkle(ctx, x, y, radius) {
+        ctx.save();
+        ctx.globalAlpha = 0.8;
+        const sparkleSize = radius * 1.5;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x - sparkleSize, y);
+        ctx.lineTo(x + sparkleSize, y);
+        ctx.moveTo(x, y - sparkleSize);
+        ctx.lineTo(x, y + sparkleSize);
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    collect() {
+        this.isCollected = true;
+        this.active = false;
+    }
+
+    isOffScreen(canvasWidth, canvasHeight) {
+        return this.y > 1.1 || this.x < -0.1 || this.x > 1.1;
+    }
+}

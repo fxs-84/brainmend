@@ -105,6 +105,11 @@ export class ScoringSystem {
         this.avoidScore += 20;
     }
 
+    onCoinCollected(value = 100) {
+        this.currentScore += value;
+        this.avoidScore += value;
+    }
+
     getGrade(score) {
         const finalScore = score || this.getFinalScore();
 

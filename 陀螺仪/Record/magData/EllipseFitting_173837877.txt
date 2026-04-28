@@ -1,0 +1,1 @@
+PCTime	MagType	HX	HY	HZ	AsX	AsY	AsZ	Q0	Q1	Q2	Q3
