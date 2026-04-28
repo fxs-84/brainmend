@@ -22,14 +22,13 @@ export class SceneSpace extends SceneBase {
 
     generateStars() {
         this.stars = [];
-        const starCount = 100;
-        for (let i = 0; i < starCount; i++) {
+        for (let i = 0; i < 100; i++) {
             this.stars.push({
                 x: Math.random(),
                 y: Math.random(),
-                size: 0.002 + Math.random() * 0.004,
-                speed: 0.02 + Math.random() * 0.08,
-                brightness: 0.3 + Math.random() * 0.7
+                size: Math.random() * 0.003 + 0.001,
+                speed: Math.random() * 0.2 + 0.05,
+                brightness: Math.random()
             });
         }
     }
