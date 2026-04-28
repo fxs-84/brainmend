@@ -936,6 +936,50 @@ function init() {
     let gyroCharacteristic = null;
     let gyroServer = null;
 
+    // 保存已配对的设备列表
+    const PAIRED_DEVICES_KEY = 'gyro_paired_devices';
+
+    // 获取已保存的设备
+    function getPairedDevices() {
+        try {
+            const saved = localStorage.getItem(PAIRED_DEVICES_KEY);
+            return saved ? JSON.parse(saved) : [];
+        } catch {
+            return [];
+        }
+    }
+
+    // 保存设备到列表
+    function savePairedDevice(device) {
+        const devices = getPairedDevices();
+        // 移除同名的旧设备
+        const filtered = devices.filter(d => d.name !== device.name);
+        // 添加新设备到开头
+        filtered.unshift({
+            name: device.name,
+            id: device.id
+        });
+        // 最多保存5个
+        const trimmed = filtered.slice(0, 5);
+        localStorage.setItem(PAIRED_DEVICES_KEY, JSON.stringify(trimmed));
+    }
+
+    // 渲染已配对设备列表
+    function renderPairedDevices() {
+        const devices = getPairedDevices();
+        if (devices.length === 0) return '';
+
+        return devices.map((d, i) => `
+            <div style="padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1);" data-device-id="${d.id}">
+                <div style="font-size: 12px; margin-bottom: 4px; display: flex; align-items: center;">
+                    <span style="color: var(--primary); margin-right: 6px;">★</span>
+                    ${d.name}
+                </div>
+                <div style="font-size: 10px; color: var(--text-muted);">点击直接连接</div>
+            </div>
+        `).join('');
+    }
+
     function logGyroDebug(msg) {
         const time = new Date().toLocaleTimeString();
         gyroDebugContent.innerHTML = `<div style="margin-bottom: 2px;"><span style="color: var(--text-muted);">[${time}]</span> ${msg}</div>` + gyroDebugContent.innerHTML;
@@ -958,15 +1002,55 @@ function init() {
             gyroDisconnectBtn.style.display = 'block';
             gyroScanBtn.style.display = 'none';
             updateGyroStatus('已连接', bluetoothDevice.name || '未知设备');
+            // 显示已连接的设备
+            gyroDeviceList.innerHTML = `
+                <div style="padding: 8px;">
+                    <div style="font-size: 12px; margin-bottom: 4px;">${bluetoothDevice.name || '未知设备'}</div>
+                    <div style="font-size: 10px; color: var(--success);">已连接</div>
+                </div>
+            `;
         } else {
             gyroDisconnectBtn.style.display = 'none';
             gyroScanBtn.style.display = 'block';
             updateGyroStatus('未连接');
+            // 显示已保存的设备列表
+            gyroDeviceList.innerHTML = renderPairedDevices();
+
+            // 为已保存的设备添加点击事件
+            gyroDeviceList.querySelectorAll('[data-device-id]').forEach(item => {
+                item.addEventListener('click', async () => {
+                    const deviceId = item.dataset.deviceId;
+                    await connectToSavedDevice(deviceId);
+                });
+                item.style.cursor = 'pointer';
+            });
         }
     }
 
     function closeGyroModal() {
         gyroModal.classList.remove('show');
+    }
+
+    // 直接连接已保存的设备
+    async function connectToSavedDevice(deviceId) {
+        if (!navigator.bluetooth) {
+            logGyroDebug('错误: 当前浏览器不支持Web Bluetooth API');
+            return;
+        }
+
+        logGyroDebug(`正在连接已保存的设备...`);
+        gyroDeviceList.innerHTML = '<div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px;">正在连接...</div>';
+
+        try {
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [{ deviceId: deviceId }]
+            });
+            bluetoothDevice = device;
+            await connectGyroscope();
+        } catch (err) {
+            logGyroDebug(`连接失败: ${err.message}`);
+            gyroDeviceList.innerHTML = '<div style="font-size: 11px; color: var(--danger); text-align: center; padding: 10px;">连接失败: ' + err.message + '</div>';
+        }
     }
 
     openGyroBtn.addEventListener('click', showGyroModal);
@@ -1211,6 +1295,11 @@ function init() {
             gyroScanBtn.style.display = 'none';
             logGyroDebug('✅ 连接完成，等待角度数据...');
             _reconnectAttempts = 0; // 重置重连计数
+
+            // 保存设备到配对列表
+            if (bluetoothDevice) {
+                savePairedDevice(bluetoothDevice);
+            }
 
             // 自动切换到陀螺仪模式
             if (!state.useGyroscope) {
