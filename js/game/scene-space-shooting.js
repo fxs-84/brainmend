@@ -247,28 +247,28 @@ export class SceneSpaceShooting extends SceneBase {
         if (star.x < 0) { star.x = 1; star.y = Math.random(); }
     }
 
-    // 玩家射击 - 添加子弹到引擎，子弹向上飞
+    // 玩家射击 - 子弹向上飞攻击敌舰
     playerShoot(playerX, playerY) {
         if (this.shootCooldown <= 0 && this.engine) {
-            // 从玩家位置发射子弹 - 向上飞
-            this.engine.bullets.push(new Bullet(playerX, playerY + 0.05, {
+            // 从玩家位置发射子弹 - 向上飞（vy负值向上）
+            this.engine.bullets.push(new Bullet(playerX, playerY - 0.05, {
                 vx: 0,
-                vy: 0.8,
+                vy: -0.8,
                 speed: 0.7,
                 radius: 0.006,
                 color: '#00D9A5'
             }));
             // 双发
-            this.engine.bullets.push(new Bullet(playerX - 0.02, playerY + 0.03, {
+            this.engine.bullets.push(new Bullet(playerX - 0.02, playerY - 0.03, {
                 vx: -0.05,
-                vy: 0.75,
+                vy: -0.75,
                 speed: 0.7,
                 radius: 0.005,
                 color: '#00D9A5'
             }));
-            this.engine.bullets.push(new Bullet(playerX + 0.02, playerY + 0.03, {
+            this.engine.bullets.push(new Bullet(playerX + 0.02, playerY - 0.03, {
                 vx: 0.05,
-                vy: 0.75,
+                vy: -0.75,
                 speed: 0.7,
                 radius: 0.005,
                 color: '#00D9A5'
