@@ -61,11 +61,11 @@ export class SoundManager {
 
         // 增益包络 - 短促有力
         const gainNode = ctx.createGain();
-        gainNode.gain.setValueAtTime(0.4, now);
+        gainNode.gain.setValueAtTime(0.15, now);
         gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.06);
 
         const gainNode2 = ctx.createGain();
-        gainNode2.gain.setValueAtTime(0.15, now);
+        gainNode2.gain.setValueAtTime(0.06, now);
         gainNode2.gain.exponentialRampToValueAtTime(0.01, now + 0.04);
 
         osc.connect(gainNode);
@@ -122,15 +122,15 @@ export class SoundManager {
 
         // 增益包络
         const oscGain = ctx.createGain();
-        oscGain.gain.setValueAtTime(0.5, now);
+        oscGain.gain.setValueAtTime(0.2, now);
         oscGain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
 
         const osc2Gain = ctx.createGain();
-        osc2Gain.gain.setValueAtTime(0.25, now);
+        osc2Gain.gain.setValueAtTime(0.1, now);
         osc2Gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
 
         const noiseGain = ctx.createGain();
-        noiseGain.gain.setValueAtTime(0.6, now);
+        noiseGain.gain.setValueAtTime(0.25, now);
         noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
 
         // 混音器
@@ -175,8 +175,8 @@ export class SoundManager {
         osc.frequency.setValueAtTime(2000, now + 0.1);
 
         const gainNode = ctx.createGain();
-        gainNode.gain.setValueAtTime(0.25, now);
-        gainNode.gain.setValueAtTime(0.25, now + 0.1);
+        gainNode.gain.setValueAtTime(0.1, now);
+        gainNode.gain.setValueAtTime(0.1, now + 0.1);
         gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
 
         osc.connect(gainNode);
