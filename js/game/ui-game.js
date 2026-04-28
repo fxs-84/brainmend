@@ -10,6 +10,13 @@ export class GameUI {
         this.container = null;
         this.selectedScene = 'space';
         this.selectedMode = MotionMapper.MODES.SINGLE_YAW;
+
+        // 创建游戏选择界面并插入DOM
+        const gameView = document.getElementById('view-game');
+        if (gameView) {
+            gameView.insertAdjacentHTML('beforeend', this.createGameSelectHTML());
+            this.init();
+        }
     }
 
     /**
