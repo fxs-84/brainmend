@@ -7,6 +7,7 @@ import { ObstacleCoin } from './obstacle.js';
 import { ParticleSystem } from './particle.js';
 import { Bullet, EnemyFleet } from './bullet.js';
 import { SceneBase } from './scene-base.js';
+import { soundManager } from './sound-manager.js';
 
 export class SceneSpaceShooting extends SceneBase {
     constructor() {
@@ -255,7 +256,8 @@ export class SceneSpaceShooting extends SceneBase {
                 vy: -0.8,
                 speed: 0.7,
                 radius: 0.006,
-                color: '#00D9A5'
+                color: '#00D9A5',
+                onFire: () => soundManager.playShoot()
             }));
             // 双发
             this.engine.bullets.push(new Bullet(playerX - 0.02, playerY - 0.03, {
@@ -263,14 +265,16 @@ export class SceneSpaceShooting extends SceneBase {
                 vy: -0.75,
                 speed: 0.7,
                 radius: 0.005,
-                color: '#00D9A5'
+                color: '#00D9A5',
+                onFire: () => soundManager.playShoot()
             }));
             this.engine.bullets.push(new Bullet(playerX + 0.02, playerY - 0.03, {
                 vx: 0.05,
                 vy: -0.75,
                 speed: 0.7,
                 radius: 0.005,
-                color: '#00D9A5'
+                color: '#00D9A5',
+                onFire: () => soundManager.playShoot()
             }));
             this.shootCooldown = this.shootInterval;
         }

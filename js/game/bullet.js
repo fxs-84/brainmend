@@ -3,6 +3,12 @@
 // ============================================================
 
 export class Bullet {
+    /**
+     * @param {number} x
+     * @param {number} y
+     * @param {Object} config
+     * @param {Function} [config.onFire] - 发射时回调
+     */
     constructor(x, y, config = {}) {
         this.x = x;
         this.y = y;
@@ -16,6 +22,11 @@ export class Bullet {
         this.history = [];
         this.life = 1;
         this.active = true;
+
+        // 发射时回调
+        if (config.onFire) {
+            config.onFire();
+        }
     }
 
     update(dt, speedMultiplier = 1) {

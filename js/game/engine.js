@@ -6,6 +6,7 @@ import { InputAdapter } from './input-adapter.js';
 import { CollisionDetector } from './collision.js';
 import { ScoringSystem } from './scoring.js';
 import { DifficultyManager } from './difficulty.js';
+import { soundManager } from './sound-manager.js';
 
 // 游戏状态
 const GameState = {
@@ -83,6 +84,7 @@ export class GameEngine {
      */
     init() {
         this.input.init();
+        soundManager.init();
         this.reset();
     }
 
@@ -374,6 +376,7 @@ export class GameEngine {
                         if (this.currentScene && this.currentScene.particles) {
                             this.currentScene.particles.emitExplosion(enemy.x, enemy.y);
                         }
+                        soundManager.playExplosion();
                         this.scoring.onObstacleDodged();
                         this.enemies.splice(j, 1);
                     }
