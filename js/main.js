@@ -13,6 +13,7 @@ import { DifficultyManager } from './game/difficulty.js';
 // 场景
 import { SceneBase } from './game/scene-base.js';
 import { SceneSpace } from './game/scene-space.js';
+import { SceneSpaceShooting } from './game/scene-space-shooting.js';
 import { SceneRoad } from './game/scene-road.js';
 import { SceneBall } from './game/scene-ball.js';
 
@@ -40,6 +41,7 @@ window.GameModule = {
     DifficultyManager,
     SceneBase,
     SceneSpace,
+    SceneSpaceShooting,
     SceneRoad,
     SceneBall,
     Obstacle,

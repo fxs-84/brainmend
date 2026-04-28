@@ -214,18 +214,25 @@ export class GameUI {
      * 设置游戏场景
      */
     setScene(sceneName) {
-        // 动态导入场景
+        // 射击模式特殊处理
+        if (this.selectedMode === 'shooting') {
+            import(`./scene-space-shooting.js`).then(module => {
+                const SceneClass = module.SceneSpaceShooting;
+                if (SceneClass) {
+                    const scene = new SceneClass();
+                    this.engine.setScene(scene);
+                }
+            }).catch(err => {
+                console.error('Failed to load shooting scene:', err);
+            });
+            return;
+        }
+
+        // 普通模式动态导入场景
         import(`./scene-${sceneName}.js`).then(module => {
             const SceneClass = module[`Scene${sceneName.charAt(0).toUpperCase() + sceneName.slice(1)}`];
             if (SceneClass) {
                 const scene = new SceneClass();
-
-                // 射击模式特殊设置
-                if (this.selectedMode === 'shooting') {
-                    scene.movementAxis = 'shooting';
-                    scene.scrollDirection = 'down';
-                }
-
                 this.engine.setScene(scene);
             }
         }).catch(err => {

@@ -19,6 +19,7 @@ export { CervicalAbilityScorer } from './cervical-scorer.js';
 // Scenes
 export { SceneBase } from './scene-base.js';
 export { SceneSpace } from './scene-space.js';
+export { SceneSpaceShooting } from './scene-space-shooting.js';
 export { SceneRoad } from './scene-road.js';
 export { SceneBall } from './scene-ball.js';
 

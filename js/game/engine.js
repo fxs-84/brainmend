@@ -39,6 +39,13 @@ export class GameEngine {
         // 当前场景
         this.currentScene = null;
 
+        // 射击模式标志
+        this.isShootingMode = false;
+
+        // 自动射击冷却
+        this.autoFireCooldown = 0;
+        this.autoFireInterval = 0.2; // 秒
+
         // 玩家
         this.player = {
             x: 0.5,  // 归一化坐标 0-1
@@ -50,6 +57,11 @@ export class GameEngine {
 
         // 障碍物列表
         this.obstacles = [];
+
+        // 射击模式对象
+        this.bullets = [];
+        this.enemies = [];
+        this.enemyBullets = [];
 
         // 粒子系统
         this.particles = null;
@@ -82,6 +94,9 @@ export class GameEngine {
         this.player.x = 0.5;
         this.player.y = 0.5;
         this.obstacles = [];
+        this.bullets = [];
+        this.enemies = [];
+        this.enemyBullets = [];
         this.scoring.reset();
         this.difficulty.reset();
         if (this.currentScene) {
@@ -208,6 +223,19 @@ export class GameEngine {
         // 更新场景
         if (this.currentScene) {
             this.currentScene.update(dt);
+
+            // 射击模式：更新子弹和敌舰
+            if (this.isShootingMode) {
+                this.updateBullets(dt);
+                this.updateEnemies(dt);
+
+                // 自动射击
+                this.autoFireCooldown -= dt;
+                if (this.autoFireCooldown <= 0) {
+                    this.playerShoot();
+                    this.autoFireCooldown = this.autoFireInterval;
+                }
+            }
         }
 
         // 更新障碍物
@@ -294,6 +322,64 @@ export class GameEngine {
     }
 
     /**
+     * 更新子弹
+     */
+    updateBullets(dt) {
+        const difficultyConfig = this.difficulty.getCurrentConfig();
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            this.bullets[i].update(dt, difficultyConfig.speedMultiplier);
+            if (this.bullets[i].isOffScreen(this.canvas.width, this.canvas.height)) {
+                this.bullets.splice(i, 1);
+            }
+        }
+    }
+
+    /**
+     * 更新敌舰
+     */
+    updateEnemies(dt) {
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+            this.enemies[i].update(dt);
+            if (this.enemies[i].isOffScreen(this.canvas.width, this.canvas.height)) {
+                this.enemies.splice(i, 1);
+            }
+        }
+    }
+
+    /**
+     * 子弹击中敌舰检测
+     */
+    checkBulletEnemyCollisions() {
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            const bullet = this.bullets[i];
+            if (!bullet.active) continue;
+
+            for (let j = this.enemies.length - 1; j >= 0; j--) {
+                const enemy = this.enemies[j];
+                if (!enemy.active) continue;
+
+                const dx = bullet.x - enemy.x;
+                const dy = bullet.y - enemy.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < enemy.radius + bullet.radius) {
+                    bullet.active = false;
+                    const destroyed = enemy.hit(1);
+
+                    if (destroyed) {
+                        if (this.currentScene && this.currentScene.particles) {
+                            this.currentScene.particles.emitExplosion(enemy.x, enemy.y);
+                        }
+                        this.scoring.onObstacleDodged();
+                        this.enemies.splice(j, 1);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
      * 渲染
      */
     render() {
@@ -316,6 +402,11 @@ export class GameEngine {
             }
         }
 
+        // 射击模式：渲染子弹和敌舰
+        if (this.isShootingMode) {
+            this.renderShootingMode(ctx);
+        }
+
         // 渲染玩家
         this.renderPlayer(ctx);
 
@@ -329,6 +420,37 @@ export class GameEngine {
 
         // 渲染状态覆盖层
         this.renderStateOverlay(ctx);
+    }
+
+    /**
+     * 渲染射击模式对象
+     */
+    renderShootingMode(ctx) {
+        // 渲染敌舰
+        for (const enemy of this.enemies) {
+            if (enemy.active) {
+                enemy.render(ctx);
+            }
+        }
+
+        // 渲染子弹
+        for (const bullet of this.bullets) {
+            if (bullet.active) {
+                bullet.render(ctx);
+            }
+        }
+
+        // 渲染敌舰子弹
+        for (const bullet of this.enemyBullets) {
+            if (bullet.active) {
+                bullet.render(ctx);
+            }
+        }
+
+        // 渲染玩家飞船（如果场景有renderPlayer方法）
+        if (this.currentScene && this.currentScene.renderPlayer) {
+            this.currentScene.renderPlayer(ctx, this.player.x, this.player.y);
+        }
     }
 
     /**
@@ -455,6 +577,23 @@ export class GameEngine {
         }
         this.currentScene = scene;
         this.currentScene.init(this);
+
+        // 检查是否是射击模式场景
+        if (scene && scene.constructor.name === 'SceneSpaceShooting') {
+            this.isShootingMode = true;
+            this.player.y = 0.85; // 玩家在屏幕下方
+        } else {
+            this.isShootingMode = false;
+        }
+    }
+
+    /**
+     * 玩家射击
+     */
+    playerShoot() {
+        if (this.isShootingMode && this.currentScene && this.currentScene.playerShoot) {
+            this.currentScene.playerShoot(this.player.x, this.player.y);
+        }
     }
 
     /**
