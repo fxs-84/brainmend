@@ -319,16 +319,15 @@ export class SceneSpaceShooting extends SceneBase {
     playerShoot(playerX, playerY) {
         if (!this.canShoot() || !this.targetEnemy) return;
 
-        // 从飞船尖端发射3颗子弹 - 扇形散开
-        const angles = [-0.15, 0, 0.15]; // 扇形角度
-        for (const angle of angles) {
+        // 从飞船尖端发射3颗子弹 - 直线向上，精确对准
+        for (let i = 0; i < 3; i++) {
             const bullet = new Bullet(playerX, playerY - 0.05, {
-                vx: Math.sin(angle) * 0.3,
+                vx: (i - 1) * 0.02,  // 略微散开一点
                 vy: -0.8,
                 speed: 0.7,
                 radius: 0.005,
                 color: '#00D9A5',
-                onFire: () => soundManager.playShoot()
+                onFire: i === 1 ? () => soundManager.playShoot() : null
             });
             this.engine.bullets.push(bullet);
         }
