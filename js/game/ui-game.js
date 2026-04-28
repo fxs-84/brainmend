@@ -11,12 +11,9 @@ export class GameUI {
         this.selectedScene = 'space';
         this.selectedMode = MotionMapper.MODES.SINGLE_YAW;
 
-        // 创建游戏选择界面并插入DOM
-        const gameView = document.getElementById('view-game');
-        if (gameView) {
-            gameView.insertAdjacentHTML('beforeend', this.createGameSelectHTML());
-            this.init();
-        }
+        // 插入游戏选择界面到 body（避免 side-panel overflow 影响）
+        document.body.insertAdjacentHTML('beforeend', this.createGameSelectHTML());
+        this.init();
     }
 
     /**
