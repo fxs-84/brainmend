@@ -352,6 +352,48 @@ export class SceneSpaceShooting extends SceneBase {
     }
 
     renderBackground(ctx, width, height) {
+        const minDim = Math.min(width, height);
+
+        // 深空背景
+        this.renderDeepSpaceGradient(ctx, width, height);
+
+        // 能量核心
+        for (const core of this.energyCores) {
+            this.renderEnergyCore(ctx, width, height, core);
+        }
+
+        // 光射线
+        for (const ray of this.lightRays) {
+            this.renderLightRay(ctx, width, height, ray);
+        }
+
+        // 星云
+        for (const nebula of this.nebulae) {
+            this.renderNebula(ctx, width, height, nebula);
+        }
+
+        // 星空
+        for (const layer of this.starLayers) {
+            for (const star of layer.stars) {
+                this.renderStar(ctx, width, height, star);
+            }
+        }
+
+        // 闪耀星
+        for (const star of this.twinkleStars) {
+            this.renderTwinkleStar(ctx, width, height, star);
+        }
+
+        // 炽热星
+        for (const star of this.blazingStars) {
+            this.renderBlazingStar(ctx, width, height, star);
+        }
+
+        // 粒子
+        this.particles.render(ctx);
+    }
+
+    renderDeepSpaceGradient(ctx, width, height) {
         const bg = ctx.createLinearGradient(0, 0, width, height);
         bg.addColorStop(0, '#000010');
         bg.addColorStop(0.3, '#0A0825');
