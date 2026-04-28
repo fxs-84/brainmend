@@ -247,28 +247,28 @@ export class SceneSpaceShooting extends SceneBase {
         if (star.x < 0) { star.x = 1; star.y = Math.random(); }
     }
 
-    // 玩家射击 - 添加子弹到引擎
+    // 玩家射击 - 添加子弹到引擎，子弹向上飞
     playerShoot(playerX, playerY) {
         if (this.shootCooldown <= 0 && this.engine) {
-            // 从玩家位置发射子弹 - 添加到引擎的bullets数组
-            this.engine.bullets.push(new Bullet(playerX, playerY - 0.05, {
+            // 从玩家位置发射子弹 - 向上飞
+            this.engine.bullets.push(new Bullet(playerX, playerY + 0.05, {
                 vx: 0,
-                vy: -0.8,
+                vy: 0.8,
                 speed: 0.7,
                 radius: 0.006,
                 color: '#00D9A5'
             }));
             // 双发
-            this.engine.bullets.push(new Bullet(playerX - 0.02, playerY - 0.03, {
+            this.engine.bullets.push(new Bullet(playerX - 0.02, playerY + 0.03, {
                 vx: -0.05,
-                vy: -0.75,
+                vy: 0.75,
                 speed: 0.7,
                 radius: 0.005,
                 color: '#00D9A5'
             }));
-            this.engine.bullets.push(new Bullet(playerX + 0.02, playerY - 0.03, {
+            this.engine.bullets.push(new Bullet(playerX + 0.02, playerY + 0.03, {
                 vx: 0.05,
-                vy: -0.75,
+                vy: 0.75,
                 speed: 0.7,
                 radius: 0.005,
                 color: '#00D9A5'
@@ -277,56 +277,84 @@ export class SceneSpaceShooting extends SceneBase {
         }
     }
 
-    // 生成敌舰
-    spawnEnemy(difficultyConfig) {
-        const types = ['fighter', 'fighter', 'fighter', 'cruiser', 'carrier'];
+    trySpawnObstacle(obstacleList, difficultyConfig) {
+        const timeSinceLastSpawn = this.gameTime - this.lastSpawnTime;
+
+        if (obstacleList.length < difficultyConfig.maxObstacles &&
+            timeSinceLastSpawn >= difficultyConfig.spawnInterval / 1000) {
+
+            const rand = Math.random();
+
+            if (rand < 0.75) {
+                // 75% 敌舰 - 从上方飞下来
+                const enemy = this.spawnEnemyFromTop(difficultyConfig);
+                this.engine.enemies.push(enemy);
+            } else {
+                // 25% 金币
+                obstacleList.push(this.spawnCoin());
+            }
+            this.lastSpawnTime = this.gameTime;
+        }
+    }
+
+    // 生成从上方飞来的敌舰
+    spawnEnemyFromTop(difficultyConfig) {
+        const types = ['fighter', 'fighter', 'cruiser', 'carrier'];
         const type = types[Math.floor(Math.random() * types.length)];
 
         let enemy;
+        const x = Math.random() * 0.6 + 0.2; // 在屏幕上方随机水平位置
+
         switch (type) {
             case 'fighter':
                 enemy = new EnemyFleet({
-                    x: 1.1,
-                    y: Math.random() * 0.5 + 0.25,
-                    speedX: -(0.12 + Math.random() * 0.08),
-                    speedY: (Math.random() - 0.5) * 0.02,
+                    x: x,
+                    y: -0.1,
+                    speedX: (Math.random() - 0.5) * 0.03,
+                    speedY: 0.12 + Math.random() * 0.08,
                     radius: 0.035,
                     type: 'fighter',
                     health: 1,
                     color: '#EF4444',
-                    canShoot: false
+                    canShoot: false,
+                    moveMode: 'vertical'
                 });
                 break;
             case 'cruiser':
                 enemy = new EnemyFleet({
-                    x: 1.1,
-                    y: Math.random() * 0.4 + 0.3,
-                    speedX: -(0.08 + Math.random() * 0.05),
-                    speedY: 0,
+                    x: x,
+                    y: -0.1,
+                    speedX: 0,
+                    speedY: 0.08 + Math.random() * 0.05,
                     radius: 0.05,
                     type: 'cruiser',
                     health: 3,
                     color: '#DC2626',
-                    canShoot: true,
-                    shootInterval: 1.5 + Math.random()
+                    canShoot: false,
+                    moveMode: 'vertical'
                 });
                 break;
             case 'carrier':
                 enemy = new EnemyFleet({
-                    x: 1.1,
-                    y: Math.random() * 0.3 + 0.35,
-                    speedX: -(0.05 + Math.random() * 0.04),
-                    speedY: 0,
+                    x: x,
+                    y: -0.1,
+                    speedX: 0,
+                    speedY: 0.05 + Math.random() * 0.04,
                     radius: 0.07,
                     type: 'carrier',
                     health: 5,
                     color: '#B91C1C',
-                    canShoot: true,
-                    shootInterval: 2 + Math.random()
+                    canShoot: false,
+                    moveMode: 'vertical'
                 });
                 break;
         }
         return enemy;
+    }
+
+    // 保留旧方法但不再使用
+    spawnEnemy(difficultyConfig) {
+        return this.spawnEnemyFromTop(difficultyConfig);
     }
 
     // 生成金币

@@ -235,6 +235,9 @@ export class GameEngine {
                     this.playerShoot();
                     this.autoFireCooldown = this.autoFireInterval;
                 }
+
+                // 玩家与敌舰碰撞检测
+                this.checkPlayerEnemyCollisions();
             }
         }
 
@@ -380,6 +383,28 @@ export class GameEngine {
     }
 
     /**
+     * 检查玩家与敌舰碰撞
+     */
+    checkPlayerEnemyCollisions() {
+        for (const enemy of this.enemies) {
+            if (!enemy.active) continue;
+
+            const dx = this.player.x - enemy.x;
+            const dy = this.player.y - enemy.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < this.player.hitboxRadius + enemy.radius) {
+                if (this.currentScene && this.currentScene.particles) {
+                    this.currentScene.particles.emitExplosion(this.player.x, this.player.y);
+                }
+                this.scoring.onCollision();
+                this.setState(GameState.GAMEOVER);
+                return;
+            }
+        }
+    }
+
+    /**
      * 渲染
      */
     render() {
@@ -407,8 +432,10 @@ export class GameEngine {
             this.renderShootingMode(ctx);
         }
 
-        // 渲染玩家
-        this.renderPlayer(ctx);
+        // 渲染玩家（跳过默认渲染，射击模式使用场景的renderPlayer）
+        if (!this.isShootingMode) {
+            this.renderPlayer(ctx);
+        }
 
         // 渲染粒子效果
         if (this.currentScene && this.currentScene.particles) {
@@ -581,7 +608,7 @@ export class GameEngine {
         // 检查是否是射击模式场景
         if (scene && scene.constructor.name === 'SceneSpaceShooting') {
             this.isShootingMode = true;
-            this.player.y = 0.85; // 玩家在屏幕下方
+            this.player.y = 0.9; // 玩家在屏幕最下方
         } else {
             this.isShootingMode = false;
         }

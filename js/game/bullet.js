@@ -101,10 +101,10 @@ export class Bullet {
 
 export class EnemyFleet {
     constructor(config = {}) {
-        this.x = config.x || 1.1;
-        this.y = config.y || 0.5;
-        this.speedX = config.speedX || -0.15;
-        this.speedY = config.speedY || 0;
+        this.x = config.x || 0.5;
+        this.y = config.y || -0.1;
+        this.speedX = config.speedX || 0;
+        this.speedY = config.speedY || 0.15;
         this.radius = config.radius || 0.04;
         this.type = config.type || 'fighter';
         this.health = config.health || 1;
@@ -130,6 +130,10 @@ export class EnemyFleet {
         }
     }
 
+    isOffScreen(canvasWidth, canvasHeight) {
+        return this.y > 1.2 || this.y < -0.3 || this.x < -0.3 || this.x > 1.3;
+    }
+
     render(ctx) {
         if (!this.active) return;
 
@@ -139,9 +143,8 @@ export class EnemyFleet {
 
         ctx.save();
         ctx.translate(posX, posY);
-
-        // 根据舰船类型设置朝向（朝向左边 = 面向玩家）
-        ctx.scale(-1, 1);
+        // 翻转使舰船朝下（朝向玩家）
+        ctx.scale(1, -1);
 
         switch (this.type) {
             case 'fighter':
