@@ -200,8 +200,9 @@ export class GameUI {
             panel.style.display = 'none';
         }
 
-        // 设置运动模式
-        this.engine.setMotionMode(this.selectedMode);
+        // 设置运动模式（射击模式使用 SINGLE_YAW 左右转头控制）
+        const modeToSet = this.selectedMode === 'shooting' ? MotionMapper.MODES.SINGLE_YAW : this.selectedMode;
+        this.engine.setMotionMode(modeToSet);
 
         // 设置场景
         this.setScene(this.selectedScene);
