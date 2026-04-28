@@ -59,7 +59,7 @@ export class SceneSpaceShooting extends SceneBase {
         };
 
         // 子弹池限制
-        this.maxBullets = 5;
+        this.maxBullets = 3;
 
         this.init();
     }
@@ -319,17 +319,19 @@ export class SceneSpaceShooting extends SceneBase {
     playerShoot(playerX, playerY) {
         if (!this.canShoot() || !this.targetEnemy) return;
 
-        // 从飞船尖端发射子弹 - 只有一发，精准打击
-        const bullet = new Bullet(playerX, playerY - 0.05, {
-            vx: 0,
-            vy: -0.8,
-            speed: 0.7,
-            radius: 0.006,
-            color: '#00D9A5',
-            onFire: () => soundManager.playShoot()
-        });
-
-        this.engine.bullets.push(bullet);
+        // 从飞船尖端发射3颗子弹 - 扇形散开
+        const angles = [-0.15, 0, 0.15]; // 扇形角度
+        for (const angle of angles) {
+            const bullet = new Bullet(playerX, playerY - 0.05, {
+                vx: Math.sin(angle) * 0.3,
+                vy: -0.8,
+                speed: 0.7,
+                radius: 0.005,
+                color: '#00D9A5',
+                onFire: () => soundManager.playShoot()
+            });
+            this.engine.bullets.push(bullet);
+        }
         this.shootCooldown = this.shootInterval;
 
         // 重置对准状态
