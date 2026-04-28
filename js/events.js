@@ -710,15 +710,14 @@ function init() {
         setMode('mode-select');
     });
     document.getElementById('back-btn-game').addEventListener('click', () => {
-        document.getElementById('view-game').style.display = 'none';
-        document.getElementById('view-mode-select').style.display = 'block';
+        // 清理游戏引擎状态
         if (window.gameEngine) {
             window.gameEngine.cleanup();
-            window.gameEngine.goToMenu();
         }
-        if (window.gameUI) {
-            window.gameUI.showSelectPanel();
-        }
+        // 隐藏游戏视图，回到主界面（模式选择）
+        document.getElementById('view-game').style.display = 'none';
+        // 显示模式选择视图
+        setMode('mode-select');
     });
 
     // 位置觉检测开始按钮
