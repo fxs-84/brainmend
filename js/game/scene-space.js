@@ -211,19 +211,19 @@ export class SceneSpace extends SceneBase {
             { core: '#FFFFFF', mid: '#CCAFFF', outer: '#8844FF' }
         ];
 
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 4; i++) {
             const colorSet = blazeColors[Math.floor(Math.random() * blazeColors.length)];
             this.blazingStars.push({
                 x: Math.random(),
                 y: Math.random(),
-                size: 0.004 + Math.random() * 0.006,
-                baseIntensity: 0.8 + Math.random() * 0.2,
+                size: 0.003 + Math.random() * 0.003,
+                baseIntensity: 0.6 + Math.random() * 0.3,
                 pulsePhase: Math.random() * Math.PI * 2,
-                pulseSpeed: 3 + Math.random() * 4,
+                pulseSpeed: 2 + Math.random() * 2,
                 colorSet: colorSet,
-                rayCount: 4 + Math.floor(Math.random() * 4),
+                rayCount: 4,
                 rayRotation: Math.random() * Math.PI * 2,
-                rayRotationSpeed: (Math.random() - 0.5) * 2
+                rayRotationSpeed: (Math.random() - 0.5) * 1.5
             });
         }
     }
@@ -730,34 +730,34 @@ export class SceneSpace extends SceneBase {
 
         ctx.save();
 
-        // 最外层巨大光晕
-        const superOuter = ctx.createRadialGradient(x, y, 0, x, y, size * 15);
-        superOuter.addColorStop(0, outer.replace(')', `, ${0.15 * intensity})`));
-        superOuter.addColorStop(0.4, outer.replace(')', `, ${0.05 * intensity})`));
+        // 最外层光晕
+        const superOuter = ctx.createRadialGradient(x, y, 0, x, y, size * 6);
+        superOuter.addColorStop(0, outer.replace(')', `, ${0.1 * intensity})`));
+        superOuter.addColorStop(0.5, outer.replace(')', `, ${0.03 * intensity})`));
         superOuter.addColorStop(1, 'transparent');
         ctx.fillStyle = superOuter;
         ctx.beginPath();
-        ctx.arc(x, y, size * 15, 0, Math.PI * 2);
+        ctx.arc(x, y, size * 6, 0, Math.PI * 2);
         ctx.fill();
 
         // 外层光晕
-        const outerGlow = ctx.createRadialGradient(x, y, 0, x, y, size * 8);
-        outerGlow.addColorStop(0, mid.replace(')', `, ${0.4 * intensity})`));
-        outerGlow.addColorStop(0.5, outer.replace(')', `, ${0.15 * intensity})`));
+        const outerGlow = ctx.createRadialGradient(x, y, 0, x, y, size * 3);
+        outerGlow.addColorStop(0, mid.replace(')', `, ${0.3 * intensity})`));
+        outerGlow.addColorStop(0.5, outer.replace(')', `, ${0.1 * intensity})`));
         outerGlow.addColorStop(1, 'transparent');
         ctx.fillStyle = outerGlow;
         ctx.beginPath();
-        ctx.arc(x, y, size * 8, 0, Math.PI * 2);
+        ctx.arc(x, y, size * 3, 0, Math.PI * 2);
         ctx.fill();
 
         // 内层光芒
-        const innerGlow = ctx.createRadialGradient(x, y, 0, x, y, size * 4);
+        const innerGlow = ctx.createRadialGradient(x, y, 0, x, y, size * 1.5);
         innerGlow.addColorStop(0, core);
-        innerGlow.addColorStop(0.3, mid.replace(')', `, ${0.7 * intensity})`));
+        innerGlow.addColorStop(0.3, mid.replace(')', `, ${0.5 * intensity})`));
         innerGlow.addColorStop(1, 'transparent');
         ctx.fillStyle = innerGlow;
         ctx.beginPath();
-        ctx.arc(x, y, size * 4, 0, Math.PI * 2);
+        ctx.arc(x, y, size * 1.5, 0, Math.PI * 2);
         ctx.fill();
 
         // 核心
@@ -767,13 +767,13 @@ export class SceneSpace extends SceneBase {
         ctx.arc(x, y, size * 0.8, 0, Math.PI * 2);
         ctx.fill();
 
-        // 动态星芒射线
-        const rayAlpha = 0.4 + 0.5 * pulse;
+        // 动态星芒射线（不超出游戏区域太多）
+        const rayAlpha = 0.3 + 0.4 * pulse;
         ctx.globalAlpha = rayAlpha;
         ctx.strokeStyle = core;
-        ctx.lineWidth = 1;
-        const rayLen = size * (4 + pulse * 2);
-        const rayCount = star.rayCount;
+        ctx.lineWidth = 0.5;
+        const rayLen = size * (2 + pulse * 1);
+        const rayCount = 4;
 
         for (let i = 0; i < rayCount; i++) {
             const angle = star.rayRotation + (i * Math.PI * 2 / rayCount);
