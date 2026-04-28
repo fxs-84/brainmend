@@ -13,6 +13,14 @@ import { updateCoordination } from './detection.js';
 let lastZoomFactor = 1;
 
 function setMode(mode) {
+    // 离开游戏模式时隐藏游戏选择界面
+    if (state.mode === 'game' && mode !== 'game') {
+        const gameSelectPanel = document.getElementById('game-select-panel');
+        if (gameSelectPanel) {
+            gameSelectPanel.style.display = 'none';
+        }
+    }
+
     state.mode = mode;
     document.querySelectorAll('.mode-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.mode === mode);
@@ -728,6 +736,7 @@ function init() {
             window.gameEngine.cleanup();
         }
         // 隐藏游戏视图，回到主界面（模式选择）
+        // game-select-panel的隐藏由setMode处理
         document.getElementById('view-game').style.display = 'none';
         // 显示模式选择视图
         setMode('mode-select');
