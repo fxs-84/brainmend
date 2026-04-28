@@ -2,6 +2,16 @@
 // UI - 界面更新
 // ============================================================
 
+// JPS 分类函数
+function classifyJPS(error) {
+    if (error < 2) return { level: '优秀', zh: '优秀', color: '#22c55e' };
+    if (error < 3) return { level: '良好', zh: '良好', color: '#84cc16' };
+    if (error < 4.5) return { level: '正常', zh: '正常', color: '#06b6d4' };
+    if (error < 6) return { level: '轻度障碍', zh: '轻度', color: '#eab308' };
+    if (error < 9) return { level: '中度障碍', zh: '中度', color: '#f97316' };
+    return { level: '重度障碍', zh: '重度', color: '#ef4444' };
+}
+
 function updateDataDisplay() {
     let displayPitch, displayYaw, displayRoll;
     if (state.useGyroscope) {
