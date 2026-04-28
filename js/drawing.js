@@ -238,6 +238,9 @@ function drawTrail(actualCenterX, actualCenterY) {
 
 // 主绘制函数
 function drawCrosshair() {
+    // 游戏模式下由游戏引擎接管渲染，跳过十字准线绘制
+    if (state.mode === 'game') return;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const actualCenterX = centerX + state.crosshairOffsetX;
