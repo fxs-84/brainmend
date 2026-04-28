@@ -32,7 +32,7 @@ export class GameUI {
                 padding: 30px;
                 min-width: 400px;
                 color: white;
-                z-index: 100;
+                z-index: 2000;
             ">
                 <h2 style="text-align: center; margin-bottom: 20px; color: var(--primary);">
                     选择游戏
