@@ -44,6 +44,23 @@ export class SceneSpaceShooting extends SceneBase {
         // 玩家
         this.playerY = 0.95; // 玩家在屏幕最下方
 
+        // 颈椎训练：瞄准系统
+        this.targetEnemy = null;      // 当前瞄准的敌舰
+        this.alignmentTime = 0;       // 对齐持续时间
+        this.alignmentThreshold = 0.02; // 对齐阈值（归一化坐标）
+        this.requiredHoldTime = 0.5;  // 需要保持对齐0.5秒才能发射
+
+        // 瞄准指示器
+        this.aimIndicator = {
+            x: 0.5,
+            y: 0.3,
+            progress: 0,  // 0-1表示瞄准进度
+            active: false
+        };
+
+        // 子弹池限制
+        this.maxBullets = 5;
+
         this.init();
     }
 
@@ -196,6 +213,9 @@ export class SceneSpaceShooting extends SceneBase {
         super.update(dt);
         this.time += dt;
 
+        // 更新瞄准系统（颈椎训练核心）
+        this.updateAimSystem(dt);
+
         // 更新能量核心
         for (const core of this.energyCores) {
             core.pulsePhase += core.pulseSpeed * dt;
@@ -247,37 +267,74 @@ export class SceneSpaceShooting extends SceneBase {
         if (star.x < 0) { star.x = 1; star.y = Math.random(); }
     }
 
-    // 玩家射击 - 子弹向上飞攻击敌舰
-    playerShoot(playerX, playerY) {
-        if (this.shootCooldown <= 0 && this.engine) {
-            // 从玩家位置发射子弹 - 向上飞（vy负值向上）
-            this.engine.bullets.push(new Bullet(playerX, playerY - 0.05, {
-                vx: 0,
-                vy: -0.8,
-                speed: 0.7,
-                radius: 0.006,
-                color: '#00D9A5',
-                onFire: () => soundManager.playShoot()
-            }));
-            // 双发
-            this.engine.bullets.push(new Bullet(playerX - 0.02, playerY - 0.03, {
-                vx: -0.05,
-                vy: -0.75,
-                speed: 0.7,
-                radius: 0.005,
-                color: '#00D9A5',
-                onFire: () => soundManager.playShoot()
-            }));
-            this.engine.bullets.push(new Bullet(playerX + 0.02, playerY - 0.03, {
-                vx: 0.05,
-                vy: -0.75,
-                speed: 0.7,
-                radius: 0.005,
-                color: '#00D9A5',
-                onFire: () => soundManager.playShoot()
-            }));
-            this.shootCooldown = this.shootInterval;
+    // 颈椎训练：瞄准系统
+    // 玩家头的位置（X轴）需要和敌舰X坐标对齐，保持0.5秒后才能发射
+    updateAimSystem(dt) {
+        if (!this.engine) return;
+
+        const playerX = this.engine.player.x;
+        let closestEnemy = null;
+        let closestDist = Infinity;
+
+        // 找到最近的敌舰
+        for (const enemy of this.engine.enemies) {
+            if (!enemy.active) continue;
+            const dist = Math.abs(enemy.x - playerX);
+            if (dist < closestDist && enemy.y > 0.1 && enemy.y < 0.8) {
+                closestDist = dist;
+                closestEnemy = enemy;
+            }
         }
+
+        this.targetEnemy = closestEnemy;
+
+        // 检查是否对齐
+        if (closestEnemy && closestDist < this.alignmentThreshold) {
+            // 对齐中
+            this.alignmentTime += dt;
+            this.aimIndicator.active = true;
+            this.aimIndicator.x = closestEnemy.x;
+            this.aimIndicator.y = closestEnemy.y;
+            this.aimIndicator.progress = Math.min(1, this.alignmentTime / this.requiredHoldTime);
+        } else {
+            // 未对齐，重置
+            if (this.alignmentTime > 0 && closestDist >= this.alignmentThreshold) {
+                // 从已对齐状态变为未对齐，逐渐减少进度
+                this.alignmentTime = Math.max(0, this.alignmentTime - dt * 2);
+            }
+            this.aimIndicator.active = false;
+            this.aimIndicator.progress = 0;
+        }
+    }
+
+    // 检查是否可以发射（颈椎控制：对齐并保持0.5秒）
+    canShoot() {
+        return this.targetEnemy &&
+               this.alignmentTime >= this.requiredHoldTime &&
+               this.shootCooldown <= 0 &&
+               this.engine.bullets.length < this.maxBullets;
+    }
+
+    // 玩家射击 - 从飞船尖端发射，必须瞄准敌舰并保持0.5秒
+    playerShoot(playerX, playerY) {
+        if (!this.canShoot() || !this.targetEnemy) return;
+
+        // 从飞船尖端发射子弹 - 只有一发，精准打击
+        const bullet = new Bullet(playerX, playerY - 0.05, {
+            vx: 0,
+            vy: -0.8,
+            speed: 0.7,
+            radius: 0.006,
+            color: '#00D9A5',
+            onFire: () => soundManager.playShoot()
+        });
+
+        this.engine.bullets.push(bullet);
+        this.shootCooldown = this.shootInterval;
+
+        // 重置对准状态
+        this.alignmentTime = 0;
+        this.aimIndicator.progress = 0;
     }
 
     trySpawnObstacle(obstacleList, difficultyConfig) {
@@ -679,6 +736,33 @@ export class SceneSpaceShooting extends SceneBase {
         ctx.quadraticCurveTo(-size * 0.1 + Math.random() * size * 0.05, size * 0.8, 0, size * 0.9 + Math.random() * size * 0.1);
         ctx.quadraticCurveTo(size * 0.1 - Math.random() * size * 0.05, size * 0.8, size * 0.2, size * 0.4);
         ctx.fill();
+
+        // 瞄准指示器 - 显示瞄准进度
+        if (this.aimIndicator.active && this.aimIndicator.progress > 0) {
+            const aimX = this.aimIndicator.x * ctx.canvas.width;
+            const aimY = this.aimIndicator.y * ctx.canvas.height;
+            const progress = this.aimIndicator.progress;
+
+            // 瞄准圈
+            ctx.strokeStyle = `rgba(0, 217, 165, ${0.5 + progress * 0.5})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(aimX, aimY, size * 0.8, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 进度环
+            ctx.strokeStyle = '#00D9A5';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(aimX, aimY, size * 1.2, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+            ctx.stroke();
+
+            // 中心点
+            ctx.fillStyle = '#00D9A5';
+            ctx.beginPath();
+            ctx.arc(aimX, aimY, size * 0.2 * progress, 0, Math.PI * 2);
+            ctx.fill();
+        }
 
         ctx.restore();
     }
