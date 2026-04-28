@@ -609,7 +609,7 @@ export class GameEngine {
         if (scene && scene.constructor.name === 'SceneSpaceShooting') {
             this.isShootingMode = true;
             this.player.x = 0.5;
-            this.player.y = 0.95; // 玩家在屏幕最下方
+            this.player.y = 0.95;
         } else {
             this.isShootingMode = false;
         }

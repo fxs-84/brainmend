@@ -42,7 +42,7 @@ export class SceneSpaceShooting extends SceneBase {
         this.shootInterval = 0.15; // 秒
 
         // 玩家
-        this.playerY = 0.5;
+        this.playerY = 0.95; // 玩家在屏幕最下方
 
         this.init();
     }
