@@ -20,6 +20,20 @@ export class SceneSpace extends SceneBase {
         this.generateStars();
     }
 
+    generateStars() {
+        this.stars = [];
+        const starCount = 100;
+        for (let i = 0; i < starCount; i++) {
+            this.stars.push({
+                x: Math.random(),
+                y: Math.random(),
+                size: 0.002 + Math.random() * 0.004,
+                speed: 0.02 + Math.random() * 0.08,
+                brightness: 0.3 + Math.random() * 0.7
+            });
+        }
+    }
+
     update(dt) {
         super.update(dt);
 
