@@ -11,8 +11,10 @@ export class GameUI {
         this.selectedScene = 'space';
         this.selectedMode = MotionMapper.MODES.SINGLE_YAW;
 
-        // 插入游戏选择界面到 body（避免 side-panel overflow 影响）
-        document.body.insertAdjacentHTML('beforeend', this.createGameSelectHTML());
+        // 只在不存在时插入游戏选择界面
+        if (!document.getElementById('game-select-panel')) {
+            document.body.insertAdjacentHTML('beforeend', this.createGameSelectHTML());
+        }
         this.init();
     }
 

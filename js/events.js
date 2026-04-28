@@ -640,8 +640,12 @@ function init() {
     // 模式按钮
     document.querySelectorAll('.mode-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            if (state.isRunning) return;
-            setMode(btn.dataset.mode);
+            // 游戏模式不受 isRunning 限制
+            if (btn.dataset.mode === 'game') {
+                setMode(btn.dataset.mode);
+            } else if (!state.isRunning) {
+                setMode(btn.dataset.mode);
+            }
         });
     });
 
@@ -706,11 +710,15 @@ function init() {
         setMode('mode-select');
     });
     document.getElementById('back-btn-game').addEventListener('click', () => {
-        document.getElementById('result-modal').classList.remove('show');
+        document.getElementById('view-game').style.display = 'none';
+        document.getElementById('view-mode-select').style.display = 'block';
         if (window.gameEngine) {
             window.gameEngine.cleanup();
+            window.gameEngine.goToMenu();
         }
-        setMode('mode-select');
+        if (window.gameUI) {
+            window.gameUI.showSelectPanel();
+        }
     });
 
     // 位置觉检测开始按钮
