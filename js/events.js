@@ -1042,9 +1042,20 @@ function init() {
         gyroDeviceList.innerHTML = '<div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px;">正在连接...</div>';
 
         try {
+            // 使用 acceptAllDevices 然后在返回的设备中找匹配的
             const device = await navigator.bluetooth.requestDevice({
-                filters: [{ deviceId: deviceId }]
+                acceptAllDevices: true,
+                optionalServices: [
+                    '0000ffe5-0000-1000-8000-00805f9a34fb',
+                    '0000ffe0-0000-1000-8000-00805f9b34fb'
+                ]
             });
+
+            // 检查设备ID是否匹配
+            if (device.id !== deviceId) {
+                logGyroDebug(`设备不匹配，尝试连接...`);
+            }
+
             bluetoothDevice = device;
             await connectGyroscope();
         } catch (err) {
