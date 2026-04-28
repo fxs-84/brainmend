@@ -626,38 +626,61 @@ export class SceneSpaceShooting extends SceneBase {
     renderPlayer(ctx, playerX, playerY) {
         const x = playerX * ctx.canvas.width;
         const y = playerY * ctx.canvas.height;
-        const size = 0.04 * Math.min(ctx.canvas.width, ctx.canvas.height);
+        const size = 0.05 * Math.min(ctx.canvas.width, ctx.canvas.height);
 
         ctx.save();
         ctx.translate(x, y);
 
-        // 飞船主体 - 箭头形状
-        ctx.fillStyle = '#00D9A5';
+        // 引擎尾焰发光
+        ctx.shadowColor = '#00D9A5';
+        ctx.shadowBlur = 20;
+
+        // 主船体 - 科幻风格箭头飞船
+        ctx.fillStyle = '#0a2a2a';
+        ctx.strokeStyle = '#00D9A5';
+        ctx.lineWidth = 2;
+
         ctx.beginPath();
         ctx.moveTo(0, -size);
-        ctx.lineTo(-size * 0.6, size * 0.6);
-        ctx.lineTo(0, size * 0.3);
-        ctx.lineTo(size * 0.6, size * 0.6);
+        ctx.lineTo(-size * 0.7, size * 0.5);
+        ctx.lineTo(-size * 0.3, size * 0.3);
+        ctx.lineTo(-size * 0.4, size * 0.7);
+        ctx.lineTo(0, size * 0.4);
+        ctx.lineTo(size * 0.4, size * 0.7);
+        ctx.lineTo(size * 0.3, size * 0.3);
+        ctx.lineTo(size * 0.7, size * 0.5);
         ctx.closePath();
         ctx.fill();
+        ctx.stroke();
 
-        // 驾驶舱
-        ctx.fillStyle = '#0088AA';
+        // 驾驶舱 - 发光玻璃
+        const cockpitGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 0.25);
+        cockpitGradient.addColorStop(0, '#88FFFF');
+        cockpitGradient.addColorStop(0.5, '#00D9A5');
+        cockpitGradient.addColorStop(1, '#006666');
+        ctx.fillStyle = cockpitGradient;
         ctx.beginPath();
-        ctx.arc(0, 0, size * 0.25, 0, Math.PI * 2);
+        ctx.ellipse(0, -size * 0.2, size * 0.2, size * 0.12, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // 引擎火焰
-        const flameGradient = ctx.createLinearGradient(0, size * 0.3, 0, size * 0.9);
-        flameGradient.addColorStop(0, '#FFE66D');
-        flameGradient.addColorStop(0.5, '#FF6B6B');
+        // 机翼装饰灯
+        ctx.fillStyle = '#00FFFF';
+        ctx.beginPath();
+        ctx.arc(-size * 0.5, size * 0.2, size * 0.05, 0, Math.PI * 2);
+        ctx.arc(size * 0.5, size * 0.2, size * 0.05, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 引擎火焰 - 动态
+        const flameGradient = ctx.createLinearGradient(0, size * 0.4, 0, size * 1.0);
+        flameGradient.addColorStop(0, '#FFFFFF');
+        flameGradient.addColorStop(0.3, '#00FFFF');
+        flameGradient.addColorStop(0.6, '#00D9A5');
         flameGradient.addColorStop(1, 'transparent');
         ctx.fillStyle = flameGradient;
         ctx.beginPath();
-        ctx.moveTo(-size * 0.25, size * 0.3);
-        ctx.lineTo(0, size * 0.9 + Math.random() * size * 0.2);
-        ctx.lineTo(size * 0.25, size * 0.3);
-        ctx.closePath();
+        ctx.moveTo(-size * 0.2, size * 0.4);
+        ctx.quadraticCurveTo(-size * 0.1 + Math.random() * size * 0.05, size * 0.8, 0, size * 0.9 + Math.random() * size * 0.1);
+        ctx.quadraticCurveTo(size * 0.1 - Math.random() * size * 0.05, size * 0.8, size * 0.2, size * 0.4);
         ctx.fill();
 
         ctx.restore();

@@ -29,7 +29,6 @@ export class Bullet {
         this.x += this.vx * this.speed * dt * speedMultiplier;
         this.y += this.vy * this.speed * dt * speedMultiplier;
 
-        // 超出边界
         if (this.y < -0.05 || this.y > 1.1 || this.x < -0.1 || this.x > 1.1) {
             this.active = false;
         }
@@ -117,12 +116,14 @@ export class EnemyFleet {
         this.shootTimer = 0;
         this.shootInterval = config.shootInterval || 2;
         this.canShoot = config.canShoot || false;
+        this.glowPhase = Math.random() * Math.PI * 2;
     }
 
     update(dt, speedMultiplier = 1) {
         this.x += this.speedX * dt * speedMultiplier;
         this.y += this.speedY * dt * speedMultiplier;
         this.rotation += this.rotationSpeed * dt;
+        this.glowPhase += dt * 3;
 
         if (this.canShoot) {
             this.shootTimer += dt;
@@ -138,7 +139,9 @@ export class EnemyFleet {
 
         ctx.save();
         ctx.translate(posX, posY);
-        ctx.rotate(this.rotation);
+
+        // 根据舰船类型设置朝向（朝向左边 = 面向玩家）
+        ctx.scale(-1, 1);
 
         switch (this.type) {
             case 'fighter':
@@ -158,89 +161,209 @@ export class EnemyFleet {
     }
 
     renderFighter(ctx, size) {
-        // 战斗机 - 三角形飞船
-        ctx.fillStyle = this.color;
+        const glow = 0.5 + 0.5 * Math.sin(this.glowPhase);
+
+        // 外发光
+        ctx.shadowColor = '#FF4444';
+        ctx.shadowBlur = 10 * glow;
+
+        // 主船体 - 黑色剪影风格
+        ctx.fillStyle = '#1a1a2e';
         ctx.beginPath();
-        ctx.moveTo(size, 0);
-        ctx.lineTo(-size * 0.7, -size * 0.6);
-        ctx.lineTo(-size * 0.4, 0);
-        ctx.lineTo(-size * 0.7, size * 0.6);
+        ctx.moveTo(size * 1.2, 0);
+        ctx.lineTo(size * 0.3, -size * 0.5);
+        ctx.lineTo(-size * 0.8, -size * 0.4);
+        ctx.lineTo(-size * 1.0, -size * 0.15);
+        ctx.lineTo(-size * 0.8, size * 0);
+        ctx.lineTo(-size * 1.0, size * 0.15);
+        ctx.lineTo(-size * 0.8, size * 0.4);
+        ctx.lineTo(size * 0.3, size * 0.5);
         ctx.closePath();
         ctx.fill();
 
-        // 驾驶舱
-        ctx.fillStyle = '#1E3A5F';
+        // 红色边框
+        ctx.strokeStyle = '#FF3333';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 驾驶舱 - 发光玻璃
+        const cockpitGradient = ctx.createRadialGradient(size * 0.3, 0, 0, size * 0.3, 0, size * 0.3);
+        cockpitGradient.addColorStop(0, '#00FFFF');
+        cockpitGradient.addColorStop(0.5, '#0066FF');
+        cockpitGradient.addColorStop(1, 'transparent');
+        ctx.fillStyle = cockpitGradient;
         ctx.beginPath();
-        ctx.arc(size * 0.2, 0, size * 0.25, 0, Math.PI * 2);
+        ctx.ellipse(size * 0.3, 0, size * 0.25, size * 0.15, 0, 0, Math.PI * 2);
         ctx.fill();
 
+        // 机翼装饰线
+        ctx.strokeStyle = '#FF6666';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(size * 0.1, -size * 0.35);
+        ctx.lineTo(-size * 0.5, -size * 0.3);
+        ctx.moveTo(size * 0.1, size * 0.35);
+        ctx.lineTo(-size * 0.5, size * 0.3);
+        ctx.stroke();
+
         // 引擎火焰
-        if (Math.random() > 0.3) {
-            const flameGradient = ctx.createLinearGradient(-size * 0.7, 0, -size * 1.2, 0);
-            flameGradient.addColorStop(0, '#FF6B6B');
-            flameGradient.addColorStop(0.5, '#FFE66D');
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#FF6600';
+        const flameGradient = ctx.createLinearGradient(-size * 0.8, 0, -size * 1.5, 0);
+        flameGradient.addColorStop(0, '#FFFFFF');
+        flameGradient.addColorStop(0.2, '#FFFF00');
+        flameGradient.addColorStop(0.5, '#FF6600');
+        flameGradient.addColorStop(1, 'transparent');
+        ctx.fillStyle = flameGradient;
+        ctx.beginPath();
+        ctx.moveTo(-size * 0.8, -size * 0.15);
+        ctx.quadraticCurveTo(-size * 1.3, 0, -size * 0.8, size * 0.15);
+        ctx.fill();
+    }
+
+    renderCruiser(ctx, size) {
+        const glow = 0.5 + 0.5 * Math.sin(this.glowPhase);
+
+        // 外发光
+        ctx.shadowColor = '#AA2222';
+        ctx.shadowBlur = 12 * glow;
+
+        // 主船体 - 更复杂的巡洋舰
+        ctx.fillStyle = '#1a1a2e';
+        ctx.beginPath();
+        // 舰首
+        ctx.moveTo(size * 1.3, 0);
+        ctx.lineTo(size * 0.8, -size * 0.3);
+        ctx.lineTo(size * 0.4, -size * 0.5);
+        ctx.lineTo(-size * 0.3, -size * 0.55);
+        ctx.lineTo(-size * 0.8, -size * 0.45);
+        ctx.lineTo(-size * 1.1, -size * 0.25);
+        ctx.lineTo(-size * 1.2, 0);
+        ctx.lineTo(-size * 1.1, size * 0.25);
+        ctx.lineTo(-size * 0.8, size * 0.45);
+        ctx.lineTo(-size * 0.3, size * 0.55);
+        ctx.lineTo(size * 0.4, size * 0.5);
+        ctx.lineTo(size * 0.8, size * 0.3);
+        ctx.closePath();
+        ctx.fill();
+
+        // 红色边框
+        ctx.strokeStyle = '#CC2222';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 舰桥塔
+        ctx.fillStyle = '#2a2a4e';
+        ctx.fillRect(-size * 0.2, -size * 0.15, size * 0.5, size * 0.3);
+        ctx.strokeStyle = '#FF4444';
+        ctx.strokeRect(-size * 0.2, -size * 0.15, size * 0.5, size * 0.3);
+
+        // 驾驶舱玻璃
+        const cockpitGradient = ctx.createRadialGradient(size * 0.5, 0, 0, size * 0.5, 0, size * 0.25);
+        cockpitGradient.addColorStop(0, '#00FFFF');
+        cockpitGradient.addColorStop(1, '#0044AA');
+        ctx.fillStyle = cockpitGradient;
+        ctx.beginPath();
+        ctx.ellipse(size * 0.5, 0, size * 0.2, size * 0.12, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 侧翼武器
+        ctx.fillStyle = '#333355';
+        ctx.fillRect(size * 0.1, -size * 0.6, size * 0.3, size * 0.12);
+        ctx.fillRect(size * 0.1, size * 0.48, size * 0.3, size * 0.12);
+
+        // 引擎组
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = '#FF4400';
+        for (let i = 0; i < 3; i++) {
+            const flameGradient = ctx.createLinearGradient(-size * 0.8, 0, -size * 1.4, 0);
+            flameGradient.addColorStop(0, '#FFFFFF');
+            flameGradient.addColorStop(0.3, '#FFAA00');
             flameGradient.addColorStop(1, 'transparent');
             ctx.fillStyle = flameGradient;
             ctx.beginPath();
-            ctx.moveTo(-size * 0.7, -size * 0.2);
-            ctx.lineTo(-size * 1.2, 0);
-            ctx.lineTo(-size * 0.7, size * 0.2);
-            ctx.closePath();
+            ctx.arc(-size * 0.9 - size * 0.15 * i, -size * 0.2 + size * 0.2 * i, size * 0.1, 0, Math.PI * 2);
             ctx.fill();
         }
     }
 
-    renderCruiser(ctx, size) {
-        // 巡洋舰 - 更大更复杂
-        ctx.fillStyle = this.color;
-        // 主船体
+    renderCarrier(ctx, size) {
+        const glow = 0.5 + 0.5 * Math.sin(this.glowPhase);
+
+        // 外发光
+        ctx.shadowColor = '#881111';
+        ctx.shadowBlur = 15 * glow;
+
+        // 主船体 - 大型航母
+        ctx.fillStyle = '#0a0a1e';
         ctx.beginPath();
-        ctx.moveTo(size, 0);
-        ctx.lineTo(size * 0.5, -size * 0.4);
-        ctx.lineTo(-size * 0.8, -size * 0.5);
-        ctx.lineTo(-size * 1.2, -size * 0.3);
-        ctx.lineTo(-size * 1.2, size * 0.3);
-        ctx.lineTo(-size * 0.8, size * 0.5);
-        ctx.lineTo(size * 0.5, size * 0.4);
+        // 舰首
+        ctx.moveTo(size * 1.5, 0);
+        ctx.lineTo(size * 1.0, -size * 0.2);
+        ctx.lineTo(size * 0.6, -size * 0.4);
+        ctx.lineTo(size * 0.3, -size * 0.6);
+        ctx.lineTo(-size * 0.5, -size * 0.6);
+        ctx.lineTo(-size * 1.0, -size * 0.4);
+        ctx.lineTo(-size * 1.4, -size * 0.2);
+        ctx.lineTo(-size * 1.6, 0);
+        ctx.lineTo(-size * 1.4, size * 0.2);
+        ctx.lineTo(-size * 1.0, size * 0.4);
+        ctx.lineTo(-size * 0.5, size * 0.6);
+        ctx.lineTo(size * 0.3, size * 0.6);
+        ctx.lineTo(size * 0.6, size * 0.4);
+        ctx.lineTo(size * 1.0, size * 0.2);
         ctx.closePath();
         ctx.fill();
 
-        // 船塔
-        ctx.fillStyle = '#B91C1C';
-        ctx.fillRect(-size * 0.3, -size * 0.15, size * 0.5, size * 0.3);
+        // 紫色边框
+        ctx.strokeStyle = '#AA2222';
+        ctx.lineWidth = 3;
+        ctx.stroke();
 
-        // 驾驶舱
-        ctx.fillStyle = '#1E3A5F';
+        // 舰桥
+        ctx.fillStyle = '#1a1a3e';
         ctx.beginPath();
-        ctx.arc(size * 0.3, 0, size * 0.2, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    renderCarrier(ctx, size) {
-        // 航母 - 最大型飞船
-        ctx.fillStyle = this.color;
-        // 主船体
-        ctx.beginPath();
-        ctx.moveTo(size * 1.2, 0);
-        ctx.lineTo(size * 0.8, -size * 0.6);
-        ctx.lineTo(-size, -size * 0.5);
-        ctx.lineTo(-size * 1.5, -size * 0.2);
-        ctx.lineTo(-size * 1.5, size * 0.2);
-        ctx.lineTo(-size, size * 0.5);
-        ctx.lineTo(size * 0.8, size * 0.6);
+        ctx.moveTo(size * 0.5, -size * 0.25);
+        ctx.lineTo(size * 0.8, -size * 0.35);
+        ctx.lineTo(size * 0.9, -size * 0.15);
+        ctx.lineTo(size * 0.9, size * 0.15);
+        ctx.lineTo(size * 0.8, size * 0.35);
+        ctx.lineTo(size * 0.5, size * 0.25);
         ctx.closePath();
         ctx.fill();
 
         // 甲板
-        ctx.fillStyle = '#991B1B';
-        ctx.fillRect(-size * 0.8, -size * 0.3, size * 1.2, size * 0.6);
+        ctx.fillStyle = '#222244';
+        ctx.fillRect(-size * 0.3, -size * 0.5, size * 0.7, size * 1.0);
+        ctx.strokeStyle = '#FF3333';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-size * 0.3, -size * 0.5, size * 0.7, size * 1.0);
 
-        // 舰桥
-        ctx.fillStyle = '#1E3A5F';
+        // 驾驶舱
+        const cockpitGradient = ctx.createRadialGradient(size * 0.6, 0, 0, size * 0.6, 0, size * 0.2);
+        cockpitGradient.addColorStop(0, '#00FFCC');
+        cockpitGradient.addColorStop(1, '#004466');
+        ctx.fillStyle = cockpitGradient;
         ctx.beginPath();
-        ctx.arc(size * 0.5, 0, size * 0.25, 0, Math.PI * 2);
+        ctx.ellipse(size * 0.6, 0, size * 0.18, size * 0.1, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillRect(-size * 0.2, -size * 0.1, size * 0.4, size * 0.2);
+
+        // 引擎组 - 四个大引擎
+        ctx.shadowBlur = 25;
+        ctx.shadowColor = '#FF6600';
+        for (let i = 0; i < 4; i++) {
+            const flameGradient = ctx.createRadialGradient(
+                -size * 1.3, -size * 0.25 + size * 0.17 * i, 0,
+                -size * 1.3, -size * 0.25 + size * 0.17 * i, size * 0.15
+            );
+            flameGradient.addColorStop(0, '#FFFFFF');
+            flameGradient.addColorStop(0.4, '#FFAA00');
+            flameGradient.addColorStop(1, 'transparent');
+            ctx.fillStyle = flameGradient;
+            ctx.beginPath();
+            ctx.arc(-size * 1.3, -size * 0.25 + size * 0.17 * i, size * 0.12, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 
     checkCollision(playerX, playerY, playerRadius) {
@@ -253,7 +376,7 @@ export class EnemyFleet {
         this.health -= damage;
         if (this.health <= 0) {
             this.active = false;
-            return true; // 被摧毁
+            return true;
         }
         return false;
     }
