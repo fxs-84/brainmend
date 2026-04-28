@@ -31,7 +31,8 @@ export class InputAdapter {
      */
     init() {
         // 检测可用输入源
-        if (this.isGyroscopeAvailable()) {
+        // 如果 state.useGyroscope 为 true，优先使用陀螺仪
+        if (state.useGyroscope && this.isGyroscopeAvailable()) {
             this.inputSource = 'gyroscope';
         } else {
             this.inputSource = 'mouse';
