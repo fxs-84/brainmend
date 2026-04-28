@@ -4,7 +4,6 @@
 
 import { MotionMapper } from './motion-mapper.js';
 import { ObstacleCoin } from './obstacle.js';
-import { ObstacleMeteor } from './obstacle.js';
 import { ParticleSystem } from './particle.js';
 import { Bullet, EnemyFleet } from './bullet.js';
 import { SceneBase } from './scene-base.js';
@@ -352,51 +351,7 @@ export class SceneSpaceShooting extends SceneBase {
         return enemy;
     }
 
-    // 保留旧方法但不再使用
-    spawnEnemy(difficultyConfig) {
-        return this.spawnEnemyFromTop(difficultyConfig);
-    }
-
-    // 生成金币
-    spawnCoin() {
-        return new ObstacleCoin({
-            x: Math.random() * 0.6 + 0.35,
-            y: -0.1,
-            speedX: (Math.random() - 0.5) * 0.01,
-            speedY: 0.06 + Math.random() * 0.03
-        });
-    }
-
-    trySpawnObstacle(obstacleList, difficultyConfig) {
-        const timeSinceLastSpawn = this.gameTime - this.lastSpawnTime;
-
-        if (obstacleList.length < difficultyConfig.maxObstacles &&
-            timeSinceLastSpawn >= difficultyConfig.spawnInterval / 1000) {
-
-            const rand = Math.random();
-
-            if (rand < 0.65) {
-                // 65% 敌舰 - 直接添加到engine的enemies数组
-                const enemy = this.spawnEnemy(difficultyConfig);
-                this.engine.enemies.push(enemy);
-            } else if (rand < 0.85) {
-                // 20% 金币
-                obstacleList.push(this.spawnCoin());
-            } else {
-                // 15% 小陨石
-                obstacleList.push(new ObstacleMeteor({
-                    size: 'small',
-                    x: 1.1,
-                    y: Math.random() * 0.6 + 0.2,
-                    speedX: -(0.15 + Math.random() * 0.1),
-                    speedY: (Math.random() - 0.5) * 0.03
-                }));
-            }
-            this.lastSpawnTime = this.gameTime;
-        }
-    }
-
-    renderBackground(ctx, width, height) {
+    // 生成从上方飞来的敌舰
         const minDim = Math.min(width, height);
 
         // 深空背景

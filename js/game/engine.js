@@ -238,6 +238,9 @@ export class GameEngine {
 
                 // 玩家与敌舰碰撞检测
                 this.checkPlayerEnemyCollisions();
+
+                // 子弹与敌舰碰撞检测
+                this.checkBulletEnemyCollisions();
             }
         }
 
