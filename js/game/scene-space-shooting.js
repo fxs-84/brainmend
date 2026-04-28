@@ -693,6 +693,7 @@ export class SceneSpaceShooting extends SceneBase {
 
     onCoinCollect(coin, engine) {
         this.particles.emitCoinCollect(coin.x, coin.y);
+        soundManager.playCoin();
         if (engine && engine.scoring) {
             engine.scoring.onCoinCollected(100);
         }

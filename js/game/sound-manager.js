@@ -20,7 +20,7 @@ export class SoundManager {
         try {
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
             this.masterGain = this.audioContext.createGain();
-            this.masterGain.gain.value = 0.3;
+            this.masterGain.gain.value = 0.5;
             this.masterGain.connect(this.audioContext.destination);
             this.isInitialized = true;
         } catch (e) {
@@ -38,7 +38,7 @@ export class SoundManager {
     }
 
     /**
-     * 播放子弹发射音效 - 短促的"嗖"声
+     * 播放子弹发射音效 - 尖锐的激光嗖声
      */
     async playShoot() {
         if (!this.isInitialized) return;
@@ -47,50 +47,59 @@ export class SoundManager {
         const ctx = this.audioContext;
         const now = ctx.currentTime;
 
-        // 创建噪声源（用于嗖声）
-        const bufferSize = ctx.sampleRate * 0.1; // 100ms
-        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
+        // 创建短促的激光音效
+        const osc = ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.exponentialRampToValueAtTime(220, now + 0.08);
 
-        // 生成噪声样本，衰减包络
-        for (let i = 0; i < bufferSize; i++) {
-            const t = i / bufferSize;
-            const envelope = Math.exp(-t * 30); // 快速衰减
-            data[i] = (Math.random() * 2 - 1) * envelope;
+        // 噪声层 - 增加质感
+        const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
+        const noiseData = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < noiseBuffer.length; i++) {
+            const t = i / noiseBuffer.length;
+            const envelope = Math.exp(-t * 25);
+            noiseData[i] = (Math.random() * 2 - 1) * envelope;
         }
 
         const noiseSource = ctx.createBufferSource();
-        noiseSource.buffer = buffer;
+        noiseSource.buffer = noiseBuffer;
 
-        // 高通滤波器 - 去除低频，让声音更"嗖"
+        // 高通滤波器 - 让声音更尖锐
         const highpass = ctx.createBiquadFilter();
         highpass.type = 'highpass';
-        highpass.frequency.value = 800;
-        highpass.Q.value = 1;
+        highpass.frequency.value = 400;
 
-        // 带通滤波器 - 增加质感
-        const bandpass = ctx.createBiquadFilter();
-        bandpass.type = 'bandpass';
-        bandpass.frequency.value = 2000;
-        bandpass.Q.value = 2;
+        // 增益包络
+        const oscGain = ctx.createGain();
+        oscGain.gain.setValueAtTime(0.3, now);
+        oscGain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
 
-        // 增益控制
-        const gainNode = ctx.createGain();
-        gainNode.gain.setValueAtTime(0.4, now);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+        const noiseGain = ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.15, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.06);
 
-        // 连接：噪声 -> 滤波 -> 增益 -> 主输出
+        // 混音器
+        const mixer = ctx.createGain();
+        mixer.gain.value = 0.8;
+
+        osc.connect(oscGain);
+        oscGain.connect(mixer);
+
         noiseSource.connect(highpass);
-        highpass.connect(bandpass);
-        bandpass.connect(gainNode);
-        gainNode.connect(this.masterGain);
+        highpass.connect(noiseGain);
+        noiseGain.connect(mixer);
 
+        mixer.connect(this.masterGain);
+
+        osc.start(now);
+        osc.stop(now + 0.1);
         noiseSource.start(now);
         noiseSource.stop(now + 0.1);
     }
 
     /**
-     * 播放敌舰爆炸音效 - 低频爆裂声
+     * 播放敌舰爆炸音效 - 饱满的爆炸声
      */
     async playExplosion() {
         if (!this.isInitialized) return;
@@ -99,45 +108,59 @@ export class SoundManager {
         const ctx = this.audioContext;
         const now = ctx.currentTime;
 
-        // 低频振荡器 - 爆炸的"轰"声
+        // 低频振荡器 - 爆炸的主体
         const osc = ctx.createOscillator();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(150, now);
-        osc.frequency.exponentialRampToValueAtTime(30, now + 0.3);
+        osc.frequency.setValueAtTime(120, now);
+        osc.frequency.exponentialRampToValueAtTime(25, now + 0.4);
 
-        // 白噪声 - 爆炸的"嘶"声
-        const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
+        // 中频振荡器 - 增加力度感
+        const osc2 = ctx.createOscillator();
+        osc2.type = 'square';
+        osc2.frequency.setValueAtTime(80, now);
+        osc2.frequency.exponentialRampToValueAtTime(20, now + 0.3);
+
+        // 白噪声层 - 爆炸的碎裂感
+        const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.6, ctx.sampleRate);
         const noiseData = noiseBuffer.getChannelData(0);
         for (let i = 0; i < noiseBuffer.length; i++) {
             const t = i / noiseBuffer.length;
-            const envelope = Math.exp(-t * 8);
+            // 快速上升然后缓慢衰减
+            const envelope = t < 0.05 ? t * 20 : Math.exp(-(t - 0.05) * 6);
             noiseData[i] = (Math.random() * 2 - 1) * envelope;
         }
 
         const noiseSource = ctx.createBufferSource();
         noiseSource.buffer = noiseBuffer;
 
-        // 低通滤波器 - 让噪声听起来更低沉
+        // 低通滤波器 - 让爆炸更低沉
         const lowpass = ctx.createBiquadFilter();
         lowpass.type = 'lowpass';
-        lowpass.frequency.setValueAtTime(500, now);
-        lowpass.frequency.exponentialRampToValueAtTime(100, now + 0.4);
+        lowpass.frequency.setValueAtTime(800, now);
+        lowpass.frequency.exponentialRampToValueAtTime(80, now + 0.5);
 
-        // 增益控制
+        // 增益包络
         const oscGain = ctx.createGain();
-        oscGain.gain.setValueAtTime(0.6, now);
-        oscGain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        oscGain.gain.setValueAtTime(0.5, now);
+        oscGain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+
+        const osc2Gain = ctx.createGain();
+        osc2Gain.gain.setValueAtTime(0.25, now);
+        osc2Gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
 
         const noiseGain = ctx.createGain();
-        noiseGain.gain.setValueAtTime(0.4, now);
-        noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+        noiseGain.gain.setValueAtTime(0.6, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
 
-        // 混音
+        // 混音器
         const mixer = ctx.createGain();
-        mixer.gain.value = 0.8;
+        mixer.gain.value = 1;
 
         osc.connect(oscGain);
         oscGain.connect(mixer);
+
+        osc2.connect(osc2Gain);
+        osc2Gain.connect(mixer);
 
         noiseSource.connect(lowpass);
         lowpass.connect(noiseGain);
@@ -146,9 +169,40 @@ export class SoundManager {
         mixer.connect(this.masterGain);
 
         osc.start(now);
-        osc.stop(now + 0.35);
+        osc.stop(now + 0.4);
+        osc2.start(now);
+        osc2.stop(now + 0.3);
         noiseSource.start(now);
-        noiseSource.stop(now + 0.5);
+        noiseSource.stop(now + 0.6);
+    }
+
+    /**
+     * 播放金币收集音效
+     */
+    async playCoin() {
+        if (!this.isInitialized) return;
+
+        await this.resume();
+        const ctx = this.audioContext;
+        const now = ctx.currentTime;
+
+        // 上升音阶 - 金币的叮声
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1200, now);
+        osc.frequency.setValueAtTime(1600, now + 0.05);
+        osc.frequency.setValueAtTime(2000, now + 0.1);
+
+        const gainNode = ctx.createGain();
+        gainNode.gain.setValueAtTime(0.25, now);
+        gainNode.gain.setValueAtTime(0.25, now + 0.1);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+
+        osc.connect(gainNode);
+        gainNode.connect(this.masterGain);
+
+        osc.start(now);
+        osc.stop(now + 0.2);
     }
 
     /**
