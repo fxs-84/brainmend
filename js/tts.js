@@ -9,6 +9,7 @@ const TTS_CONFIG = {
     pitch: 1.0,
     volume: 1.0
 };
+window.TTS_CONFIG = TTS_CONFIG;
 
 // 可用语音列表
 let cachedVoices = [];
@@ -192,6 +193,7 @@ function processQueue() {
         processQueue();
     }
 }
+window.speak = speak;
 
 /**
  * 播报语音并在完成后执行回调
@@ -383,4 +385,11 @@ function speakResultsPosition(positionResults) {
     speak(message);
 }
 
-export { initTTS, toggleTTS, speakWithCallback };
+// Window bridge for cross-module access (ui.js)
+window.speakResults = speakResults;
+window.speakResultsIntegrated = speakResults;  // alias used by ui.js
+window.speakResultsCoordination = speakResultsCoordination;
+window.speakResultsROM = speakResultsROM;
+window.speakResultsPosition = speakResultsPosition;
+
+export { initTTS, toggleTTS, speakWithCallback, speak };

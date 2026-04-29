@@ -142,9 +142,9 @@ function updateDotPosition(e) {
     const clampedOffsetX = Math.max(-hLineLength, Math.min(hLineLength, offsetX));
     state.dotX = clampedOffsetX;
 
-    // 动态计算角度系数，确保最大位移对应 ±80°/±45°
-    state.yawCoefficient = 80 / hLineLength;
-    state.pitchCoefficient = 45 / vLineLength;
+    // 按模块映射范围计算角度系数（协调性 yaw±45°/pitch±22.5°，ROM/位置觉 yaw±80°/pitch±45°）
+    state.yawCoefficient = state.yawRange / hLineLength;
+    state.pitchCoefficient = state.pitchRange / vLineLength;
 
     state.trail.push({ x: state.dotX, y: state.dotY });
     if (state.trail.length > state.maxTrailLength) {
@@ -167,6 +167,8 @@ function updateDotPosition(e) {
 }
 
 function returnToCenter() {
+    // 协调性跟踪期间不禁用回中，避免绿色光点漂移
+    if (state.mode === 'coordination') return;
     state.dotX *= (1 - CONFIG.DOT_RETURN_SPEED);
     state.dotY *= (1 - CONFIG.DOT_RETURN_SPEED);
     state.yaw = state.dotX * state.yawCoefficient;

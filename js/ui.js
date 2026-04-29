@@ -2,6 +2,9 @@
 // UI - 界面更新
 // ============================================================
 
+import { state } from './state.js';
+import { CONFIG } from './config.js';
+
 // JPS 分类函数
 function classifyJPS(error) {
     if (error < 2) return { level: '优秀', zh: '优秀', color: '#22c55e' };
@@ -13,18 +16,10 @@ function classifyJPS(error) {
 }
 
 function updateDataDisplay() {
-    let displayPitch, displayYaw, displayRoll;
-    if (state.useGyroscope) {
-        // 陀螺仪模式：偏移量已在 updateFromGyroscope 中减过
-        displayPitch = state.pitch;
-        displayYaw = state.yaw;
-        displayRoll = state.roll;
-    } else {
-        // 鼠标模式：需要手动减偏移
-        displayPitch = state.pitch - state.pitchOffset;
-        displayYaw = state.yaw - state.yawOffset;
-        displayRoll = state.roll - state.rollOffset;
-    }
+    // 陀螺仪模式 offset 已在 updateFromGyroscope 中减过，不重复减
+    const displayPitch = state.useGyroscope ? state.pitch : state.pitch - state.pitchOffset;
+    const displayYaw = state.useGyroscope ? state.yaw : state.yaw - state.yawOffset;
+    const displayRoll = state.useGyroscope ? state.roll : state.roll - state.rollOffset;
     document.getElementById('pitch-value').textContent = displayPitch.toFixed(1) + '°';
     document.getElementById('yaw-value').textContent = displayYaw.toFixed(1) + '°';
     document.getElementById('roll-value').textContent = displayRoll.toFixed(1) + '°';
@@ -35,9 +30,27 @@ function updateDataDisplay() {
 }
 
 function zeroPosition() {
-    state.pitchOffset = state.pitch;
-    state.yawOffset = state.yaw;
-    state.rollOffset = state.roll;
+    if (state.useGyroscope) {
+        // 陀螺仪模式：state.pitch = rawPitch - pitchOffset
+        // 归零需要将 offset 设为原始值：rawPitch = state.pitch + pitchOffset
+        state.pitchOffset = state.pitch + state.pitchOffset;
+        state.yawOffset = state.yaw + state.yawOffset;
+        state.rollOffset = state.roll + state.rollOffset;
+        // 立即归零显示值，不等下一次陀螺仪数据
+        state.pitch = 0;
+        state.yaw = 0;
+        state.roll = 0;
+        // 同步重置光点和显示位置，避免平滑插值产生漂移
+        state.dotX = 0;
+        state.dotY = 0;
+        state.displayDotX = 0;
+        state.displayDotY = 0;
+    } else {
+        // 鼠标模式：state.pitch 不含 offset，display = state.pitch - pitchOffset
+        state.pitchOffset = state.pitch;
+        state.yawOffset = state.yaw;
+        state.rollOffset = state.roll;
+    }
 
     // ROM检测模式：romStepIndex=0未开始, 1-6进行中, 7完成
     // 只有采集后才能归零进入下一步
@@ -46,7 +59,7 @@ function zeroPosition() {
             // 第一次归零：开始检测
             state.romStepIndex = 1;
             state.romIsWaitingForZero = false;
-            updateROMGuide();
+            window.updateROMGuide();
         } else if (state.romStepIndex >= 1 && state.romStepIndex <= 6 && state.romIsWaitingForZero === false) {
             // 已开始但还未采集就归零：忽略
         } else if (state.romStepIndex >= 1 && state.romStepIndex <= 6 && state.romIsWaitingForZero) {
@@ -58,27 +71,27 @@ function zeroPosition() {
             } else {
                 state.romStepIndex++;
             }
-            updateROMGuide();
+            window.updateROMGuide();
         }
     }
 
     // 位置觉检测模式
     if (state.mode === 'position') {
         if (state.positionStepIndex === 0) {
-            // 第一次归零：记录初始位置并开始检测
-            state.positionInitialPitch = state.pitch;
-            state.positionInitialYaw = state.yaw;
-            state.positionInitialRoll = state.roll;
+            // 第一次归零：归零后的位置就是基准0°
+            state.positionInitialPitch = 0;
+            state.positionInitialYaw = 0;
+            state.positionInitialRoll = 0;
             state.positionStepIndex = 1;
             state.positionIsRunning = true;
-            updatePositionGuide();
+            window.updatePositionGuide();
         } else if (state.positionStepIndex > 0 && state.positionIsRunning === 'waiting_for_zero') {
-            // 采集后的归零：记录新的初始位置，进入下一步
-            state.positionInitialPitch = state.pitch;
-            state.positionInitialYaw = state.yaw;
-            state.positionInitialRoll = state.roll;
+            // 采集后的归零：归零后的位置就是新的基准0°
+            state.positionInitialPitch = 0;
+            state.positionInitialYaw = 0;
+            state.positionInitialRoll = 0;
             state.positionIsRunning = true;
-            updatePositionGuide();
+            window.updatePositionGuide();
         }
     }
 }
@@ -101,16 +114,10 @@ function collectPoint() {
         return;
     }
 
-    let dispPitch, dispYaw, dispRoll;
-    if (state.useGyroscope) {
-        dispPitch = state.pitch;
-        dispYaw = state.yaw;
-        dispRoll = state.roll;
-    } else {
-        dispPitch = state.pitch - state.pitchOffset;
-        dispYaw = state.yaw - state.yawOffset;
-        dispRoll = state.roll - state.rollOffset;
-    }
+    // 陀螺仪模式 offset 已在 updateFromGyroscope 中减过
+    const dispPitch = state.useGyroscope ? state.pitch : state.pitch - state.pitchOffset;
+    const dispYaw = state.useGyroscope ? state.yaw : state.yaw - state.yawOffset;
+    const dispRoll = state.useGyroscope ? state.roll : state.roll - state.rollOffset;
     const point = {
         id: Date.now(),
         dotX: state.dotX,
@@ -128,7 +135,7 @@ function collectPoint() {
         state.romResults[step.name] = point[step.axis];
         state.romIsWaitingForZero = true;
         // updateROMGuide中已有TTS播报"请归零进入下一步"
-        updateROMGuide();
+        window.updateROMGuide();
     }
 
     // 在romResults设置后再更新显示
@@ -217,7 +224,7 @@ function showROMResults() {
         state.romIsWaitingForZero = false;
         state.collectedPoints = [];
         showROMInlineResults();
-        updateROMGuide();
+        window.updateROMGuide();
         document.getElementById('close-modal').textContent = '确定';
         document.getElementById('close-modal').onclick = closeModal;
     };
@@ -260,9 +267,9 @@ function updateProgress() {
     } else if (state.progress >= 0.5) {
         progressRing.classList.add('warning');
         // 中途提示（只在50%时播报一次）
-        if (TTS_CONFIG.enabled && state.lastAnnouncedProgress < 0.5) {
+        if (window.TTS_CONFIG.enabled && state.lastAnnouncedProgress < 0.5) {
             if (state.mode === 'integrated' || state.mode === 'coordination') {
-                speak('继续跟踪');
+                window.speak('继续跟踪');
             }
         }
     }
@@ -540,19 +547,19 @@ function showResults() {
     }
 
     // 语音播报结果
-    if (TTS_CONFIG.enabled) {
+    if (window.TTS_CONFIG.enabled) {
         if (state.mode === 'integrated') {
-            speakResultsIntegrated({ position: positionScore, stability: stabilityScore, rom: romScore, coordination: coordinationScore });
+            window.speakResultsIntegrated({ position: positionScore, stability: stabilityScore, rom: romScore, coordination: coordinationScore });
         } else if (state.mode === 'coordination') {
-            speakResultsCoordination(coordinationScore);
+            window.speakResultsCoordination(coordinationScore);
         } else if (state.mode === 'rom') {
-            speakResultsROM(state.romResults);
+            window.speakResultsROM(state.romResults);
         } else if (state.mode === 'position') {
-            speakResultsPosition(state.positionResults);
+            window.speakResultsPosition(state.positionResults);
         }
     }
 
     document.getElementById('result-modal').classList.add('show');
 }
 
-export { renderCollectedPoints, updateDataDisplay, updateProgress, zeroPosition, collectPoint, showROMResults };
+export { renderCollectedPoints, updateDataDisplay, updateProgress, zeroPosition, collectPoint, showROMResults, showROMInlineResults };

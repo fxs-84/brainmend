@@ -30,11 +30,17 @@ function resizeCanvas() {
 // ============================================================
 
 function animate() {
+    // 绿色光点平滑插值：消除陀螺仪数据低频更新导致的卡顿
+    // 0.7 = 99%收敛约4帧(67ms)，兼顾流畅与响应，避免低平滑因子产生的拖尾漂移
+    const smoothFactor = 0.7;
+    state.displayDotX += (state.dotX - state.displayDotX) * smoothFactor;
+    state.displayDotY += (state.dotY - state.displayDotY) * smoothFactor;
+
     drawCrosshair();
     updateDataDisplay();
 
-    // 鼠标模式下：非拖动时缓慢回到中心
-    if (!state.useGyroscope && !isDraggingDot) {
+    // 鼠标模式下：非拖动时缓慢回到中心（协调性跟踪期间禁用，避免绿色光点漂移）
+    if (!state.useGyroscope && !isDraggingDot && state.mode !== 'coordination') {
         state.dotX *= CONFIG.DOT_RETURN_SPEED;
         state.dotY *= CONFIG.DOT_RETURN_SPEED;
         state.yaw = state.dotX * state.yawCoefficient;

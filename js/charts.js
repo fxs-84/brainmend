@@ -279,3 +279,6 @@ function drawResultCharts(scores, romData = null) {
         drawROMChart(romCanvas, romData, 280, 100);
     }
 }
+
+window.drawRadarChart = drawRadarChart;
+window.drawROMChart = drawROMChart;

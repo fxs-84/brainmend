@@ -117,6 +117,16 @@ export class GameUI {
                     </div>
                 </div>
 
+                <!-- 归零按钮 -->
+                <button id="zero-gyro-btn" style="
+                    width: 100%; padding: 10px; background: #374151;
+                    border: none; border-radius: 8px; color: white;
+                    font-size: 14px; font-weight: bold; cursor: pointer;
+                    margin-bottom: 10px; transition: transform 0.1s;
+                ">
+                    归零校准
+                </button>
+
                 <!-- 开始按钮 -->
                 <button id="start-game-btn" style="
                     width: 100%; padding: 14px; background: var(--primary);
@@ -141,6 +151,9 @@ export class GameUI {
 
         // 绑定运动模式选择事件
         this.bindModeEvents();
+
+        // 绑定归零按钮
+        this.bindZeroEvent();
 
         // 绑定开始按钮
         this.bindStartEvent();
@@ -181,6 +194,40 @@ export class GameUI {
     }
 
     /**
+     * 绑定归零按钮
+     */
+    bindZeroEvent() {
+        const zeroBtn = document.getElementById('zero-gyro-btn');
+        if (zeroBtn) {
+            let zeroTimeout;
+            zeroBtn.addEventListener('click', () => {
+                // 归零校准：将当前角度设置为中立0°
+                // 陀螺仪模式：state.yaw = rawYaw - yawOffset，归零需设 offset = rawYaw
+                if (window.state) {
+                    window.state.yawOffset = window.state.yaw + window.state.yawOffset;
+                    window.state.pitchOffset = window.state.pitch + window.state.pitchOffset;
+                    window.state.rollOffset = window.state.roll + window.state.rollOffset;
+                    window.state.pitch = 0;
+                    window.state.yaw = 0;
+                    window.state.roll = 0;
+                    window.state.dotX = 0;
+                    window.state.dotY = 0;
+                    window.state.displayDotX = 0;
+                    window.state.displayDotY = 0;
+                    // 视觉反馈
+                    zeroBtn.textContent = '已归零 ✓';
+                    zeroBtn.style.background = '#059669';
+                    if (zeroTimeout) clearTimeout(zeroTimeout);
+                    zeroTimeout = setTimeout(() => {
+                        zeroBtn.textContent = '归零校准';
+                        zeroBtn.style.background = '#374151';
+                    }, 1000);
+                }
+            });
+        }
+    }
+
+    /**
      * 绑定开始按钮
      */
     bindStartEvent() {
@@ -195,7 +242,7 @@ export class GameUI {
     /**
      * 开始游戏
      */
-    startGame() {
+    async startGame() {
         // 隐藏选择界面
         const panel = document.getElementById('game-select-panel');
         if (panel) {
@@ -206,8 +253,8 @@ export class GameUI {
         const modeToSet = this.selectedMode === 'shooting' ? MotionMapper.MODES.SINGLE_YAW : this.selectedMode;
         this.engine.setMotionMode(modeToSet);
 
-        // 设置场景
-        this.setScene(this.selectedScene);
+        // 设置场景（等待场景加载完成）
+        await this.setScene(this.selectedScene);
 
         // 开始游戏
         this.engine.start();
@@ -216,31 +263,33 @@ export class GameUI {
     /**
      * 设置游戏场景
      */
-    setScene(sceneName) {
+    async setScene(sceneName) {
         // 射击模式特殊处理
         if (this.selectedMode === 'shooting') {
-            import(`./scene-space-shooting.js`).then(module => {
+            try {
+                const module = await import(`./scene-space-shooting.js`);
                 const SceneClass = module.SceneSpaceShooting;
                 if (SceneClass) {
                     const scene = new SceneClass();
                     this.engine.setScene(scene);
                 }
-            }).catch(err => {
+            } catch (err) {
                 console.error('Failed to load shooting scene:', err);
-            });
+            }
             return;
         }
 
         // 普通模式动态导入场景
-        import(`./scene-${sceneName}.js`).then(module => {
+        try {
+            const module = await import(`./scene-${sceneName}.js`);
             const SceneClass = module[`Scene${sceneName.charAt(0).toUpperCase() + sceneName.slice(1)}`];
             if (SceneClass) {
                 const scene = new SceneClass();
                 this.engine.setScene(scene);
             }
-        }).catch(err => {
+        } catch (err) {
             console.error('Failed to load scene:', err);
-        });
+        }
     }
 
     /**

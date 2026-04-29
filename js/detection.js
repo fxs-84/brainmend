@@ -108,11 +108,11 @@ function updateCoordination(elapsed) {
     // 使用时间进度，兼容COORDINATION_DURATION设置
     state.progress = Math.min(1, elapsed / CONFIG.COORDINATION_DURATION);
 
-    // 计算像素范围（与 input.js 中的 hLineLength/vLineLength 一致）
-    const hLineLength = crosshairSize / 2 - 15;   // 水平80°对应的像素范围
-    const vLineLength = ringRadius * 0.85;          // 垂直45°对应的像素范围
+    const hLineLength = crosshairSize / 2 - 15;
+    const vLineLength = ringRadius * 0.85;
+    // 45°物理偏移对应的像素（按模块 yawRange 动态计算）
+    const angle45Offset = hLineLength * 45 / state.yawRange;
 
-    // targetX/Y 直接使用像素值（与 state.dotX/dotY 坐标系一致）
     let targetX, targetY;
     if (state.trajectoryType === 'horizontal') {
         targetX = Math.sin(smoothT) * hLineLength;
@@ -121,13 +121,9 @@ function updateCoordination(elapsed) {
         targetX = 0;
         targetY = Math.sin(smoothT) * vLineLength;
     } else if (state.trajectoryType === 'vertical_left') {
-        // 左45°位置：x偏移 = hLineLength * (45°/80°), y范围 = vLineLength
-        const angle45Offset = hLineLength * 45 / 80;
         targetX = -angle45Offset;
         targetY = Math.sin(smoothT) * vLineLength;
     } else if (state.trajectoryType === 'vertical_right') {
-        // 右45°位置
-        const angle45Offset = hLineLength * 45 / 80;
         targetX = angle45Offset;
         targetY = Math.sin(smoothT) * vLineLength;
     } else {

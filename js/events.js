@@ -6,8 +6,8 @@ import { state } from './state.js';
 import { CONFIG } from './config.js';
 import { canvas, crosshairSize, ringRadius, resizeCanvas, animate } from './canvas.js';
 import { initInput } from './input.js';
-import { initTTS, toggleTTS, speakWithCallback } from './tts.js';
-import { renderCollectedPoints, updateProgress, zeroPosition, collectPoint, showROMResults } from './ui.js';
+import { initTTS, toggleTTS, speakWithCallback, speak } from './tts.js';
+import { renderCollectedPoints, updateProgress, zeroPosition, collectPoint, showROMResults, showROMInlineResults } from './ui.js';
 import { updateCoordination } from './detection.js';
 
 let lastZoomFactor = 1;
@@ -21,6 +21,7 @@ function setMode(mode) {
         }
     }
 
+    const prevMode = state.mode;
     state.mode = mode;
     document.querySelectorAll('.mode-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.mode === mode);
@@ -36,6 +37,8 @@ function setMode(mode) {
 
     // ROM检测初始化
     if (mode === 'rom') {
+        state.yawRange = 80;
+        state.pitchRange = 45;
         state.romStepIndex = 0;
         state.romResults = {};
         state.romIsWaitingForZero = false;
@@ -46,6 +49,8 @@ function setMode(mode) {
 
     // 位置觉检测初始化
     if (mode === 'position') {
+        state.yawRange = 80;
+        state.pitchRange = 45;
         state.positionStepIndex = 0;
         state.positionResults = [];
         state.positionIsRunning = false;
@@ -54,6 +59,8 @@ function setMode(mode) {
 
     // 协调性检测初始化
     if (mode === 'coordination') {
+        state.yawRange = 35;
+        state.pitchRange = 22.5;
         state.coordScores = { tracking: [], trajectory: [], smoothness: [] };
         state.coordFailTime = 0;
         state.coordFullScores = [];
@@ -66,22 +73,46 @@ function setMode(mode) {
 
     // 游戏模式初始化
     if (mode === 'game') {
+        state.yawRange = 45;
+        state.pitchRange = 22.5;
         initGame();
     }
 
+    // 按当前模块范围重算角度系数
+    const hLineLen = crosshairSize / 2 - 15;
+    const vLineLen = ringRadius * 0.85;
+    state.yawCoefficient = state.yawRange / hLineLen;
+    state.pitchCoefficient = state.pitchRange / vLineLen;
+
+    state.isRunning = false;
     state.progress = 0;
     state.lastAnnouncedProgress = -1;
     state.holdTime = 0;
-    state.integratedPhase = 0;
     updateProgress();
     state.trail = [];
     state.fullTrail = [];
     state.lastError = 0;
     state.collectedPoints = [];
     renderCollectedPoints();
-    state.pitchOffset = 0;
-    state.yawOffset = 0;
-    state.rollOffset = 0;
+
+    // 重置各检测模块的按钮状态
+    const coordBtn = document.getElementById('action-btn-coord');
+    if (coordBtn) {
+        coordBtn.textContent = '开始检测';
+        coordBtn.disabled = false;
+    }
+    const actionBtn = document.getElementById('action-btn');
+    if (actionBtn) {
+        actionBtn.textContent = '开始检测';
+        actionBtn.disabled = false;
+    }
+
+    // 仅在切换到不同模式时重置归零偏移
+    if (mode !== prevMode) {
+        state.pitchOffset = 0;
+        state.yawOffset = 0;
+        state.rollOffset = 0;
+    }
 
     if (mode === 'integrated' || mode === 'coordination') {
         state.targetX = 0;
@@ -368,17 +399,9 @@ function startDetection() {
         updateCoordinationModeUI();
         updateCoordinationTrajectoryUI();
         updateCoordinationFullProgressUI();
-    } else {
-        state.testDuration = CONFIG.INTEGRATED_DURATION;
-    }
-
-    state.romRange = { pitch: { min: state.pitch, max: state.pitch }, yaw: { min: state.yaw, max: state.yaw } };
-    state.integratedResults = { positionScore: 0, stabilityScore: 0, romScore: 0 };
-    state.collectedPoints = [];
-    renderCollectedPoints();
-
-    // 启动协调性检测循环
-    if (state.mode === 'coordination' && state.coordMode === 'single') {
+        // 语音播报完成后再启动红色光点移动
+        speakWithCallback('请跟随红色光点，保持同步移动', () => {
+            if (state.coordMode === 'single') {
         const btn = document.getElementById('action-btn-coord');
         btn.textContent = '检测中...';
         btn.disabled = true;
@@ -405,8 +428,56 @@ function startDetection() {
             requestAnimationFrame(updateCoordLoop);
         }
         requestAnimationFrame(updateCoordLoop);
+            } else {
+                // Full mode: 启动通用检测循环
+                const coordBtn = document.getElementById('action-btn-coord');
+                if (coordBtn) {
+                    coordBtn.textContent = '检测中...';
+                    coordBtn.disabled = true;
+                }
+                const startTime = Date.now();
+                function updateFull() {
+                    if (!state.isRunning) return;
+                    const elapsed = (Date.now() - startTime) / 1000;
+                    updateCoordination(elapsed);
+                    updateProgress();
+                    if (state.progress >= 1) {
+                        state.isRunning = false;
+                        const scores = state.coordScores;
+                        if (scores && scores.tracking.length > 0) {
+                            const avgTracking = scores.tracking.reduce((a, b) => a + b, 0) / scores.tracking.length;
+                            const avgTrajectory = scores.trajectory.reduce((a, b) => a + b, 0) / scores.trajectory.length;
+                            const avgSmoothness = scores.smoothness.reduce((a, b) => a + b, 0) / scores.smoothness.length;
+                            const trajectoryScore = avgTracking * 0.4 + avgTrajectory * 0.3 + avgSmoothness * 0.3;
+                            state.coordFullScores.push({ trajectory: state.trajectoryType, score: trajectoryScore });
+                        }
+                        state.coordCurrentTrajectoryIndex++;
+                        if (state.coordCurrentTrajectoryIndex < CONFIG.COORD_TRAJECTORIES.length) {
+                            const trajNames = { 'horizontal': '水平', 'vertical': '垂直', 'vertical_left': '垂直左', 'vertical_right': '垂直右', 'figure8': '8字' };
+                            coordBtn.textContent = `继续 (${state.coordCurrentTrajectoryIndex + 1}/${CONFIG.COORD_TRAJECTORIES.length})`;
+                            coordBtn.disabled = false;
+                            updateCoordinationFullProgressUI();
+                        } else {
+                            const totalScore = state.coordFullScores.reduce((sum, s) => sum + s.score, 0) / state.coordFullScores.length;
+                            state.results.coordination = totalScore;
+                            stopDetection();
+                        }
+                        return;
+                    }
+                    requestAnimationFrame(updateFull);
+                }
+                requestAnimationFrame(updateFull);
+            }
+        });
         return;
+    } else {
+        state.testDuration = CONFIG.INTEGRATED_DURATION;
     }
+
+    state.romRange = { pitch: { min: state.pitch, max: state.pitch }, yaw: { min: state.yaw, max: state.yaw } };
+    state.integratedResults = { positionScore: 0, stabilityScore: 0, romScore: 0 };
+    state.collectedPoints = [];
+    renderCollectedPoints();
 
     // 根据模式设置对应的按钮状态
     if (state.mode === 'coordination') {
@@ -537,6 +608,7 @@ function stopDetection() {
             coordBtn.textContent = '开始检测';
             coordBtn.disabled = false;
         }
+        speak('跟踪结束');
     } else {
         document.getElementById('action-btn').textContent = '开始检测';
         document.getElementById('action-btn').disabled = false;
@@ -689,9 +761,9 @@ function init() {
                 b.style.color = b === btn ? 'var(--bg-dark)' : 'var(--text)';
             });
 
-            // 垂直左右跳转 - 使用旋转45°位置（半规管测试角度）
+            // 垂直左右跳转 - 旋转45°位置（半规管测试角度）
             const hLineLength = crosshairSize / 2 - 15;
-            const angle45Offset = hLineLength * 45 / 80;
+            const angle45Offset = hLineLength * 45 / state.yawRange;
             if (state.trajectoryType === 'vertical_left') {
                 state.targetX = -angle45Offset;
                 state.targetY = 0;
@@ -878,6 +950,7 @@ function init() {
     function closeModal() {
         document.getElementById('result-modal').classList.remove('show');
     }
+    window.closeModal = closeModal;
     document.getElementById('close-modal').addEventListener('click', closeModal);
 
     // 时钟
@@ -1291,12 +1364,12 @@ function init() {
                 logGyroDebug('无写入特征，跳过初始化指令');
             }
 
-            // 正确初始化角度系数（鼠标模式下在 updateDotPosition 里动态算，陀螺仪模式需要提前设置）
+            // 按模块映射范围计算角度系数
             const hLineLen = crosshairSize / 2 - 15;
             const vLineLen = ringRadius * 0.85;
-            state.yawCoefficient = 80 / hLineLen;    // 水平 ±80° 对应 hLineLength 像素
-            state.pitchCoefficient = 45 / vLineLen;   // 垂直 ±45° 对应 vLineLength 像素
-            logGyroDebug(`角度系数已初始化: yaw=${state.yawCoefficient.toFixed(3)} pitch=${state.pitchCoefficient.toFixed(3)}`);
+            state.yawCoefficient = state.yawRange / hLineLen;
+            state.pitchCoefficient = state.pitchRange / vLineLen;
+            logGyroDebug(`角度系数: yaw=${state.yawCoefficient.toFixed(3)}(${state.yawRange}°) pitch=${state.pitchCoefficient.toFixed(3)}(${state.pitchRange}°)`);
             logGyroDebug(`画布尺寸: hLine=${hLineLen.toFixed(0)}px vLine=${vLineLen.toFixed(0)}px`);
 
             // 更新UI
@@ -1506,4 +1579,7 @@ function init() {
     });
 }
 
-export { init };
+window.updatePositionGuide = updatePositionGuide;
+window.updateROMGuide = updateROMGuide;
+
+export { init, updatePositionGuide };

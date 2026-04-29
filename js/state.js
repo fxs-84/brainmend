@@ -13,9 +13,12 @@ const createState = () => ({
     yaw: 0,
     roll: 0,
 
-    // 光点位置
+    // 光点位置（原始/物理位置）
     dotX: 0,
     dotY: 0,
+    // 平滑后的显示位置（用于渲染，消除陀螺仪数据低频更新导致的卡顿）
+    displayDotX: 0,
+    displayDotY: 0,
 
     // 目标点位置（替换 window.targetX/Y）
     targetX: 0,
@@ -45,6 +48,10 @@ const createState = () => ({
     // 角度系数（动态计算以匹配实际显示范围）
     yawCoefficient: 0.8,
     pitchCoefficient: 0.53,
+
+    // 各模块角度映射范围（默认 ROM 检测的完整范围）
+    yawRange: 80,
+    pitchRange: 45,
 
     // 检测状态
     holdTime: 0,

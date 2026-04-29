@@ -251,7 +251,7 @@ function drawCrosshair() {
     drawStaticElements();
     drawTrajectory(actualCenterX, actualCenterY, scale);
     drawTargetDot(actualCenterX, actualCenterY, scale, state.targetX, state.targetY);
-    drawPositionDot(actualCenterX, actualCenterY, scale, state.dotX, state.dotY);
+    drawPositionDot(actualCenterX, actualCenterY, scale, state.displayDotX, state.displayDotY);
     drawTrail(actualCenterX, actualCenterY);
 }
 
