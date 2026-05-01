@@ -12,8 +12,10 @@ export let spacePressed = false;
 
 // EMA基线追踪（全局漂移补偿，所有模式共享）
 let _emaYaw = null, _emaPitch = null, _emaRoll = null;
-const EMA_ALPHA = 0.997; // ~5秒半衰期：追踪漂移不追踪动作
-window._resetGyroEMA = () => { _emaYaw = null; _emaPitch = null; _emaRoll = null; };
+let _emaWarmup = 0;
+const EMA_ALPHA = 0.9995; // ~23秒半衰期：极慢追踪，慢速康复动作不被吸收
+const EMA_WARMUP = 0.9;    // 初始化时快速收敛
+window._resetGyroEMA = () => { _emaYaw = null; _emaPitch = null; _emaRoll = null; _emaWarmup = 0; };
 
 function updateFromGyroscope(gyroData) {
     if (!state.useGyroscope) return;
@@ -23,10 +25,13 @@ function updateFromGyroscope(gyroData) {
     const rawRoll = gyroData.roll || 0;
 
     // EMA基线：吸收传感器慢速漂移
-    if (_emaYaw === null) { _emaYaw = rawYaw; _emaPitch = rawPitch; _emaRoll = rawRoll; }
-    _emaYaw = _emaYaw * EMA_ALPHA + rawYaw * (1 - EMA_ALPHA);
-    _emaPitch = _emaPitch * EMA_ALPHA + rawPitch * (1 - EMA_ALPHA);
-    _emaRoll = _emaRoll * EMA_ALPHA + rawRoll * (1 - EMA_ALPHA);
+    if (_emaYaw === null) { _emaYaw = rawYaw; _emaPitch = rawPitch; _emaRoll = rawRoll; _emaWarmup = 0; }
+    // 前60帧(~0.6s)用较快alpha快速收敛到真实基线
+    const a = _emaWarmup < 60 ? EMA_WARMUP : EMA_ALPHA;
+    _emaWarmup++;
+    _emaYaw = _emaYaw * a + rawYaw * (1 - a);
+    _emaPitch = _emaPitch * a + rawPitch * (1 - a);
+    _emaRoll = _emaRoll * a + rawRoll * (1 - a);
 
     // state = (去漂移) - 归零偏移 = 干净的有意运动
     state.yaw = (rawYaw - _emaYaw) - state.yawOffset;

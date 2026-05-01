@@ -1467,23 +1467,18 @@ function init() {
                 const angY = view.getInt16(4, true) / 32768 * 180; // Pitch 俯仰/点头
                 const angZ = view.getInt16(6, true) / 32768 * 180; // Roll  翻滚/侧屈
 
-                // Yaw 360°边界修正：传感器yaw范围-180~180，穿过边界时角度跳变360°
-                // 检测相邻帧raw yaw差值，差值>180°说明跨边界，修正为连续角度
+                // Yaw 360°边界修正：传感器范围-180~180，跨边界时修正跳变
                 let rawYaw = -angX;
                 if (_lastYaw !== null) {
                     let delta = rawYaw - _lastYaw;
                     if (delta > 180) delta -= 360;
                     if (delta < -180) delta += 360;
-                    const continuousYaw = _lastYaw + delta;
-                    // 低通滤波消除传感器静置时的漂移噪声（仅影响dotX）
-                    // 0.85 = 85%保留上帧值，15%采新值，收敛快(~6帧)且平滑
-                    const filteredYaw = _lastYaw * 0.85 + continuousYaw * 0.15;
-                    window.updateFromGyroscope({ pitch: -angY, yaw: filteredYaw, roll: angZ });
-                    _lastYaw = filteredYaw;
-                } else {
-                    window.updateFromGyroscope({ pitch: -angY, yaw: rawYaw, roll: angZ });
-                    _lastYaw = rawYaw;
+                    rawYaw = _lastYaw + delta;
                 }
+                // 不再做低通滤波——EMA漂移补偿在updateFromGyroscope中统一处理
+                // 双重滤波会造成信号延时被误判为漂移
+                window.updateFromGyroscope({ pitch: -angY, yaw: rawYaw, roll: angZ });
+                _lastYaw = rawYaw;
                 _frameCount++;
                 _eulerFrameCount++;
                 // 前50帧每帧都打印，之后每10帧打印一次
