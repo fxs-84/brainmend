@@ -654,10 +654,14 @@ export class GameEngine {
     }
 
     /**
-     * 开始游戏
+     * 开始游戏（强制重启，绕过 setState 的同状态检查）
      */
     start() {
-        this.setState(GameState.PLAYING);
+        this.state = GameState.PLAYING;
+        this.previousState = GameState.MENU;
+        this.reset();
+        this.lastTime = performance.now();
+        this.startGameLoop();
     }
 
     /**
@@ -675,5 +679,8 @@ export class GameEngine {
         if (this.currentScene) {
             this.currentScene.cleanup();
         }
+        this.state = GameState.MENU;
+        this.currentScene = null;
+        this.isShootingMode = false;
     }
 }

@@ -114,7 +114,11 @@ function updateCoordination(elapsed) {
     const angle45Offset = hLineLength * 45 / state.yawRange;
 
     let targetX, targetY;
-    if (state.trajectoryType === 'horizontal') {
+    if (state.trajectoryType === 'free') {
+        // 自由跟踪实验：红点静止在中心，只记录绿点轨迹
+        targetX = 0;
+        targetY = 0;
+    } else if (state.trajectoryType === 'horizontal') {
         targetX = Math.sin(smoothT) * hLineLength;
         targetY = 0;
     } else if (state.trajectoryType === 'vertical') {

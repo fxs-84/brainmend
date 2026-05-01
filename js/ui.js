@@ -23,7 +23,7 @@ function updateDataDisplay() {
     document.getElementById('pitch-value').textContent = displayPitch.toFixed(1) + '°';
     document.getElementById('yaw-value').textContent = displayYaw.toFixed(1) + '°';
     document.getElementById('roll-value').textContent = displayRoll.toFixed(1) + '°';
-    state.error = Math.sqrt(state.dotX ** 2 + state.dotY ** 2);
+    state.error = Math.sqrt(state.yaw ** 2 + state.pitch ** 2);
     document.getElementById('error-value').textContent = state.error.toFixed(1) + '°';
     document.getElementById('dot-x').textContent = Math.round(state.dotX);
     document.getElementById('dot-y').textContent = Math.round(state.dotY);
@@ -31,16 +31,12 @@ function updateDataDisplay() {
 
 function zeroPosition() {
     if (state.useGyroscope) {
-        // 陀螺仪模式：state.pitch = rawPitch - pitchOffset
-        // 归零需要将 offset 设为原始值：rawPitch = state.pitch + pitchOffset
         state.pitchOffset = state.pitch + state.pitchOffset;
         state.yawOffset = state.yaw + state.yawOffset;
         state.rollOffset = state.roll + state.rollOffset;
-        // 立即归零显示值，不等下一次陀螺仪数据
         state.pitch = 0;
         state.yaw = 0;
         state.roll = 0;
-        // 同步重置光点和显示位置，避免平滑插值产生漂移
         state.dotX = 0;
         state.dotY = 0;
         state.displayDotX = 0;

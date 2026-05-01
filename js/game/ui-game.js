@@ -65,6 +65,13 @@ export class GameUI {
                         ">
                             ⚽ 接球
                         </button>
+                        <button class="scene-btn" data-scene="valley" style="
+                            flex: 1; padding: 12px; border: 2px solid transparent;
+                            border-radius: 8px; background: #1E293B; color: white;
+                            cursor: pointer; transition: all 0.2s;
+                        ">
+                            ✈️ 山谷飞行
+                        </button>
                     </div>
                 </div>
 
@@ -113,6 +120,13 @@ export class GameUI {
                             cursor: pointer; text-align: left;
                         ">
                             🎯 射击模式 - 消灭敌舰
+                        </button>
+                        <button class="mode-btn" data-mode="flight" style="
+                            padding: 10px; border: 2px solid transparent;
+                            border-radius: 6px; background: #1E293B; color: white;
+                            cursor: pointer; text-align: left;
+                        ">
+                            ✈️ 山谷飞行 - 全面姿态控制
                         </button>
                     </div>
                 </div>
@@ -249,15 +263,16 @@ export class GameUI {
             panel.style.display = 'none';
         }
 
-        // 设置运动模式（射击模式使用 SINGLE_YAW 左右转头控制）
-        const modeToSet = this.selectedMode === 'shooting' ? MotionMapper.MODES.SINGLE_YAW : this.selectedMode;
-        this.engine.setMotionMode(modeToSet);
-
         // 设置场景（等待场景加载完成）
-        await this.setScene(this.selectedScene);
+        const handledByScene = await this.setScene(this.selectedScene);
 
-        // 开始游戏
-        this.engine.start();
+        // 山谷飞行模式由 ValleyEngine 独立管理渲染，不需要 GameEngine
+        if (!handledByScene) {
+            // 设置运动模式（射击模式使用 SINGLE_YAW 左右转头控制）
+            const modeToSet = this.selectedMode === 'shooting' ? MotionMapper.MODES.SINGLE_YAW : this.selectedMode;
+            this.engine.setMotionMode(modeToSet);
+            this.engine.start();
+        }
     }
 
     /**
@@ -277,6 +292,29 @@ export class GameUI {
                 console.error('Failed to load shooting scene:', err);
             }
             return;
+        }
+
+        // 山谷飞行模式特殊处理 - 使用独立的ValleyEngine
+        if (this.selectedMode === 'flight' || sceneName === 'valley') {
+            try {
+                if (!window.valleyEngine) {
+                    const canvas = document.getElementById('crosshair-canvas');
+                    const module = await import(`./valley-engine.js`);
+                    window.valleyEngine = new module.ValleyEngine(canvas);
+                    window.valleyEngine.init();
+                    window.valleyEngine.onScoreUpdate = (score) => {
+                        const el = document.getElementById('game-score');
+                        if (el) el.textContent = '分数: ' + score;
+                    };
+                    window.valleyEngine.onGameOver = (score, grade, info) => {
+                        console.log('Valley game over:', { score, grade, info });
+                    };
+                }
+                window.valleyEngine.start();
+            } catch (err) {
+                console.error('Failed to load valley engine:', err);
+            }
+            return true; // 已由 ValleyEngine 接管
         }
 
         // 普通模式动态导入场景

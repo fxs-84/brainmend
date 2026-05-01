@@ -718,6 +718,14 @@ function init() {
     updateProgress();
     renderCollectedPoints();
 
+    // 山谷飞行模式：同步陀螺仪数据到valleyEngine（漂移补偿已在updateFromGyroscope中全局处理）
+    setInterval(() => {
+        if (window.valleyEngine && window.valleyEngine.state === 'playing') {
+            // state.pitch/yaw/roll 已经过全局EMA漂移补偿
+            window.valleyEngine.setGyroInput(state.pitch, state.yaw, state.roll);
+        }
+    }, 16);
+
     // TTS切换按钮
     document.getElementById('tts-toggle').addEventListener('click', toggleTTS);
 
@@ -806,6 +814,10 @@ function init() {
         // 清理游戏引擎状态
         if (window.gameEngine) {
             window.gameEngine.cleanup();
+        }
+        // 清理山谷飞行引擎状态
+        if (window.valleyEngine) {
+            window.valleyEngine.cleanup();
         }
         // 隐藏游戏视图，回到主界面（模式选择）
         // game-select-panel的隐藏由setMode处理
@@ -1417,6 +1429,7 @@ function init() {
     let _frameCount = 0;  // 帧计数器
     let _eulerFrameCount = 0;  // 欧拉角帧计数
     let _lastMagFrameTime = 0;  // 上次收到磁力计帧的时间
+    let _lastYaw = null; // 上一帧Yaw值，用于检测角度跳变（360°边界）
 
     function handleGyroscopeData(event) {
         const incoming = new Uint8Array(event.target.value.buffer,
@@ -1450,19 +1463,27 @@ function init() {
 
             // 0x3D 和 0x71 都可能是欧拉角帧（不同固件版本使用不同类型值）
             if (type === 0x3D || type === 0x71) {
-                // 角度帧 - 使用小端序（字节低位在前）
-                // 维特智能协议（此固件版本）：
-                // 字节0-1: 帧头0x55 0x71
-                // 字节2-3: 保留/版本 (总是 3d 00)
-                // 字节4-5: 角度X (Pitch/俯仰/点头)  int16
-                // 字节6-7: 角度Y (Roll/侧屈)        int16
-                // 字节8-9: 角度Z (Yaw/偏航/旋转)    int16
-                // 字节10-11: 校验和
                 const angX = view.getInt16(8, true) / 32768 * 180; // Yaw   偏航/旋转
                 const angY = view.getInt16(4, true) / 32768 * 180; // Pitch 俯仰/点头
                 const angZ = view.getInt16(6, true) / 32768 * 180; // Roll  翻滚/侧屈
-                // 点头(Pitch)→上下，旋转(Yaw)→左右，侧屈(Roll)仅记录
-                window.updateFromGyroscope({ pitch: -angY, yaw: -angX, roll: angZ });
+
+                // Yaw 360°边界修正：传感器yaw范围-180~180，穿过边界时角度跳变360°
+                // 检测相邻帧raw yaw差值，差值>180°说明跨边界，修正为连续角度
+                let rawYaw = -angX;
+                if (_lastYaw !== null) {
+                    let delta = rawYaw - _lastYaw;
+                    if (delta > 180) delta -= 360;
+                    if (delta < -180) delta += 360;
+                    const continuousYaw = _lastYaw + delta;
+                    // 低通滤波消除传感器静置时的漂移噪声（仅影响dotX）
+                    // 0.85 = 85%保留上帧值，15%采新值，收敛快(~6帧)且平滑
+                    const filteredYaw = _lastYaw * 0.85 + continuousYaw * 0.15;
+                    window.updateFromGyroscope({ pitch: -angY, yaw: filteredYaw, roll: angZ });
+                    _lastYaw = filteredYaw;
+                } else {
+                    window.updateFromGyroscope({ pitch: -angY, yaw: rawYaw, roll: angZ });
+                    _lastYaw = rawYaw;
+                }
                 _frameCount++;
                 _eulerFrameCount++;
                 // 前50帧每帧都打印，之后每10帧打印一次

@@ -102,6 +102,7 @@ function drawTrajectory(actualCenterX, actualCenterY, scale) {
     const isVertical = state.trajectoryType === 'vertical';
     const isVerticalLeft = state.trajectoryType === 'vertical_left';
     const isVerticalRight = state.trajectoryType === 'vertical_right';
+    const isFree = state.trajectoryType === 'free';
 
     // 使用与 state.dotX/dotY 相同的像素坐标系
     const hLineLength = crosshairSize / 2 - 15;   // 水平像素范围
@@ -130,6 +131,9 @@ function drawTrajectory(actualCenterX, actualCenterY, scale) {
             const angle45Offset = hLineLength * 45 / 80;
             pathX = actualCenterX + angle45Offset;
             pathY = actualCenterY - Math.cos(tParam) * vLineLength;
+        } else if (isFree) {
+            // 自由实验：红点固定在中心，无轨迹线
+            return;
         } else {
             pathX = actualCenterX + Math.sin(tParam) * hLineLength;
             pathY = actualCenterY;

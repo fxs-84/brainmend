@@ -16,6 +16,11 @@ import { SceneSpace } from './game/scene-space.js';
 import { SceneSpaceShooting } from './game/scene-space-shooting.js';
 import { SceneRoad } from './game/scene-road.js';
 import { SceneBall } from './game/scene-ball.js';
+import { SceneValley } from './game/scene-valley.js';
+
+// 山谷飞行引擎
+import { ValleyEngine, ValleyState } from './game/valley-engine.js';
+import { ValleyObstacle } from './game/valley-obstacle.js';
 
 // 障碍物
 import { Obstacle, ObstacleMeteor, ObstacleVehicle, ObstacleBall, ObstacleCoin, ObstacleGate, ObstacleWave, ObstacleSpiral } from './game/obstacle.js';
@@ -44,6 +49,10 @@ window.GameModule = {
     SceneSpaceShooting,
     SceneRoad,
     SceneBall,
+    SceneValley,
+    ValleyEngine,
+    ValleyState,
+    ValleyObstacle,
     Obstacle,
     ObstacleMeteor,
     ObstacleVehicle,

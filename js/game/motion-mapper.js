@@ -47,9 +47,8 @@ export const MotionMapper = {
                 break;
 
             case this.MODES.SINGLE_YAW:
-                // 仅X轴：yaw控制水平位置
-                // yaw负值=左转=屏幕左移，yaw正值=右转=屏幕右移
-                x = 0.5 + yaw * 0.4;
+                // 仅X轴：yaw控制水平位置，±1→0.0~1.0全屏
+                x = 0.5 + yaw * 0.5;
                 break;
 
             case this.MODES.SINGLE_ROLL:

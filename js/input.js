@@ -3,37 +3,44 @@
 // ============================================================
 
 import { state } from './state.js';
-import { canvas, crosshairSize, ringRadius } from './canvas.js';
+import { canvas, crosshairSize, ringRadius, centerX, centerY } from './canvas.js';
 import { updateDataDisplay } from './ui.js';
+import { CONFIG } from './config.js';
 
 export let isDraggingDot = false;
 export let spacePressed = false;
 
-// 陀螺仪输入模式更新（供外部调用）
+// EMA基线追踪（全局漂移补偿，所有模式共享）
+let _emaYaw = null, _emaPitch = null, _emaRoll = null;
+const EMA_ALPHA = 0.997; // ~5秒半衰期：追踪漂移不追踪动作
+window._resetGyroEMA = () => { _emaYaw = null; _emaPitch = null; _emaRoll = null; };
+
 function updateFromGyroscope(gyroData) {
     if (!state.useGyroscope) return;
 
-    // 陀螺仪直接给角度值（需要先减去偏移量）
     const rawYaw = gyroData.yaw || 0;
     const rawPitch = gyroData.pitch || 0;
     const rawRoll = gyroData.roll || 0;
 
-    // 应用归零偏移
-    state.yaw = rawYaw - state.yawOffset;
-    state.pitch = rawPitch - state.pitchOffset;
-    state.roll = rawRoll - state.rollOffset;
+    // EMA基线：吸收传感器慢速漂移
+    if (_emaYaw === null) { _emaYaw = rawYaw; _emaPitch = rawPitch; _emaRoll = rawRoll; }
+    _emaYaw = _emaYaw * EMA_ALPHA + rawYaw * (1 - EMA_ALPHA);
+    _emaPitch = _emaPitch * EMA_ALPHA + rawPitch * (1 - EMA_ALPHA);
+    _emaRoll = _emaRoll * EMA_ALPHA + rawRoll * (1 - EMA_ALPHA);
 
-    // 用系数反向算出像素位置，用于屏幕显示
+    // state = (去漂移) - 归零偏移 = 干净的有意运动
+    state.yaw = (rawYaw - _emaYaw) - state.yawOffset;
+    state.pitch = (rawPitch - _emaPitch) - state.pitchOffset;
+    state.roll = (rawRoll - _emaRoll) - state.rollOffset;
+
     state.dotX = state.yaw / state.yawCoefficient;
     state.dotY = -state.pitch / state.pitchCoefficient;
 
-    // 限制在范围内
     const hLineLength = crosshairSize / 2 - 15;
     const vLineLength = ringRadius * 0.85;
     state.dotX = Math.max(-hLineLength, Math.min(hLineLength, state.dotX));
     state.dotY = Math.max(-vLineLength, Math.min(vLineLength, state.dotY));
 
-    // 记录轨迹
     if (state.isRunning) {
         state.trail.push({ x: state.dotX, y: state.dotY });
         if (state.trail.length > state.maxTrailLength) {

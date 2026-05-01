@@ -58,7 +58,7 @@ export class InputAdapter {
      * 绑定鼠标事件
      */
     bindMouseEvents() {
-        const canvas = document.getElementById('game-canvas') || document.getElementById('canvas');
+        const canvas = document.getElementById('crosshair-canvas');
 
         if (!canvas) {
             console.warn('Canvas not found for mouse input');
@@ -146,7 +146,8 @@ export class InputAdapter {
      * 获取当前位置（归一化 0-1）
      */
     getPosition() {
-        if (this.inputSource === 'gyroscope') {
+        // 动态检测输入源：优先陀螺仪（state.useGyroscope），否则用鼠标
+        if (state.useGyroscope && this.hasRecentGyroData()) {
             return this.getGyroscopePosition();
         } else {
             return { x: this.mouseX, y: this.mouseY };
@@ -154,16 +155,21 @@ export class InputAdapter {
     }
 
     /**
+     * 检查是否有最近的陀螺仪数据（最近500ms内有更新）
+     */
+    hasRecentGyroData() {
+        return (state.pitch !== 0 || state.yaw !== 0 || state.roll !== 0) ||
+               (this._lastGyroTime && (Date.now() - this._lastGyroTime) < 500);
+    }
+
+    /**
      * 获取陀螺仪位置
      */
     getGyroscopePosition() {
-        // state.pitch/yaw/roll 已经在 updateFromGyroscope 中减去偏移量
-        // 直接使用归一化
-        const pitch = state.pitch / 45;  // 归一化到约-1到1
-        const yaw = state.yaw / 80;
+        // 归一化：pitch ±22.5°→±1, yaw ±35°→±1, roll ±45°→±1
+        const pitch = state.pitch / 22.5;
+        const yaw = state.yaw / 35;
         const roll = state.roll / 45;
-
-        // 根据运动模式返回不同的坐标
         return MotionMapper.mapToGame({ pitch, yaw, roll }, this.motionMode);
     }
 
@@ -207,5 +213,17 @@ export class InputAdapter {
             this.inputSource = 'mouse';
         }
         return this.inputSource;
+    }
+
+    /**
+     * 获取原始陀螺仪数据（用于山谷飞行模式）
+     * 返回 pitch, yaw, roll 原始值
+     */
+    getRawGyro() {
+        return {
+            pitch: state.pitch,
+            yaw: state.yaw,
+            roll: state.roll
+        };
     }
 }

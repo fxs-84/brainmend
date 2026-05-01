@@ -30,6 +30,13 @@ function resizeCanvas() {
 // ============================================================
 
 function animate() {
+    // 游戏模式：不绘制检测UI，让游戏引擎独占画布
+    if (state.mode === 'game') {
+        updateDataDisplay();
+        requestAnimationFrame(animate);
+        return;
+    }
+
     // 绿色光点平滑插值：消除陀螺仪数据低频更新导致的卡顿
     // 0.7 = 99%收敛约4帧(67ms)，兼顾流畅与响应，避免低平滑因子产生的拖尾漂移
     const smoothFactor = 0.7;
