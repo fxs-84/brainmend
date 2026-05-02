@@ -11,8 +11,12 @@
         <header>
             <div class="logo">颈椎康复训练</div>
             <div class="header-info">
+                <span id="current-patient" style="color:var(--primary);margin-right:10px;"></span>
+                <button id="fullscreen-btn" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;" title="全屏">⛶</button>
+                <button id="login-btn" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">用户登录</button>
                 <button id="toggle-input-mode" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">鼠标模式</button>
                 <button id="open-gyro-modal" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">蓝牙连接</button>
+                <button id="records-btn" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-left: 5px;">报告查询</button>
                 <button id="tts-toggle" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-left: 5px;">语音关闭</button>
             </div>
         </header>
@@ -46,8 +50,8 @@
                 <div id="view-mode-select">
                     <div class="panel-title">检测模式</div>
                     <div class="mode-grid">
-                        <button class="mode-btn active" data-mode="integrated"><span class="icon">◎</span>综合检测</button>
-                        <button class="mode-btn" data-mode="coordination"><span class="icon">∞</span>协调性</button>
+                        <button class="mode-btn" data-mode="integrated" style="display:none"><span class="icon">◎</span>综合检测</button>
+                        <button class="mode-btn active" data-mode="coordination"><span class="icon">∞</span>协调性</button>
                         <button class="mode-btn" data-mode="rom"><span class="icon">□</span>ROM检测</button>
                         <button class="mode-btn" data-mode="position"><span class="icon">◎</span>位置觉</button>
                         <button class="mode-btn" data-mode="game"><span class="icon">🎮</span>康复游戏</button>
@@ -93,6 +97,7 @@
                             <button class="traj-btn" data-traj="vertical_left" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直左</button>
                             <button class="traj-btn" data-traj="vertical_right" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直右</button>
                             <button class="traj-btn" data-traj="figure8" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">8字</button>
+                            <button class="traj-btn" data-traj="free" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: var(--warning); color: var(--bg-dark); border-radius: 4px; cursor: pointer; font-size: 10px;">自由(实验)</button>
                         </div>
                     </div>
                     <div class="panel-title" id="coord-current-trajectory" style="display: none;">当前轨迹: <span id="coord-current-traj-name">-</span></div>
@@ -117,6 +122,10 @@
                         <div style="display: flex; justify-content: space-between; padding: 3px 0;">
                             <span class="data-label">偏离</span>
                             <span class="data-value" id="coord-deviation">0.0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 3px 0;">
+                            <span class="data-label">漂移帧</span>
+                            <span class="data-value" id="coord-drift-count" style="color:var(--text-muted)">0</span>
                         </div>
                     </div>
                     <div id="coord-full-progress" style="display: none; margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px;">
@@ -162,7 +171,22 @@
                         <div style="font-size: 10px; color: var(--text-muted);">暂无结果</div>
                     </div>
                     <button class="collect-btn" id="zero-btn-position" style="background: var(--secondary);">⟳ 归零</button>
-                    <button class="action-btn" id="start-position-btn" style="background: var(--warning); margin-top: 5px;">开始检测</button>
+    <!-- 训练模式方向选择（默认隐藏） -->
+                    <div id="position-train-dirs" style="display:none;margin-top:6px;">
+                        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">选择训练方向</div>
+                        <div style="display:flex;flex-wrap:wrap;gap:4px;">
+                            <button class="traj-btn pos-dir-btn" data-dir="right_rotation" style="padding:4px 8px;font-size:10px;">右旋</button>
+                            <button class="traj-btn pos-dir-btn" data-dir="left_rotation" style="padding:4px 8px;font-size:10px;">左旋</button>
+                            <button class="traj-btn pos-dir-btn" data-dir="extension" style="padding:4px 8px;font-size:10px;">后伸</button>
+                            <button class="traj-btn pos-dir-btn" data-dir="flexion" style="padding:4px 8px;font-size:10px;">前屈</button>
+                            <button class="traj-btn pos-dir-btn" data-dir="right_lateral" style="padding:4px 8px;font-size:10px;">右屈</button>
+                            <button class="traj-btn pos-dir-btn" data-dir="left_lateral" style="padding:4px 8px;font-size:10px;">左屈</button>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:6px;margin-top:5px;">
+                        <button class="action-btn" id="start-position-btn" style="background: var(--warning); flex:2;">开始检测</button>
+                        <button class="action-btn" id="start-position-train-btn" style="background: var(--secondary); flex:1; font-size:10px;">训练模式</button>
+                    </div>
                 </div>
 
                 <!-- 游戏视图 - 使用主画布 -->
@@ -174,19 +198,7 @@
                     </div>
                 </div>
 
-                <div class="panel-title">光点位置</div>
-                <div class="data-card">
-                    <div class="data-row"><span class="data-label">X</span><span class="data-value" id="dot-x">0</span></div>
-                    <div class="data-row"><span class="data-label">Y</span><span class="data-value" id="dot-y">0</span></div>
-                </div>
-                <div class="panel-title">标靶大小</div>
-                <div class="data-card">
-                    <div class="data-row">
-                        <span class="data-label">缩放</span>
-                        <input type="range" id="zoom-slider" min="50" max="500" value="100" style="width: 80px;">
-                        <span class="data-value" id="zoom-value">100%</span>
-                    </div>
-                </div>
+                <!-- 光点位置和标靶缩放已移除，标靶用鼠标滚轮控制 -->
             </div>
         </main>
         <div id="status-bar">
@@ -263,7 +275,11 @@
                 <div id="rehab-suggestions-content" style="font-size: 11px; line-height: 1.6; color: var(--text);"></div>
             </div>
 
-            <button class="modal-btn" id="close-modal">确定</button>
+            <div style="display:flex;gap:8px;margin-top:16px;">
+                <button class="modal-btn" id="comprehensive-btn" style="flex:1;background:linear-gradient(135deg,#00D9A5,#0086FF)">综合报告</button>
+                <button class="modal-btn" id="save-patient-btn" style="flex:1;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2)">保存数据</button>
+                <button class="modal-btn" id="close-modal" style="flex:1">确定</button>
+            </div>
         </div>
     </div>
 
@@ -408,6 +424,55 @@
             <div style="display: flex; gap: 8px;">
                 <button class="modal-btn" id="close-game-report" style="flex: 1;">返回菜单</button>
                 <button class="modal-btn" id="restart-game" style="flex: 1; background: var(--primary);">再来一次</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 用户登录弹窗 -->
+    <div class="modal" id="login-modal">
+        <div class="modal-content" style="max-width: 360px;">
+            <div class="modal-title">客户信息</div>
+            <div style="margin:12px 0;">
+                <div style="display:flex;gap:8px;margin-bottom:8px;">
+                    <div style="flex:2">
+                        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">姓名 *</div>
+                        <input id="patient-name-input" placeholder="姓名" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
+                    </div>
+                    <div style="flex:1">
+                        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">性别</div>
+                        <select id="patient-gender-input" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
+                            <option value="">-</option><option value="男">男</option><option value="女">女</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <div style="flex:1">
+                        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">年龄</div>
+                        <input id="patient-age-input" placeholder="年龄" type="number" min="1" max="120" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
+                    </div>
+                    <div style="flex:2">
+                        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">编号/病历号</div>
+                        <input id="patient-id-input" placeholder="编号" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
+                    </div>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button class="modal-btn" id="login-ok-btn" style="flex:1;">确认登录</button>
+                <button class="modal-btn" id="login-cancel-btn" style="flex:1;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2)">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 报告查询弹窗 -->
+    <div class="modal" id="records-modal">
+        <div class="modal-content" style="max-width: 500px; max-height: 85vh; overflow-y: auto;">
+            <div class="modal-title">评估报告记录</div>
+            <div id="records-list" style="margin: 12px 0;">
+                <div style="font-size:11px;color:var(--text-muted);text-align:center;padding:20px;">暂无保存的记录</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button class="modal-btn" id="clear-records-btn" style="background:var(--danger);flex:1;">清空记录</button>
+                <button class="modal-btn" id="close-records-btn" style="flex:1;">关闭</button>
             </div>
         </div>
     </div>

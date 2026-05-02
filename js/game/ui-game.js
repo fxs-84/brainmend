@@ -121,6 +121,13 @@ export class GameUI {
                         ">
                             🎯 射击模式 - 消灭敌舰
                         </button>
+                        <button class="mode-btn" data-mode="nodding" style="
+                            padding: 10px; border: 2px solid transparent;
+                            border-radius: 6px; background: #1E293B; color: white;
+                            cursor: pointer; text-align: left;
+                        ">
+                            🚀 太空点头 - 上下躲避吃金币
+                        </button>
                         <button class="mode-btn" data-mode="flight" style="
                             padding: 10px; border: 2px solid transparent;
                             border-radius: 6px; background: #1E293B; color: white;
@@ -268,8 +275,10 @@ export class GameUI {
 
         // 山谷飞行模式由 ValleyEngine 独立管理渲染，不需要 GameEngine
         if (!handledByScene) {
-            // 设置运动模式（射击模式使用 SINGLE_YAW 左右转头控制）
-            const modeToSet = this.selectedMode === 'shooting' ? MotionMapper.MODES.SINGLE_YAW : this.selectedMode;
+            // 运动模式映射
+            let modeToSet = this.selectedMode;
+            if (this.selectedMode === 'shooting') modeToSet = MotionMapper.MODES.SINGLE_YAW;
+            if (this.selectedMode === 'nodding') modeToSet = MotionMapper.MODES.SINGLE_PITCH;
             this.engine.setMotionMode(modeToSet);
             this.engine.start();
         }
@@ -279,6 +288,17 @@ export class GameUI {
      * 设置游戏场景
      */
     async setScene(sceneName) {
+        // 太空点头模式
+        if (this.selectedMode === 'nodding') {
+            try {
+                const module = await import(`./scene-space-nodding.js`);
+                const scene = new module.SceneSpaceNodding();
+                this.engine.setScene(scene);
+                this.engine._noddingMode = true;
+            } catch (err) { console.error('Failed to load nodding scene:', err); }
+            return;
+        }
+
         // 射击模式特殊处理
         if (this.selectedMode === 'shooting') {
             try {

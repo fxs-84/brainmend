@@ -110,8 +110,6 @@ function updateCoordination(elapsed) {
 
     const hLineLength = crosshairSize / 2 - 15;
     const vLineLength = ringRadius * 0.85;
-    // 45°物理偏移对应的像素（按模块 yawRange 动态计算）
-    const angle45Offset = hLineLength * 45 / state.yawRange;
 
     let targetX, targetY;
     if (state.trajectoryType === 'free') {
@@ -125,10 +123,10 @@ function updateCoordination(elapsed) {
         targetX = 0;
         targetY = Math.sin(smoothT) * vLineLength;
     } else if (state.trajectoryType === 'vertical_left') {
-        targetX = -angle45Offset;
+        targetX = -hLineLength;
         targetY = Math.sin(smoothT) * vLineLength;
     } else if (state.trajectoryType === 'vertical_right') {
-        targetX = angle45Offset;
+        targetX = hLineLength;
         targetY = Math.sin(smoothT) * vLineLength;
     } else {
         // figure8
@@ -145,6 +143,20 @@ function updateCoordination(elapsed) {
 
     // 1. 跟踪误差分数 (与红色目标距离)
     const trackingError = Math.sqrt((dotX - targetX) ** 2 + (dotY - targetY) ** 2);
+
+    // 漂移检测：水平方向偏差>10°视为漂移，连续3帧确认
+    const driftThresholdPx = hLineLength * 10 / state.yawRange; // ~67px = 10°
+    const isDriftFrame = Math.abs(dotX - targetX) > driftThresholdPx;
+    if (isDriftFrame) {
+        state._driftStreak = (state._driftStreak || 0) + 1;
+    } else {
+        state._driftStreak = 0;
+    }
+    const confirmedDrift = state._driftStreak >= 3;
+    if (confirmedDrift) {
+        state._driftCount = (state._driftCount || 0) + 1;
+    }
+
     const trackingScore = calculateTrackingScore(trackingError);
 
     // 2. 轨迹偏离分数 (点到轨迹的距离)
@@ -155,13 +167,15 @@ function updateCoordination(elapsed) {
     const jerk = calculateJerk();
     const smoothnessScore = calculateSmoothnessScore(jerk);
 
-    // 更新状态
+    // 更新状态：漂移帧不计入评分
     if (!state.coordScores) {
         state.coordScores = { tracking: [], trajectory: [], smoothness: [] };
     }
-    state.coordScores.tracking.push(trackingScore);
-    state.coordScores.trajectory.push(trajectoryScore);
-    state.coordScores.smoothness.push(smoothnessScore);
+    if (!confirmedDrift) {
+        state.coordScores.tracking.push(trackingScore);
+        state.coordScores.trajectory.push(trajectoryScore);
+        state.coordScores.smoothness.push(smoothnessScore);
+    }
 
     // 计算综合分数
     const totalScore = trackingScore * 0.4 + trajectoryScore * 0.3 + smoothnessScore * 0.3;
@@ -186,23 +200,19 @@ function updateCoordination(elapsed) {
  * @returns {number} 0-100分数
  */
 function calculateTrackingScore(error) {
-    if (error <= 10) return 100;
-    if (error <= 20) return 80;
-    if (error <= 30) return 60;
-    if (error <= 40) return 40;
+    // 跟踪误差：阈值按轨迹幅度比例缩放(hLineLength≈235px)
+    if (error <= 20) return 100;
+    if (error <= 50) return 80;
+    if (error <= 90) return 60;
+    if (error <= 140) return 40;
     return 20;
 }
 
-/**
- * 计算轨迹偏离分数
- * @param {number} deviation - 像素偏离
- * @returns {number} 0-100分数
- */
 function calculateTrajectoryScore(deviation) {
-    if (deviation <= 5) return 100;
-    if (deviation <= 15) return 80;
-    if (deviation <= 25) return 60;
-    if (deviation <= 35) return 40;
+    if (deviation <= 12) return 100;
+    if (deviation <= 30) return 80;
+    if (deviation <= 55) return 60;
+    if (deviation <= 85) return 40;
     return 20;
 }
 
@@ -212,11 +222,18 @@ function calculateTrajectoryScore(deviation) {
  * @returns {number} 0-100分数
  */
 function calculateSmoothnessScore(jerk) {
-    if (jerk < 5) return 100;
-    if (jerk < 15) return 80;
-    if (jerk < 25) return 60;
-    if (jerk < 35) return 40;
-    return 20;
+    // 基础平稳分基于jerk
+    let base;
+    if (jerk < 5) base = 100;
+    else if (jerk < 15) base = 80;
+    else if (jerk < 25) base = 60;
+    else if (jerk < 35) base = 40;
+    else base = 20;
+    // 如果离目标太远，平稳没意义——限制最高分
+    const dist = Math.sqrt((state.dotX - state.targetX) ** 2 + (state.dotY - state.targetY) ** 2);
+    if (dist > 150) return Math.min(base, 40);
+    if (dist > 80) return Math.min(base, 60);
+    return base;
 }
 
 /**
@@ -280,6 +297,12 @@ function updateCoordinationDisplay(trackingScore, trajectoryScore, smoothnessSco
     if (smoothnessEl) smoothnessEl.textContent = Math.round(smoothnessScore);
     if (errorEl) errorEl.textContent = trackingError.toFixed(1);
     if (deviationEl) deviationEl.textContent = trajectoryDeviation.toFixed(1);
+    const driftEl = document.getElementById('coord-drift-count');
+    if (driftEl) {
+        const dc = state._driftCount || 0;
+        driftEl.textContent = dc;
+        driftEl.style.color = dc > 30 ? '#ef4444' : dc > 10 ? '#f59e0b' : '#9CA3AF';
+    }
 }
 
 // ============================================================

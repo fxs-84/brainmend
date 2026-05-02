@@ -33,13 +33,17 @@ function updateFromGyroscope(gyroData) {
     _emaPitch = _emaPitch * a + rawPitch * (1 - a);
     _emaRoll = _emaRoll * a + rawRoll * (1 - a);
 
-    // state = (去漂移) - 归零偏移 = 干净的有意运动
-    state.yaw = (rawYaw - _emaYaw) - state.yawOffset;
-    state.pitch = (rawPitch - _emaPitch) - state.pitchOffset;
-    state.roll = (rawRoll - _emaRoll) - state.rollOffset;
-
-    state.dotX = state.yaw / state.yawCoefficient;
-    state.dotY = -state.pitch / state.pitchCoefficient;
+    if (!state._posLocked) {
+        state.yaw = (rawYaw - _emaYaw) - state.yawOffset;
+        state.pitch = (rawPitch - _emaPitch) - state.pitchOffset;
+        state.roll = (rawRoll - _emaRoll) - state.rollOffset;
+        state.dotX = state.yaw / state.yawCoefficient;
+        state.dotY = -state.pitch / state.pitchCoefficient;
+    } else {
+        // 训练模式锁定：光点保持在采集位置不动
+        state.dotX = state._posLockedX;
+        state.dotY = state._posLockedY;
+    }
 
     const hLineLength = crosshairSize / 2 - 15;
     const vLineLength = ringRadius * 0.85;

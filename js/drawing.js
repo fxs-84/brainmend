@@ -123,13 +123,12 @@ function drawTrajectory(actualCenterX, actualCenterY, scale) {
             pathX = actualCenterX;
             pathY = actualCenterY - Math.cos(tParam) * vLineLength;
         } else if (isVerticalLeft) {
-            // 左45°：x偏移 = hLineLength * (45°/80°), y范围 = vLineLength
-            const angle45Offset = hLineLength * 45 / 80;
-            pathX = actualCenterX - angle45Offset;
+            // 垂直线在水平线左端点
+            pathX = actualCenterX - hLineLength;
             pathY = actualCenterY - Math.cos(tParam) * vLineLength;
         } else if (isVerticalRight) {
-            const angle45Offset = hLineLength * 45 / 80;
-            pathX = actualCenterX + angle45Offset;
+            // 垂直线在水平线右端点
+            pathX = actualCenterX + hLineLength;
             pathY = actualCenterY - Math.cos(tParam) * vLineLength;
         } else if (isFree) {
             // 自由实验：红点固定在中心，无轨迹线
@@ -186,16 +185,22 @@ function drawTargetDot(actualCenterX, actualCenterY, scale, targetX, targetY) {
 
 // 绘制绿色位置点
 function drawPositionDot(actualCenterX, actualCenterY, scale, dotX, dotY) {
-    // dotX/Y 已经是像素值（与 state.dotX/dotY 坐标系一致）
     const pX = actualCenterX + dotX;
     const pY = actualCenterY - dotY;
     const dotRadius = 12;
+    const locked = state._posLocked;
 
     // 光晕
     const gradient = ctx.createRadialGradient(pX, pY, 0, pX, pY, dotRadius * 2);
-    gradient.addColorStop(0, CONFIG.COLORS.POSITION_GLOW);
-    gradient.addColorStop(0.5, CONFIG.COLORS.POSITION_GLOW_MID);
-    gradient.addColorStop(1, 'rgba(0, 217, 165, 0)');
+    if (locked) {
+        gradient.addColorStop(0, 'rgba(255, 200, 50, 0.8)');
+        gradient.addColorStop(0.5, 'rgba(255, 150, 0, 0.4)');
+        gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+    } else {
+        gradient.addColorStop(0, CONFIG.COLORS.POSITION_GLOW);
+        gradient.addColorStop(0.5, CONFIG.COLORS.POSITION_GLOW_MID);
+        gradient.addColorStop(1, 'rgba(0, 217, 165, 0)');
+    }
     ctx.beginPath();
     ctx.arc(pX, pY, dotRadius * 2, 0, Math.PI * 2);
     ctx.fillStyle = gradient;
@@ -204,15 +209,26 @@ function drawPositionDot(actualCenterX, actualCenterY, scale, dotX, dotY) {
     // 圆形
     ctx.beginPath();
     ctx.arc(pX, pY, dotRadius, 0, Math.PI * 2);
-    ctx.fillStyle = CONFIG.COLORS.POSITION;
+    ctx.fillStyle = locked ? '#ff8800' : CONFIG.COLORS.POSITION;
     ctx.fill();
 
-    // 边框
+    // 边框（锁定态闪烁效果）
     ctx.beginPath();
     ctx.arc(pX, pY, dotRadius, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = locked ? 'rgba(255, 200, 50, 0.9)' : 'rgba(255, 255, 255, 0.8)';
+    ctx.lineWidth = locked ? 3 : 2;
     ctx.stroke();
+
+    // 锁定指示圈
+    if (locked) {
+        ctx.beginPath();
+        ctx.arc(pX, pY, dotRadius + 6, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 150, 0, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
 }
 
 // 绘制轨迹

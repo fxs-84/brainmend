@@ -245,13 +245,28 @@ export class GameEngine {
         }
 
         // 更新障碍物
-        this.updateObstacles(dt);
+        if (!this._noddingMode) this.updateObstacles(dt);
 
         // 碰撞检测
-        this.checkCollisions();
+        if (this._noddingMode && this.currentScene) {
+            if (this.currentScene.checkCollision(this.player.x, this.player.y, this.player.hitboxRadius)) {
+                this.setState(GameState.GAMEOVER);
+                return;
+            }
+            // 金币收集
+            const collected = this.currentScene.checkCoinCollect(this.player.x, this.player.y);
+            for (const c of collected) {
+                this.score += 10;
+                if (this.currentScene.onCoinCollect) this.currentScene.onCoinCollect(c, this);
+            }
+        } else {
+            this.checkCollisions();
+        }
 
-        // 更新评分
-        this.scoring.calculateFrameScore(this.player, this.obstacles, dt, difficultyLevel);
+        // 更新评分（点头模式只用金币积分）
+        if (!this._noddingMode) {
+            this.scoring.calculateFrameScore(this.player, this.obstacles, dt, difficultyLevel);
+        }
 
         // 通知评分更新
         if (this.onScoreUpdate) {
@@ -436,8 +451,10 @@ export class GameEngine {
             this.renderShootingMode(ctx);
         }
 
-        // 渲染玩家（跳过默认渲染，射击模式使用场景的renderPlayer）
-        if (!this.isShootingMode) {
+        // 渲染玩家
+        if (this._noddingMode && this.currentScene && this.currentScene.renderPlayer) {
+            this.currentScene.renderPlayer(ctx, this.player.x, this.player.y);
+        } else if (!this.isShootingMode) {
             this.renderPlayer(ctx);
         }
 
@@ -682,5 +699,6 @@ export class GameEngine {
         this.state = GameState.MENU;
         this.currentScene = null;
         this.isShootingMode = false;
+        this._noddingMode = false;
     }
 }

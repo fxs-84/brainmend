@@ -14,6 +14,7 @@ import { DifficultyManager } from './game/difficulty.js';
 import { SceneBase } from './game/scene-base.js';
 import { SceneSpace } from './game/scene-space.js';
 import { SceneSpaceShooting } from './game/scene-space-shooting.js';
+import { SceneSpaceNodding } from './game/scene-space-nodding.js';
 import { SceneRoad } from './game/scene-road.js';
 import { SceneBall } from './game/scene-ball.js';
 import { SceneValley } from './game/scene-valley.js';
@@ -47,6 +48,7 @@ window.GameModule = {
     SceneBase,
     SceneSpace,
     SceneSpaceShooting,
+    SceneSpaceNodding,
     SceneRoad,
     SceneBall,
     SceneValley,

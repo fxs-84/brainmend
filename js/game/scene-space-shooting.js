@@ -346,12 +346,12 @@ export class SceneSpaceShooting extends SceneBase {
 
             const rand = Math.random();
 
-            if (rand < 0.75) {
-                // 75% 敌舰 - 从上方飞下来
+            if (rand < 0.55) {
+                // 55% 敌舰
                 const enemy = this.spawnEnemyFromTop(difficultyConfig);
                 this.engine.enemies.push(enemy);
             } else {
-                // 25% 金币
+                // 45% 金币
                 obstacleList.push(this.spawnCoin());
             }
             this.lastSpawnTime = this.gameTime;
@@ -418,8 +418,8 @@ export class SceneSpaceShooting extends SceneBase {
         return new ObstacleCoin({
             x: Math.random() * 0.6 + 0.2,
             y: -0.1,
-            speedX: (Math.random() - 0.5) * 0.01,
-            speedY: 0.06 + Math.random() * 0.03
+            speedX: (Math.random() - 0.5) * 0.02,
+            speedY: 0.12 + Math.random() * 0.10
         });
     }
 

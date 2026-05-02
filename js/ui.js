@@ -7,12 +7,12 @@ import { CONFIG } from './config.js';
 
 // JPS 分类函数
 function classifyJPS(error) {
-    if (error < 2) return { level: '优秀', zh: '优秀', color: '#22c55e' };
-    if (error < 3) return { level: '良好', zh: '良好', color: '#84cc16' };
-    if (error < 4.5) return { level: '正常', zh: '正常', color: '#06b6d4' };
-    if (error < 6) return { level: '轻度障碍', zh: '轻度', color: '#eab308' };
-    if (error < 9) return { level: '中度障碍', zh: '中度', color: '#f97316' };
-    return { level: '重度障碍', zh: '重度', color: '#ef4444' };
+    if (error < 2) return { level: '优秀', zh: '优秀', color: '#22c55e', clinical: '本体感觉正常，脑能准确定位头部位置，视觉依赖≈0%', anrmStage: 0 };
+    if (error < 3) return { level: '良好', zh: '良好', color: '#84cc16', clinical: '轻微减退，视觉代偿启动，闭眼时脑开始调用视觉记忆填补', anrmStage: 1 };
+    if (error < 4.5) return { level: '轻度障碍', zh: '轻度', color: '#06b6d4', clinical: '中度减退，脑已释放保护性紧张信号(ANRM神经源性级联第3步)', anrmStage: 2 };
+    if (error < 6) return { level: '中度障碍', zh: '中度', color: '#eab308', clinical: '明显障碍，三叉-颈髓会聚区过度激活，非受伤肌肉持续紧张', anrmStage: 3 };
+    if (error < 9) return { level: '重度障碍', zh: '重度', color: '#f97316', clinical: '严重障碍，颈部位置完全依赖视觉输入', anrmStage: 4 };
+    return { level: '极重度障碍', zh: '极重度', color: '#ef4444', clinical: '慢性疼痛环路已形成，建议先做神经脱敏再评估(ANRM第1步)', anrmStage: 5 };
 }
 
 function updateDataDisplay() {
@@ -25,8 +25,10 @@ function updateDataDisplay() {
     document.getElementById('roll-value').textContent = displayRoll.toFixed(1) + '°';
     state.error = Math.sqrt(state.yaw ** 2 + state.pitch ** 2);
     document.getElementById('error-value').textContent = state.error.toFixed(1) + '°';
-    document.getElementById('dot-x').textContent = Math.round(state.dotX);
-    document.getElementById('dot-y').textContent = Math.round(state.dotY);
+    const dotX = document.getElementById('dot-x');
+    const dotY = document.getElementById('dot-y');
+    if (dotX) dotX.textContent = Math.round(state.dotX);
+    if (dotY) dotY.textContent = Math.round(state.dotY);
 }
 
 function zeroPosition() {
@@ -558,4 +560,586 @@ function showResults() {
     document.getElementById('result-modal').classList.add('show');
 }
 
-export { renderCollectedPoints, updateDataDisplay, updateProgress, zeroPosition, collectPoint, showROMResults, showROMInlineResults };
+// ============================================================
+// 综合评估报告系统
+// ============================================================
+
+/**
+ * 收集所有检测模式的数据并生成综合报告
+ */
+function generateComprehensiveReport() {
+    const report = { available: [], scores: {}, details: {} };
+
+    // 位置觉数据
+    if (state.positionResults && state.positionResults.length > 0) {
+        const avgError = state.positionResults.reduce((s, r) => s + r.totalError, 0) / state.positionResults.length;
+        const posScore = Math.max(0, Math.round(100 - avgError * 10));
+        report.available.push('position');
+        report.scores.position = posScore;
+        report.details.position = { avgError: avgError.toFixed(1), results: [...state.positionResults] };
+    }
+
+    // 协调性数据 → 拆分为协调性+稳定性两个维度
+    if (state.coordScores && state.coordScores.tracking && state.coordScores.tracking.length > 0) {
+        const avgTracking = state.coordScores.tracking.reduce((a, b) => a + b, 0) / state.coordScores.tracking.length;
+        const avgTrajectory = state.coordScores.trajectory.reduce((a, b) => a + b, 0) / state.coordScores.trajectory.length;
+        const avgSmoothness = state.coordScores.smoothness.reduce((a, b) => a + b, 0) / state.coordScores.smoothness.length;
+        // 协调性 = 跟踪能力（光点能否跟上红点）
+        const coordScore = Math.round(avgTracking * 100);
+        // 稳定性 = 轨迹+平稳（是否在轨道上平顺移动）
+        const stabScore = Math.round((avgTrajectory * 0.55 + avgSmoothness * 0.45) * 100);
+        // ANRM运动质量分类（基于smoothness）
+        let mqClass, mqInterpretation;
+        if (avgSmoothness > 0.8) { mqClass = '流畅型(Smooth)'; mqInterpretation = '小脑-脊髓通路完整，运动连续平滑'; }
+        else if (avgSmoothness > 0.5) { mqClass = '共济失调型(Ataxic)'; mqInterpretation = '运动中有震颤，可能伴小脑/前庭小脑功能障碍，建议检查扫视和VOR'; }
+        else if (avgSmoothness > 0.3) { mqClass = '运动减少型(Hypometric)'; mqInterpretation = '阶梯状运动，ROM受限，可能额叶/基底节受累，建议检查扫视'; }
+        else { mqClass = '代偿型(Compensatory)'; mqInterpretation = '浅层肌肉(SCM/斜方肌)主导，深层失能，心率易≥+10bpm，需先做肌肉训练'; }
+        report.available.push('coordination');
+        report.available.push('stability');
+        report.scores.coordination = coordScore;
+        report.scores.stability = stabScore;
+        report.details.coordination = { tracking: avgTracking.toFixed(2) };
+        report.details.stability = { trajectory: avgTrajectory.toFixed(2), smoothness: avgSmoothness.toFixed(2), mqClass, mqInterpretation };
+    }
+
+    // ROM数据
+    if (state.romResults && Object.keys(state.romResults).length > 0) {
+        const romKeys = Object.keys(state.romResults);
+        let totalRom = 0;
+        romKeys.forEach(k => { totalRom += Math.abs(state.romResults[k] || 0); });
+        const romScore = Math.min(100, Math.round(totalRom / romKeys.length * 2));
+        report.available.push('rom');
+        report.scores.rom = romScore;
+        report.details.rom = { angles: {...state.romResults}, count: romKeys.length };
+    }
+
+    // 综合评分（加权平均）
+    const weights = { position: 0.30, coordination: 0.25, stability: 0.25, rom: 0.20 };
+    let totalWeight = 0, weightedSum = 0;
+    for (const [key, w] of Object.entries(weights)) {
+        if (report.scores[key] !== undefined) {
+            weightedSum += report.scores[key] * w;
+            totalWeight += w;
+        }
+    }
+    report.overall = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0;
+
+    // 前庭功能间接评估
+    const jpsError = report.details.position ? parseFloat(report.details.position.avgError) : 99;
+    const smoothness = report.details.stability ? parseFloat(report.details.stability.smoothness) : 0;
+    const trajectory = report.details.stability ? parseFloat(report.details.stability.trajectory) : 0;
+    report.vestibular = evaluateVestibularFromAll(jpsError, smoothness, trajectory, report.scores.stability || 0);
+
+    // 康复建议
+    report.recommendations = generateRehabRecommendations(report);
+
+    return report;
+}
+
+function evaluateVestibularFromAll(jpsError, smoothness, trajectory, stabilityScore) {
+    // ANRM CTSIB分类模型
+    let cls, clsName, assessment, color, recommendation;
+
+    if (jpsError > 99 && smoothness === 0 && stabilityScore === 0) {
+        cls = 'N/A'; clsName = '数据不足';
+        assessment = '仅有单项数据，无法进行前庭系统分类评估';
+        color = '#9CA3AF';
+        recommendation = '建议完成位置觉+协调性检测后进行综合评估';
+    } else if (jpsError > 4 && smoothness < 0.5 && stabilityScore < 50) {
+        cls = 'Class M'; clsName = '前庭-本体混合障碍';
+        assessment = 'CTSIB Class M：本体感觉+前庭功能均减退，感觉加权系统紊乱';
+        color = '#f97316';
+        recommendation = '优先进行神经脱敏（ANRM第1步），然后综合训练：下肢本体（勾脚/臀肌）+ VOR头部运动（相反方向），每项≥7分钟';
+    } else if (jpsError > 4 && smoothness >= 0.5) {
+        cls = 'Class P'; clsName = '本体感觉主导障碍';
+        assessment = 'CTSIB Class P：主要问题在本体感觉，前庭功能相对保留';
+        color = '#eab308';
+        recommendation = '重点训练下肢本体感觉：踝背屈抗阻、臀肌激活、膝关节稳定。配合闭眼头部定位练习';
+    } else if (smoothness < 0.5 || stabilityScore < 50) {
+        cls = 'Class V'; clsName = '前庭-小脑功能障碍';
+        assessment = 'CTSIB Class V：前庭/小脑功能可能减退，运动控制平滑度不足';
+        color = '#ef4444';
+        recommendation = '进行头部运动训练（训练与问题相反的方向）：VOR转头+凝视稳定。如伴眩晕需就医排除BPPV';
+    } else if (smoothness >= 0.5 && smoothness < 0.8 && stabilityScore >= 50) {
+        cls = 'Class C'; clsName = '小脑功能基本完整';
+        assessment = 'CTSIB Class C：前庭小脑功能基本完整，短暂晃动后可在5秒内自我校正';
+        color = '#22c55e';
+        recommendation = '维持当前训练水平，逐步增加难度：从稳定平面→不稳定平面、慢速→快速';
+    } else {
+        cls = 'Class N'; clsName = '正常';
+        assessment = '前庭系统各维度指标正常，感觉加权分布合理（本体70%+前庭20%+视觉10%）';
+        color = '#22c55e';
+        recommendation = '各项指标正常，保持规律颈椎活动，每周2-3次康复训练';
+    }
+    return { cls, clsName, assessment, color, recommendation };
+}
+
+function generateRehabRecommendations(report) {
+    const recs = [];
+    // ANRM 6步强制治疗序列，标注神经可塑性最小有效时长(7分钟)
+    const needStep = {
+        1: report.scores.position !== undefined && report.scores.position < 50,
+        2: report.scores.rom !== undefined && report.scores.rom < 50,
+        3: report.scores.rom !== undefined && report.scores.rom < 50,
+        4: (report.scores.stability !== undefined && report.scores.stability < 60) ||
+           (report.scores.coordination !== undefined && report.scores.coordination < 60),
+        5: report.scores.coordination !== undefined && report.scores.coordination < 60,
+        6: report.scores.position !== undefined && report.scores.position < 60,
+    };
+    const priorities = [];
+
+    if (needStep[1]) priorities.push('① 神经脱敏 ★优先 — 枕下肌群/SCM后缘/锁骨上窝，即使无痛也需7分钟（ANRM:神经可塑性最小有效时长）');
+    if (needStep[2]) priorities.push('② 肩胛稳定 ★优先 — 前锯肌激活（侧卧推墙）+ 胸小肌释放（等长收缩×3组），肩胛是颈椎的"地基"');
+    if (needStep[3]) priorities.push('③ 上颈椎活动度 — 缓慢转颈+点头，全ROM各方向，注意不引发疼痛，7分钟');
+    if (needStep[4]) priorities.push('④ 肌肉训练 ★优先 — 深层颈屈肌（仰卧点头，目标30mmHg×10s，SCM不激活）+ 颈伸肌（俯卧收下巴，目标2分钟），心率增幅<10bpm');
+    if (needStep[5]) priorities.push('⑤ 头颈分离训练 — 球抵墙保持不动+身体移动；或头顶激光笔保持光点稳定+身体移动');
+    if (needStep[6]) priorities.push('⑥ 本体感觉整合 ★优先 — 闭眼头部各方向定位，配合VOR训练（眼睛盯目标+头转动，训练相反方向）');
+    if (priorities.length === 0) {
+        priorities.push('各项指标良好，保持规律颈椎活动和正确坐姿');
+        priorities.push('维持训练：每周2-3次，每项≥7分钟（ANRM神经可塑性维持剂量）');
+    } else {
+        priorities.push('⚠ 训练心率监测：训练时心率增幅≥10bpm需停止或降低强度（ANRM:浅层肌肉过度激活标志）');
+        priorities.push('⚠ 训练后颈部不应酸痛——酸痛=练错了（用了SCM而非深层屈肌）');
+        priorities.push('📋 建议每日训练，每项≥7分钟（ANRM:神经可塑性最小有效时长），预期4周见效');
+    }
+    return priorities;
+}
+
+/** 绘制五维雷达图 */
+function drawRadarChart(canvas, scores) {
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    const cx = w / 2, cy = h / 2, r = Math.min(w, h) * 0.38;
+
+    const labels = ['活动度', '位置觉', '稳定性', '协调性', '反应'];
+    const keys = ['rom', 'position', 'stability', 'coordination', 'reaction'];
+    const values = keys.map(k => Math.max(5, scores[k] || 0));
+
+    ctx.clearRect(0, 0, w, h);
+
+    // 背景网格
+    for (let level = 1; level <= 5; level++) {
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) {
+            const angle = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+            const vr = (r * level) / 5;
+            const x = cx + Math.cos(angle) * vr;
+            const y = cy + Math.sin(angle) * vr;
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = `rgba(255,255,255,${0.08 + level * 0.03})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
+
+    // 轴线
+    for (let i = 0; i < 5; i++) {
+        const angle = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r);
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.stroke();
+    }
+
+    // 数据区域
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+        const angle = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+        const vr = (r * values[i]) / 100;
+        const x = cx + Math.cos(angle) * vr;
+        const y = cy + Math.sin(angle) * vr;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(0,217,165,0.15)';
+    ctx.fill();
+    ctx.strokeStyle = '#00D9A5';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 数据点
+    for (let i = 0; i < 5; i++) {
+        const angle = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+        const vr = (r * values[i]) / 100;
+        const x = cx + Math.cos(angle) * vr;
+        const y = cy + Math.sin(angle) * vr;
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#00D9A5';
+        ctx.fill();
+    }
+
+    // 标签
+    ctx.fillStyle = '#9CA3AF';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    for (let i = 0; i < 5; i++) {
+        const angle = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+        const lx = cx + Math.cos(angle) * (r + 22);
+        const ly = cy + Math.sin(angle) * (r + 22);
+        ctx.fillText(labels[i], lx, ly + 4);
+        // 分数
+        ctx.fillStyle = '#00D9A5';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillText(values[i].toString(), lx, ly - 12);
+        ctx.fillStyle = '#9CA3AF';
+        ctx.font = '11px sans-serif';
+    }
+}
+
+// ============================================================
+// 患者数据持久化
+// ============================================================
+const PATIENT_KEY = 'cervical_client_records';
+
+function savePatientData(patient, report) {
+    const records = getPatientRecords();
+    records.push({
+        name: patient.name || '匿名',
+        gender: patient.gender || '',
+        age: patient.age || '',
+        id: patient.id || '',
+        date: new Date().toISOString(),
+        overall: report.overall,
+        scores: { ...report.scores },
+        details: { ...report.details },
+        vestibular: report.vestibular,
+        recommendations: [...report.recommendations],
+    });
+    if (records.length > 50) records.shift();
+    localStorage.setItem(PATIENT_KEY, JSON.stringify(records));
+    return records;
+}
+
+function getPatientRecords() {
+    try { return JSON.parse(localStorage.getItem(PATIENT_KEY)) || []; }
+    catch { return []; }
+}
+
+function deletePatientRecord(index) {
+    const records = getPatientRecords();
+    records.splice(index, 1);
+    localStorage.setItem(PATIENT_KEY, JSON.stringify(records));
+    return records;
+}
+
+/** 在报告弹窗中显示历史记录对比 */
+function showHistoryComparison(currentReport) {
+    const records = getPatientRecords();
+    const detailsDiv = document.getElementById('report-details');
+    const chartsDiv = document.getElementById('report-charts');
+    const radarCanvas = document.getElementById('radar-chart');
+
+    // 绘制当前雷达图
+    radarCanvas.style.display = 'block';
+    radarCanvas.width = 260; radarCanvas.height = 260;
+    // 加入反应速度维度（如果无数据则用协调性替代）
+    if (!currentReport.scores.reaction) currentReport.scores.reaction = currentReport.scores.coordination || 50;
+    drawRadarChart(radarCanvas, currentReport.scores);
+    chartsDiv.style.display = 'block';
+
+    // 历史对比
+    if (records.length > 0) {
+        let html = '<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">历史记录</div>';
+        const recent = records.slice(-5).reverse();
+        recent.forEach((r, i) => {
+            const d = new Date(r.date);
+            const dateStr = `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+            const color = r.overall >= 70 ? '#22c55e' : r.overall >= 50 ? '#eab308' : '#ef4444';
+            html += `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:10px;border-bottom:1px solid rgba(255,255,255,0.05)">
+                <span>${r.name || '患者'} ${dateStr}</span>
+                <span style="color:${color}">${r.overall}分</span>
+                <span style="color:var(--text-muted);cursor:pointer" onclick="window._delRecord(${records.length-1-i})" title="删除">×</span>
+            </div>`;
+        });
+        detailsDiv.innerHTML = html;
+        detailsDiv.style.display = 'block';
+    }
+}
+
+window._delRecord = (i) => {
+    deletePatientRecord(i);
+    document.getElementById('report-details').style.display = 'none';
+};
+
+/** 弹出保存对话框 */
+function promptSavePatient() {
+    const report = generateComprehensiveReport();
+    if (report.available.length === 0) return;
+    if (!state.clientInfo || !state.clientInfo.name) {
+        document.getElementById('login-modal').classList.add('show');
+        document.getElementById('patient-name-input').focus();
+        return;
+    }
+    savePatientData(state.clientInfo, report);
+    showHistoryComparison(report);
+}
+
+// ============================================================
+// 脑功能推断（ANRM脑优化1-3 + 908运动控制）
+// 从颈椎检测数据映射到可能受损的脑区，给出脑功能层面的建议
+// ============================================================
+function inferBrainFunction(report) {
+    const findings = []; // { region, likelihood, evidence, recommendation }
+
+    // 小脑蚓部/脊髓小脑 — 从运动质量和平稳度推断
+    if (report.details.stability) {
+        const smooth = parseFloat(report.details.stability.smoothness);
+        const traj = parseFloat(report.details.stability.trajectory);
+        if (smooth < 0.5 && traj < 0.5) {
+            findings.push({
+                region: '小脑蚓部(脊髓小脑 Spinocerebellum)',
+                likelihood: '高',
+                evidence: `运动平稳度${(smooth*100).toFixed(0)}%、轨迹偏离度${((1-traj)*100).toFixed(0)}%，符合小脑中线功能障碍特征`,
+                recommendation: '中线稳定性训练：单腿站立+眼球追踪；躯干共济失调筛查（ANRM: "Fat Guy Eats Donuts" 小脑核序列）'
+            });
+        } else if (smooth < 0.7) {
+            findings.push({
+                region: '小脑半球(大脑小脑 Cerebrocerebellum)',
+                likelihood: '中',
+                evidence: `运动平稳度${(smooth*100).toFixed(0)}%，运动不够流畅`,
+                recommendation: '协调性训练：手指-鼻子测试+交替运动，7分钟/天'
+            });
+        }
+    }
+
+    // 前庭小脑 — 从运动质量+JPS推断
+    if (report.details.stability && report.details.position) {
+        const smooth = parseFloat(report.details.stability.smoothness);
+        const jps = parseFloat(report.details.position.avgError);
+        if (smooth < 0.5 && jps > 4) {
+            findings.push({
+                region: '前庭小脑(绒球小结叶 Flocculonodular Lobe)',
+                likelihood: '高',
+                evidence: `JPS误差${jps}°+平稳度${(smooth*100).toFixed(0)}%，本体-前庭双重障碍模式`,
+                recommendation: 'VOR训练(头动眼不动，训练相反方向)；闭眼单腿站立15秒(CTSIB Stage 4)；如伴有眩晕建议做Dix-Hallpike排查BPPV'
+            });
+        }
+    }
+
+    // 额叶/前运动皮层(BA6) — 从轨迹跟踪推断
+    if (report.details.stability) {
+        const traj = parseFloat(report.details.stability.trajectory);
+        if (traj < 0.5) {
+            findings.push({
+                region: '前运动皮层/辅助运动区(BA6)',
+                likelihood: '中',
+                evidence: `轨迹跟踪度${(traj*100).toFixed(0)}%，网状脊髓束输出可能不足（BA6→脑桥网状核→脊髓前角，40倍下行纤维用于躯干稳定）`,
+                recommendation: '快速手臂运动前先激活躯干(0.1s内)；Bolbath球上躯干稳定训练；红蓝眼镜数字阅读(方向匹配)'
+            });
+        }
+    }
+
+    // 顶叶/体感皮层 — 从JPS误差推断
+    if (report.details.position) {
+        const jps = parseFloat(report.details.position.avgError);
+        if (jps > 6) {
+            findings.push({
+                region: '顶叶/初级体感皮层(S1)',
+                likelihood: '高',
+                evidence: `JPS平均误差${jps}°，本体感觉输入严重不足，脑已无法准确定位头部`,
+                recommendation: '本体感觉再训练：闭眼头部各方向定位（ANRM第6步），Moro反射评估（仰卧头部突然下落测试），视觉-本体感觉分离训练'
+            });
+        } else if (jps > 4) {
+            findings.push({
+                region: '顶叶/体感联合皮层',
+                likelihood: '中',
+                evidence: `JPS平均误差${jps}°，本体感觉输入减退，视觉开始代偿`,
+                recommendation: '下肢本体感觉训练优先（CTSIB: 本体70%权重）；踝背屈抗阻+闭眼站立训练'
+            });
+        }
+    }
+
+    // 基底节 — 从ROM和运动质量推断
+    if (report.details.rom) {
+        const romKeys = Object.keys(report.details.rom.angles || {});
+        if (romKeys.length > 0 && report.scores.rom < 40) {
+            findings.push({
+                region: '基底节(直接/间接通路)',
+                likelihood: '中',
+                evidence: `ROM评分${report.scores.rom}分，活动范围受限可能涉及基底节运动环路`,
+                recommendation: '大振幅缓慢运动训练；节拍器(54BPM)引导的节律性转头运动；避免快速/弹道式动作'
+            });
+        }
+    }
+
+    // 额叶眼区/上丘 — 从Saccade代偿模式间接推断
+    // 基于协调性检测中的跟踪指标（模拟smooth pursuit+saccade的混合）
+    if (report.details.coordination) {
+        const tracking = parseFloat(report.details.coordination.tracking);
+        if (tracking < 0.4) {
+            findings.push({
+                region: '额叶眼区(FEF/BA8)+上丘',
+                likelihood: '低(需扫视测试确认)',
+                evidence: `跟踪度${(tracking*100).toFixed(0)}%，眼-头协调可能受损（ANRM: 67种眼动类型的眼-脊耦合）`,
+                recommendation: '扫视训练：双笔快速交替目标，极小幅(远小于评估幅度)，20次×多组；如出现代偿性头部运动=阳性'
+            });
+        }
+    }
+
+    // 脑干网状结构 — 综合多项指标
+    const totalIssues = findings.filter(f => f.likelihood === '高').length;
+    if (totalIssues >= 2) {
+        findings.push({
+            region: '脑干网状结构(Reticular Formation)',
+            likelihood: '中',
+            evidence: `多个脑区同时受累(${totalIssues}个高可能)，网状结构作为中枢整合枢纽可能参与`,
+            recommendation: '神经脱敏优先(ANRM第1步)；心率监测(训练时<+10bpm)；卧姿起步→坐姿→站姿渐进训练；保证睡眠质量'
+        });
+    }
+
+    // 疼痛-大脑偏侧映射
+    if (report.details.position) {
+        const results = report.details.position.results || [];
+        const leftErrors = results.filter(r => r.name && r.name.includes('左'));
+        const rightErrors = results.filter(r => r.name && r.name.includes('右'));
+        const leftAvg = leftErrors.length > 0 ? leftErrors.reduce((s, r) => s + r.totalError, 0) / leftErrors.length : 0;
+        const rightAvg = rightErrors.length > 0 ? rightErrors.reduce((s, r) => s + r.totalError, 0) / rightErrors.length : 0;
+        if (leftAvg > 0 && rightAvg > 0 && Math.abs(leftAvg - rightAvg) > 1.5) {
+            const worseSide = leftAvg > rightAvg ? '左侧' : '右侧';
+            const brainSide = worseSide === '左侧' ? '右半球' : '可能涉及双侧';
+            findings.push({
+                region: `大脑${brainSide}（疼痛偏侧映射）`,
+                likelihood: '低',
+                evidence: `${worseSide}JPS误差(${Math.max(leftAvg,rightAvg).toFixed(1)}°)显著大于对侧(${Math.min(leftAvg,rightAvg).toFixed(1)}°)，ANRM原则：左侧功能障碍→右脑`,
+                recommendation: `${brainSide === '右半球' ? '右脑' : '双侧'}训练：对侧承重+同侧自由运动；空间记忆回忆训练（黑点视觉记忆）`
+            });
+        }
+    }
+
+    return findings;
+}
+
+/** 一键显示综合报告（按钮调用入口） */
+function showComprehensiveReport() {
+    const report = generateComprehensiveReport();
+    if (report.available.length === 0) { alert('请先完成至少一项检测（位置觉/协调性/ROM）'); return; }
+    updateScoreBars(
+        report.scores.position || 0,
+        report.scores.stability || 0,
+        report.scores.rom || 0,
+        report.scores.coordination || 0
+    );
+    // 前庭CTSIB分类
+    const vDiv = document.getElementById('vestibular-assessment');
+    vDiv.style.display = 'block';
+    document.getElementById('vestibular-result').textContent =
+        `[${report.vestibular.cls}] ${report.vestibular.assessment}`;
+    document.getElementById('vestibular-result').style.color = report.vestibular.color;
+    document.getElementById('vestibular-recommendation').textContent = report.vestibular.recommendation;
+    // 运动质量分类
+    if (report.details.stability && report.details.stability.mqClass) {
+        const mqInfo = document.createElement('div');
+        mqInfo.style.cssText = 'margin-top:4px;font-size:10px;color:#9CA3AF;';
+        mqInfo.textContent = `运动质量: ${report.details.stability.mqClass} — ${report.details.stability.mqInterpretation}`;
+        vDiv.appendChild(mqInfo);
+    }
+    // 脑功能推断
+    const brainFindings = inferBrainFunction(report);
+    if (brainFindings.length > 0) {
+        const reportDetails = document.getElementById('report-details');
+        let brainHtml = '<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">🧠 脑功能推断 (ANRM模型)</div>';
+        brainFindings.forEach(f => {
+            const lc = f.likelihood === '高' ? '#ef4444' : f.likelihood === '中' ? '#f59e0b' : '#9CA3AF';
+            brainHtml += `<div style="padding:3px 0;font-size:10px;border-bottom:1px solid rgba(255,255,255,0.04)">
+                <span style="color:${lc}">[${f.likelihood}]</span> <b>${f.region}</b><br>
+                <span style="color:#9CA3AF">📊 ${f.evidence}</span><br>
+                <span style="color:#00D9A5">💡 ${f.recommendation}</span>
+            </div>`;
+        });
+        if (!reportDetails.innerHTML) reportDetails.innerHTML = '';
+        reportDetails.innerHTML = brainHtml + reportDetails.innerHTML;
+        reportDetails.style.display = 'block';
+    }
+    // 康复建议(ANRM 6步)
+    const rehabDiv = document.getElementById('rehab-suggestions');
+    rehabDiv.style.display = 'block';
+    document.getElementById('rehab-suggestions-content').innerHTML = report.recommendations.map(r => '• ' + r).join('<br>');
+    showHistoryComparison(report);
+}
+
+/** 报告查询弹窗 */
+function showRecordsModal() {
+    const records = getPatientRecords();
+    const modal = document.getElementById('records-modal');
+    const list = document.getElementById('records-list');
+
+    if (records.length === 0) {
+        list.innerHTML = '<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:20px;">暂无保存的记录</div>';
+    } else {
+        let html = '';
+        records.slice().reverse().forEach((r, i) => {
+            const d = new Date(r.date);
+            const ds = `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+            const c = r.overall >= 70 ? '#22c55e' : r.overall >= 50 ? '#eab308' : '#ef4444';
+            html += `<div style="padding:8px;margin-bottom:4px;background:rgba(255,255,255,0.03);border-radius:6px;cursor:pointer" onclick="window._viewRecord(${records.length-1-i})">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <span style="font-weight:600">${r.name || '匿名'}
+                        ${r.gender ? '<span style="font-size:10px;color:var(--text-muted)">'+r.gender+'</span>' : ''}
+                        ${r.age ? '<span style="font-size:10px;color:var(--text-muted)">'+r.age+'岁</span>' : ''}
+                        ${r.id ? '<span style="font-size:10px;color:var(--primary)"> #'+r.id+'</span>' : ''}
+                        <span style="font-size:10px;color:var(--text-muted)">${ds}</span></span>
+                    <span style="font-size:18px;font-weight:700;color:${c}">${r.overall}分</span>
+                </div>
+                <div style="font-size:9px;color:var(--text-muted);margin-top:2px">
+                    活动度${r.scores.rom||'-'} | 位置觉${r.scores.position||'-'} | 稳定${r.scores.stability||'-'} | 协调${r.scores.coordination||'-'}
+                </div>
+            </div>`;
+        });
+        list.innerHTML = html;
+    }
+    if (!modal._bound) {
+        document.getElementById('close-records-btn').onclick = () => modal.classList.remove('show');
+        document.getElementById('clear-records-btn').onclick = () => {
+            if (confirm('确认清空所有记录？')) { localStorage.removeItem('cervical_client_records'); showRecordsModal(); }
+        };
+        modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('show'); });
+        modal._bound = true;
+    }
+    modal.classList.add('show');
+}
+
+/** 点击单条记录查看详情 */
+window._viewRecord = (index) => {
+    const records = getPatientRecords();
+    const r = records[index];
+    if (!r) return;
+    // 关闭查询弹窗
+    document.getElementById('records-modal').classList.remove('show');
+    // 把数据写入report用于展示
+    updateScoreBars(r.scores.position || 0, r.scores.stability || 0, r.scores.rom || 0, r.scores.coordination || 0);
+    if (r.vestibular) {
+        const vDiv = document.getElementById('vestibular-assessment');
+        vDiv.style.display = 'block';
+        document.getElementById('vestibular-result').textContent = r.vestibular.assessment || r.vestibular.clsName || '';
+        document.getElementById('vestibular-result').style.color = r.vestibular.color || '#9CA3AF';
+        document.getElementById('vestibular-recommendation').textContent = r.vestibular.recommendation || '';
+    }
+    if (r.recommendations) {
+        const rehabDiv = document.getElementById('rehab-suggestions');
+        rehabDiv.style.display = 'block';
+        document.getElementById('rehab-suggestions-content').innerHTML = r.recommendations.map(rc => '• ' + rc).join('<br>');
+    }
+    // 雷达图
+    const radarCanvas = document.getElementById('radar-chart');
+    radarCanvas.style.display = 'block';
+    radarCanvas.width = 260; radarCanvas.height = 260;
+    const scores = { ...r.scores, reaction: r.scores.coordination || 50 };
+    drawRadarChart(radarCanvas, scores);
+    document.getElementById('report-charts').style.display = 'block';
+    document.getElementById('result-modal').classList.add('show');
+};
+
+// 暴露到全局
+window.generateComprehensiveReport = generateComprehensiveReport;
+window.savePatientData = savePatientData;
+window.getPatientRecords = getPatientRecords;
+window.promptSavePatient = promptSavePatient;
+window.showHistoryComparison = showHistoryComparison;
+window.drawRadarChart = drawRadarChart;
+window.showComprehensiveReport = showComprehensiveReport;
+window.showRecordsModal = showRecordsModal;
+
+export { renderCollectedPoints, updateDataDisplay, updateProgress, zeroPosition, collectPoint, showROMResults, showROMInlineResults, generateComprehensiveReport, savePatientData, getPatientRecords, promptSavePatient, showComprehensiveReport, showRecordsModal };

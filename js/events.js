@@ -7,12 +7,24 @@ import { CONFIG } from './config.js';
 import { canvas, crosshairSize, ringRadius, resizeCanvas, animate } from './canvas.js';
 import { initInput } from './input.js';
 import { initTTS, toggleTTS, speakWithCallback, speak } from './tts.js';
-import { renderCollectedPoints, updateProgress, zeroPosition, collectPoint, showROMResults, showROMInlineResults } from './ui.js';
+import { renderCollectedPoints, updateProgress, zeroPosition, collectPoint, showROMResults, showROMInlineResults, showComprehensiveReport, promptSavePatient, showRecordsModal } from './ui.js';
 import { updateCoordination } from './detection.js';
 
 let lastZoomFactor = 1;
 
 function setMode(mode) {
+    // 侧边栏：游戏模式自动折叠，检测模式保留操作面板
+    const sp = document.getElementById('side-panel');
+    const stb = document.getElementById('sidebar-toggle');
+    if (mode === 'mode-select') {
+        sp.classList.remove('collapsed');
+        if (stb) stb.textContent = '◀';
+    } else if (mode === 'game') {
+        sp.classList.add('collapsed');
+        if (stb) { stb.textContent = '▶'; stb.style.display = 'block'; }
+    }
+    // 检测模式(integrated/coordination/rom/position)：侧边栏保持展开
+
     // 离开游戏模式时隐藏游戏选择界面
     if (state.mode === 'game' && mode !== 'game') {
         const gameSelectPanel = document.getElementById('game-select-panel');
@@ -55,6 +67,7 @@ function setMode(mode) {
         state.positionResults = [];
         state.positionIsRunning = false;
         updatePositionGuide();
+        showPositionResults(); // 清空上次残留的DOM数据
     }
 
     // 协调性检测初始化
@@ -63,11 +76,16 @@ function setMode(mode) {
         state.pitchRange = 22.5;
         state.coordScores = { tracking: [], trajectory: [], smoothness: [] };
         state.coordFailTime = 0;
+        state._driftCount = 0;
+        state._driftStreak = 0;
         state.coordFullScores = [];
         state.coordCurrentTrajectoryIndex = 0;
         state.coordMode = 'single';
-        state.targetX = 0;
-        state.targetY = 0;
+        // 仅在首次进入时重置目标点，已选轨迹后不重置
+        if (mode !== prevMode) {
+            state.targetX = 0;
+            state.targetY = 0;
+        }
         updateCoordinationModeUI();
     }
 
@@ -114,7 +132,7 @@ function setMode(mode) {
         state.rollOffset = 0;
     }
 
-    if (mode === 'integrated' || mode === 'coordination') {
+    if ((mode === 'integrated' || mode === 'coordination') && mode !== prevMode) {
         state.targetX = 0;
         state.targetY = 0;
     }
@@ -206,8 +224,41 @@ function updatePositionGuide() {
 
     countdown.style.display = 'none';
     eyeHint.style.display = 'none';
-    startBtn.onclick = null; // 重置onclick
+    startBtn.onclick = null;
 
+    // 训练模式：单项训练引导
+    if (state.positionTrainingMode) {
+        if (state.positionStepIndex === 0) {
+            instruction.textContent = '请选择训练方向';
+            instruction.style.background = 'rgba(0,217,165,0.1)';
+            instruction.style.color = 'var(--primary)';
+            progress.textContent = '训练模式';
+            startBtn.textContent = '开始检测';
+            startBtn.disabled = true;
+        } else if (state._posLocked) {
+            instruction.textContent = '请睁眼，查看偏差后归零';
+            instruction.style.background = 'rgba(239,68,68,0.1)';
+            instruction.style.color = 'var(--danger)';
+            progress.textContent = '光点已锁定';
+            startBtn.textContent = '归零解锁';
+            startBtn.disabled = false;
+        } else if (state.positionIsRunning === true) {
+            instruction.style.background = 'rgba(239,68,68,0.1)';
+            instruction.style.color = 'var(--danger)';
+            progress.textContent = '闭眼移动中...';
+            startBtn.disabled = true;
+        } else {
+            instruction.textContent = '已选择方向，请先归零';
+            instruction.style.background = 'rgba(0,217,165,0.1)';
+            instruction.style.color = 'var(--primary)';
+            progress.textContent = '训练模式';
+            startBtn.textContent = '>>> 开始执行 <<<';
+            startBtn.disabled = false;
+        }
+        return;
+    }
+
+    // 检测模式（原逻辑）
     if (state.positionStepIndex === 0) {
         instruction.textContent = '请先归零';
         instruction.style.background = 'rgba(0,217,165,0.1)';
@@ -215,7 +266,6 @@ function updatePositionGuide() {
         progress.textContent = '步骤 0/6';
         startBtn.textContent = '开始检测';
         startBtn.disabled = false;
-        // 进入界面时播报操作指引
         speak('请先归零');
     } else if (state.positionStepIndex <= 6) {
         const step = CONFIG.POSITION_STEPS[state.positionStepIndex - 1];
@@ -275,12 +325,19 @@ function executePositionStep() {
             clearInterval(timer);
             countdown.style.display = 'none';
             eyeHint.style.display = 'none';
-            instruction.textContent = '请回到初始位置，然后睁眼';
-            startBtn.textContent = '采集位置';
-            startBtn.disabled = false;
-            state.positionIsRunning = false; // 等待采集
-            // 倒计时结束时播报提示
-            speak('回到初始位置，等待采集');
+            state.positionIsRunning = false;
+            if (state.positionTrainingMode) {
+                // 训练模式：提示回到初始位置，用户归位后再采集
+                instruction.textContent = '闭眼回到初始位置后，点击采集';
+                startBtn.textContent = '采集锁定';
+                startBtn.disabled = false;
+                speak('闭眼回到初始位置，点击采集');
+            } else {
+                instruction.textContent = '请回到初始位置，然后睁眼';
+                startBtn.textContent = '采集位置';
+                startBtn.disabled = false;
+                speak('回到初始位置，等待采集');
+            }
         }
     }, 1000);
 }
@@ -395,6 +452,8 @@ function startDetection() {
         }
         state.coordScores = { tracking: [], trajectory: [], smoothness: [] };
         state.coordFailTime = 0;
+        state._driftCount = 0;
+        state._driftStreak = 0;
         state.results.coordination = 0;
         updateCoordinationModeUI();
         updateCoordinationTrajectoryUI();
@@ -769,14 +828,13 @@ function init() {
                 b.style.color = b === btn ? 'var(--bg-dark)' : 'var(--text)';
             });
 
-            // 垂直左右跳转 - 旋转45°位置（半规管测试角度）
+            // 垂直左右跳转 - 垂线在水平线端点，红点跳到垂线中点
             const hLineLength = crosshairSize / 2 - 15;
-            const angle45Offset = hLineLength * 45 / state.yawRange;
             if (state.trajectoryType === 'vertical_left') {
-                state.targetX = -angle45Offset;
+                state.targetX = -hLineLength;
                 state.targetY = 0;
             } else if (state.trajectoryType === 'vertical_right') {
-                state.targetX = angle45Offset;
+                state.targetX = hLineLength;
                 state.targetY = 0;
             } else {
                 state.targetX = 0;
@@ -829,23 +887,49 @@ function init() {
     // 位置觉检测开始按钮
     const startPosBtn = document.getElementById('start-position-btn');
     startPosBtn.addEventListener('click', () => {
-        const instruction = document.getElementById('position-instruction');
+        if (state.positionTrainingMode) {
+            if (!state.positionTrainingStep) { alert('请先选择训练方向'); return; }
+            if (state._posLocked) {
+                state._posLocked = false;
+                state.dotX = 0; state.dotY = 0;
+                state.yaw = 0; state.pitch = 0;
+                state.yawOffset = 0; state.pitchOffset = 0;
+                if (window._resetGyroEMA) window._resetGyroEMA();
+                updatePositionGuide();
+                speak('已归零解锁，可重新训练');
+            } else if (state.positionIsRunning === false && startPosBtn.textContent === '采集锁定') {
+                // 闭眼采集→锁定光点→再提示睁眼
+                state._posLocked = true;
+                state._posLockedX = state.dotX;
+                state._posLockedY = state.dotY;
+                const dirBtns = document.querySelectorAll('.pos-dir-btn');
+                const dirName = Array.from(dirBtns).find(b => b.dataset.dir === state.positionTrainingStep)?.textContent || '';
+                state.positionResults.push({ name: dirName, totalError: 0 });
+                speak('已采集，请睁眼，查看偏差');
+                updatePositionGuide();
+                showPositionResults();
+            } else {
+                // 播报方向指导
+                const dirBtns = document.querySelectorAll('.pos-dir-btn');
+                const dirName = Array.from(dirBtns).find(b => b.dataset.dir === state.positionTrainingStep)?.textContent || '';
+                if (dirName) speak('请闭眼，头向' + dirName + '转到最大范围');
+                state.positionIsRunning = true;
+                executePositionStep();
+            }
+            return;
+        }
 
+        // 检测模式（原逻辑）
         if (state.positionStepIndex === 0) {
-            // 等待用户先归零 - updatePositionGuide已播报过，无需重复
         } else if (state.positionStepIndex >= 1 && state.positionStepIndex <= 6) {
             if (state.positionIsRunning === true) {
-                // 直接执行倒计时，executePositionStep中已有TTS
                 executePositionStep();
             } else if (state.positionIsRunning === false) {
-                // 采集位置
                 collectPositionPoint();
             } else if (state.positionIsRunning === 'waiting_for_zero') {
-                // 归零进入下一步
                 zeroPosition();
             }
         } else {
-            // 重新开始
             state.positionStepIndex = 0;
             state.positionResults = [];
             document.getElementById('position-results').innerHTML = '<div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px;">暂无结果</div>';
@@ -853,26 +937,97 @@ function init() {
         }
     });
 
+    // 位置觉训练模式按钮
+    const trainDirsPanel = document.getElementById('position-train-dirs');
+    const trainDirBtns = document.querySelectorAll('.pos-dir-btn');
+    let trainSelectedDir = null;
+
+    trainDirBtns.forEach(b => {
+        b.addEventListener('click', () => {
+            trainDirBtns.forEach(x => { x.style.background = 'transparent'; x.style.color = 'var(--text)'; });
+            b.style.background = 'var(--primary)'; b.style.color = 'var(--bg-dark)';
+            trainSelectedDir = b.dataset.dir;
+            // 设置训练方向
+            state.positionTrainingStep = trainSelectedDir;
+            state.positionStepIndex = 1; // 模拟已进入步骤1
+            state._posLocked = false;
+            updatePositionGuide();
+            document.getElementById('start-position-btn').textContent = '>>> 开始执行 <<<';
+            document.getElementById('start-position-btn').disabled = false;
+            document.getElementById('position-instruction').textContent =
+                '已选择: ' + b.textContent + '，请先归零';
+        });
+    });
+
+    document.getElementById('start-position-train-btn').addEventListener('click', () => {
+        if (state.isRunning) return;
+        state.positionTrainingMode = !state.positionTrainingMode;
+        const btn = document.getElementById('start-position-train-btn');
+        if (state.positionTrainingMode) {
+            btn.style.background = 'var(--primary)'; btn.textContent = '训练中';
+            trainDirsPanel.style.display = 'block';
+            trainSelectedDir = null;
+            trainDirBtns.forEach(x => { x.style.background = 'transparent'; x.style.color = 'var(--text)'; });
+            state.positionStepIndex = 0;
+            state.positionResults = [];
+            state.positionIsRunning = false;
+            state._posLocked = false;
+            state.positionTrainingStep = null;
+            document.getElementById('position-results').innerHTML =
+                '<div style="font-size:10px;color:var(--text-muted);text-align:center;padding:10px;">训练模式：选择方向→归零→闭眼执行</div>';
+            updatePositionGuide();
+        } else {
+            btn.style.background = 'var(--secondary)'; btn.textContent = '训练模式';
+            trainDirsPanel.style.display = 'none';
+            state.positionTrainingMode = false;
+            state.positionStepIndex = 0;
+            state.positionResults = [];
+            state.positionIsRunning = false;
+            state._posLocked = false;
+            state.positionTrainingStep = null;
+            document.getElementById('position-results').innerHTML =
+                '<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:10px;">暂无结果</div>';
+            updatePositionGuide();
+        }
+    });
+
     // 位置觉归零按钮
     const zeroBtnPos = document.getElementById('zero-btn-position');
     zeroBtnPos.addEventListener('click', () => {
+        if (state.positionTrainingMode && state._posLocked) {
+            state._posLocked = false;
+            state.dotX = 0; state.dotY = 0;
+            state.yaw = 0; state.pitch = 0;
+            state.yawOffset = 0; state.pitchOffset = 0;
+            if (window._resetGyroEMA) window._resetGyroEMA();
+            if (state.positionStepIndex >= 6) {
+                state.positionStepIndex = 0; state.positionResults = [];
+                document.getElementById('position-results').innerHTML =
+                    '<div style="font-size:10px;color:var(--text-muted);text-align:center;padding:10px;">训练模式：定位后锁定光点</div>';
+            }
+            updatePositionGuide();
+            speak('已归零解锁');
+            return;
+        }
         zeroPosition();
     });
 
     // 缩放滑块（检测中禁止缩放）
     const zoomSlider = document.getElementById('zoom-slider');
     const zoomValue = document.getElementById('zoom-value');
-    zoomSlider.addEventListener('input', e => {
-        if (state.isRunning) return;
-        const newZoom = e.target.value / 100;
-        const zoomRatio = newZoom / lastZoomFactor;
-        state.targetX *= zoomRatio;
-        state.targetY *= zoomRatio;
-        state.zoomFactor = newZoom;
-        zoomValue.textContent = e.target.value + '%';
-        lastZoomFactor = newZoom;
-        resizeCanvas();
-    });
+    if (zoomSlider) {
+        zoomSlider.addEventListener('input', e => {
+            if (state.isRunning) return;
+            const newZoom = e.target.value / 100;
+            const zoomRatio = newZoom / lastZoomFactor;
+            state.targetX *= zoomRatio;
+            state.targetY *= zoomRatio;
+            state.zoomFactor = newZoom;
+            if (zoomValue) zoomValue.textContent = e.target.value + '%';
+            lastZoomFactor = newZoom;
+            resizeCanvas();
+        });
+    }
 
     // 鼠标滚轮缩放（检测中禁止缩放）
     canvas.addEventListener('wheel', e => {
@@ -884,8 +1039,8 @@ function init() {
         state.targetX *= zoomRatio;
         state.targetY *= zoomRatio;
         state.zoomFactor = newZoom;
-        zoomSlider.value = newZoom * 100;
-        zoomValue.textContent = Math.round(newZoom * 100) + '%';
+        if (zoomSlider) zoomSlider.value = newZoom * 100;
+        if (zoomValue) zoomValue.textContent = Math.round(newZoom * 100) + '%';
         lastZoomFactor = newZoom;
         resizeCanvas();
     }, { passive: false });
@@ -964,6 +1119,115 @@ function init() {
     }
     window.closeModal = closeModal;
     document.getElementById('close-modal').addEventListener('click', closeModal);
+
+    // 综合报告按钮
+    document.getElementById('comprehensive-btn').addEventListener('click', () => {
+        showComprehensiveReport();
+    });
+
+    // 保存患者数据按钮
+    document.getElementById('save-patient-btn').addEventListener('click', () => {
+        promptSavePatient();
+    });
+
+    // 报告查询按钮
+    document.getElementById('records-btn').addEventListener('click', () => {
+        showRecordsModal();
+    });
+
+    // 全屏切换
+    document.getElementById('fullscreen-btn').addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+            document.exitFullscreen();
+        }
+    });
+    // 退出全屏时自动展开侧边栏
+    document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement) {
+            const sp = document.getElementById('side-panel');
+            const stb = document.getElementById('sidebar-toggle');
+            sp.classList.remove('collapsed');
+            if (stb) stb.textContent = '◀';
+        }
+    });
+
+    // 侧边栏折叠：检测/游戏模式下自动隐藏
+    const sidePanel = document.getElementById('side-panel');
+    const sidebarBtn = document.createElement('button');
+    sidebarBtn.id = 'sidebar-toggle';
+    sidebarBtn.textContent = '◀';
+    sidebarBtn.title = '折叠侧边栏';
+    sidePanel.appendChild(sidebarBtn);
+
+    function setSidebarCollapsed(collapsed) {
+        if (collapsed) {
+            sidePanel.classList.add('collapsed');
+            sidebarBtn.textContent = '▶';
+            sidebarBtn.style.display = 'block';
+        } else {
+            sidePanel.classList.remove('collapsed');
+            sidebarBtn.textContent = '◀';
+            sidebarBtn.style.display = 'block';
+        }
+    }
+
+    sidebarBtn.addEventListener('click', () => {
+        const isCollapsed = sidePanel.classList.contains('collapsed');
+        setSidebarCollapsed(!isCollapsed);
+    });
+
+
+    // 用户登录
+    const loginModal = document.getElementById('login-modal');
+    const loginBtn = document.getElementById('login-btn');
+    const patientInput = document.getElementById('patient-name-input');
+    const patientLabel = document.getElementById('current-patient');
+
+    // 读取已保存的患者信息
+    try {
+        const saved = JSON.parse(localStorage.getItem('cervical_current_client'));
+        if (saved && saved.name) {
+            state.clientInfo = saved;
+            patientLabel.textContent = '👤 ' + saved.name + (saved.id ? ' #' + saved.id : '');
+            loginBtn.textContent = '切换客户';
+        }
+    } catch(e) {}
+
+    loginBtn.addEventListener('click', () => {
+        const info = state.clientInfo || {};
+        patientInput.value = info.name || '';
+        document.getElementById('patient-gender-input').value = info.gender || '';
+        document.getElementById('patient-age-input').value = info.age || '';
+        document.getElementById('patient-id-input').value = info.id || '';
+        loginModal.classList.add('show');
+        patientInput.focus();
+    });
+
+    document.getElementById('login-ok-btn').addEventListener('click', () => {
+        const name = document.getElementById('patient-name-input').value.trim();
+        if (!name) { alert('请输入姓名'); return; }
+        const info = {
+            name,
+            gender: document.getElementById('patient-gender-input').value,
+            age: document.getElementById('patient-age-input').value,
+            id: document.getElementById('patient-id-input').value.trim(),
+        };
+        state.clientInfo = info;
+        localStorage.setItem('cervical_current_client', JSON.stringify(info));
+        patientLabel.textContent = '👤 ' + name + (info.id ? ' #' + info.id : '') +
+            (info.gender ? ' ' + info.gender : '') + (info.age ? ' ' + info.age + '岁' : '');
+        loginBtn.textContent = '切换客户';
+        loginModal.classList.remove('show');
+    });
+
+    document.getElementById('login-cancel-btn').addEventListener('click', () => {
+        loginModal.classList.remove('show');
+    });
+    loginModal.addEventListener('click', (e) => {
+        if (e.target === loginModal) loginModal.classList.remove('show');
+    });
 
     // 时钟
     setInterval(() => {
