@@ -4,12 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>颈椎检测康复训练游戏</title>
-  <script type="module" crossorigin src="./assets/index-DPTbQwkj.js"></script>
+  <script type="module" crossorigin src="./assets/index-D7q6Ghlk.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-lhHHWwHU.js">
-  <link rel="modulepreload" crossorigin href="./assets/obstacle-BM4lrNWK.js">
+  <link rel="modulepreload" crossorigin href="./assets/bullet-Cz6fGGYr.js">
+  <link rel="modulepreload" crossorigin href="./assets/obstacle-B_Ja8--0.js">
   <link rel="modulepreload" crossorigin href="./assets/particle-BnwUJCTT.js">
   <link rel="modulepreload" crossorigin href="./assets/scene-base-h5q7y06u.js">
-  <link rel="modulepreload" crossorigin href="./assets/sound-manager-CgQYRGnJ.js">
+  <link rel="modulepreload" crossorigin href="./assets/sound-manager-D85V_UAg.js">
   <link rel="stylesheet" crossorigin href="./assets/index-PkJ8M8Pr.css">
 </head>
 <body>
@@ -17,12 +18,19 @@
         <header>
             <div class="logo">颈椎康复训练</div>
             <div class="header-info">
-                <span id="current-patient" style="color:var(--primary);margin-right:10px;"></span>
+                <!-- 客户：点击切换/登录 -->
+                <span id="current-patient" style="color:var(--primary);margin-right:8px;cursor:pointer;border-bottom:1px dashed var(--primary);" title="点击切换客户"></span>
+                <!-- 报告：下拉菜单 -->
+                <div style="position:relative;display:inline-block;margin-right:4px;" id="report-menu-wrap">
+                    <button id="report-menu-btn" style="background: linear-gradient(135deg,#00D9A5,#0086FF); border: none; color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">报告 ▾</button>
+                    <div id="report-dropdown" style="display:none;position:absolute;top:100%;right:0;background:rgba(15,23,42,0.98);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 0;z-index:3000;min-width:120px;">
+                        <div id="gen-report-item" style="padding:6px 14px;font-size:11px;color:#fff;cursor:pointer;white-space:nowrap;">📊 生成报告</div>
+                        <div id="records-item" style="padding:6px 14px;font-size:11px;color:#9CA3AF;cursor:pointer;white-space:nowrap;">📋 报告查询</div>
+                    </div>
+                </div>
                 <button id="fullscreen-btn" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;" title="全屏">⛶</button>
-                <button id="login-btn" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">用户登录</button>
                 <button id="toggle-input-mode" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">鼠标模式</button>
                 <button id="open-gyro-modal" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">蓝牙连接</button>
-                <button id="records-btn" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-left: 5px;">报告查询</button>
                 <button id="tts-toggle" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-left: 5px;">语音关闭</button>
             </div>
         </header>

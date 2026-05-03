@@ -72,6 +72,13 @@ export class GameUI {
                         ">
                             ✈️ 山谷飞行
                         </button>
+                        <button class="scene-btn" data-scene="space3d" style="
+                            flex: 1; padding: 12px; border: 2px solid transparent;
+                            border-radius: 8px; background: #1E293B; color: white;
+                            cursor: pointer; transition: all 0.2s;
+                        ">
+                            🌌 太空3D飞行
+                        </button>
                     </div>
                 </div>
 
@@ -235,6 +242,9 @@ export class GameUI {
                     window.state.dotY = 0;
                     window.state.displayDotX = 0;
                     window.state.displayDotY = 0;
+                    // 归零所有引擎的EMA基线
+                    if (window.valleyEngine) window.valleyEngine.rezero();
+                    if (window.spaceEngine) window.spaceEngine.rezero();
                     // 视觉反馈
                     zeroBtn.textContent = '已归零 ✓';
                     zeroBtn.style.background = '#059669';
@@ -314,6 +324,30 @@ export class GameUI {
             return;
         }
 
+        // 太空3D飞行模式
+        if (sceneName === 'space3d' || this.selectedMode === 'flight') {
+            try {
+                if (!window.spaceEngine) {
+                    const canvas = document.getElementById('crosshair-canvas');
+                    const module = await import('./space-engine.js');
+                    window.spaceEngine = new module.SpaceEngine(canvas);
+                    window.spaceEngine.init();
+                    window.spaceEngine.onScoreUpdate = (score) => {
+                        const el = document.getElementById('game-score');
+                        if (el) el.textContent = '分数: ' + score;
+                    };
+                    window.spaceEngine.onGameOver = (score, grade, info) => {
+                        console.log('Space game over:', { score, grade, info });
+                    };
+                }
+                window.spaceEngine.start();
+                window.spaceEngine.onEntryZero();
+            } catch (err) {
+                console.error('Failed to load space engine:', err);
+            }
+            return true;
+        }
+
         // 山谷飞行模式特殊处理 - 使用独立的ValleyEngine
         if (this.selectedMode === 'flight' || sceneName === 'valley') {
             try {
@@ -331,6 +365,7 @@ export class GameUI {
                     };
                 }
                 window.valleyEngine.start();
+                window.valleyEngine.onEntryZero();
             } catch (err) {
                 console.error('Failed to load valley engine:', err);
             }

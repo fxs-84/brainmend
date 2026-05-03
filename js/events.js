@@ -7,7 +7,7 @@ import { CONFIG } from './config.js';
 import { canvas, crosshairSize, ringRadius, resizeCanvas, animate } from './canvas.js';
 import { initInput } from './input.js';
 import { initTTS, toggleTTS, speakWithCallback, speak } from './tts.js';
-import { renderCollectedPoints, updateProgress, zeroPosition, collectPoint, showROMResults, showROMInlineResults, showComprehensiveReport, promptSavePatient, showRecordsModal } from './ui.js';
+import { renderCollectedPoints, updateProgress, zeroPosition, collectPoint, showROMResults, showROMInlineResults, showComprehensiveReport, promptSavePatient, showRecordsModal, generateComprehensiveReport, savePatientData, showResults } from './ui.js';
 import { updateCoordination } from './detection.js';
 
 let lastZoomFactor = 1;
@@ -364,6 +364,8 @@ function collectPositionPoint() {
 
     if (state.positionStepIndex > 6) {
         updatePositionGuide();
+        // 显示综合报告弹窗
+        showPositionReportModal();
     } else {
         // 提示归零进入下一步
         const instruction = document.getElementById('position-instruction');
@@ -427,6 +429,15 @@ function showPositionResults() {
     `;
 
     resultsDiv.innerHTML = html;
+}
+
+function showPositionReportModal() {
+    // 位置觉完成：只更新 inline 显示 + 自动保存，不出弹窗
+    showPositionResults();
+    if (state.clientInfo && state.clientInfo.name) {
+        const report = generateComprehensiveReport();
+        if (report.available.length > 0) savePatientData(state.clientInfo, report);
+    }
 }
 
 function startDetection() {
@@ -783,6 +794,9 @@ function init() {
             // state.pitch/yaw/roll 已经过全局EMA漂移补偿
             window.valleyEngine.setGyroInput(state.pitch, state.yaw, state.roll);
         }
+        if (window.spaceEngine && window.spaceEngine.state === 'playing') {
+            window.spaceEngine.setGyroInput(state.pitch, state.yaw, state.roll);
+        }
     }, 16);
 
     // TTS切换按钮
@@ -876,6 +890,10 @@ function init() {
         // 清理山谷飞行引擎状态
         if (window.valleyEngine) {
             window.valleyEngine.cleanup();
+        }
+        // 清理太空飞行引擎状态
+        if (window.spaceEngine) {
+            window.spaceEngine.cleanup();
         }
         // 隐藏游戏视图，回到主界面（模式选择）
         // game-select-panel的隐藏由setMode处理
@@ -1120,7 +1138,26 @@ function init() {
     window.closeModal = closeModal;
     document.getElementById('close-modal').addEventListener('click', closeModal);
 
-    // 综合报告按钮
+    // 报告下拉菜单
+    const reportBtn = document.getElementById('report-menu-btn');
+    const reportDrop = document.getElementById('report-dropdown');
+    reportBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        reportDrop.style.display = reportDrop.style.display === 'block' ? 'none' : 'block';
+    });
+    document.addEventListener('click', () => { reportDrop.style.display = 'none'; });
+    document.getElementById('gen-report-item').addEventListener('click', (e) => {
+        e.stopPropagation();
+        reportDrop.style.display = 'none';
+        showComprehensiveReport();
+    });
+    document.getElementById('records-item').addEventListener('click', (e) => {
+        e.stopPropagation();
+        reportDrop.style.display = 'none';
+        showRecordsModal();
+    });
+
+    // 综合报告按钮（模态框内）
     document.getElementById('comprehensive-btn').addEventListener('click', () => {
         showComprehensiveReport();
     });
@@ -1128,11 +1165,6 @@ function init() {
     // 保存患者数据按钮
     document.getElementById('save-patient-btn').addEventListener('click', () => {
         promptSavePatient();
-    });
-
-    // 报告查询按钮
-    document.getElementById('records-btn').addEventListener('click', () => {
-        showRecordsModal();
     });
 
     // 全屏切换
@@ -1179,9 +1211,8 @@ function init() {
     });
 
 
-    // 用户登录
+    // 用户登录（点击名称切换客户）
     const loginModal = document.getElementById('login-modal');
-    const loginBtn = document.getElementById('login-btn');
     const patientInput = document.getElementById('patient-name-input');
     const patientLabel = document.getElementById('current-patient');
 
@@ -1191,11 +1222,14 @@ function init() {
         if (saved && saved.name) {
             state.clientInfo = saved;
             patientLabel.textContent = '👤 ' + saved.name + (saved.id ? ' #' + saved.id : '');
-            loginBtn.textContent = '切换客户';
+        } else {
+            patientLabel.textContent = '👤 点击登录';
         }
-    } catch(e) {}
+    } catch(e) {
+        patientLabel.textContent = '👤 点击登录';
+    }
 
-    loginBtn.addEventListener('click', () => {
+    patientLabel.addEventListener('click', () => {
         const info = state.clientInfo || {};
         patientInput.value = info.name || '';
         document.getElementById('patient-gender-input').value = info.gender || '';
@@ -1218,7 +1252,6 @@ function init() {
         localStorage.setItem('cervical_current_client', JSON.stringify(info));
         patientLabel.textContent = '👤 ' + name + (info.id ? ' #' + info.id : '') +
             (info.gender ? ' ' + info.gender : '') + (info.age ? ' ' + info.age + '岁' : '');
-        loginBtn.textContent = '切换客户';
         loginModal.classList.remove('show');
     });
 

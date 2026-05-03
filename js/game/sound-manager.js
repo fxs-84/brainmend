@@ -61,12 +61,12 @@ export class SoundManager {
 
         // 增益包络 - 短促有力
         const gainNode = ctx.createGain();
-        gainNode.gain.setValueAtTime(0.15, now);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.06);
+        gainNode.gain.setValueAtTime(0.25, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
 
         const gainNode2 = ctx.createGain();
-        gainNode2.gain.setValueAtTime(0.06, now);
-        gainNode2.gain.exponentialRampToValueAtTime(0.01, now + 0.04);
+        gainNode2.gain.setValueAtTime(0.10, now);
+        gainNode2.gain.exponentialRampToValueAtTime(0.01, now + 0.06);
 
         osc.connect(gainNode);
         osc2.connect(gainNode2);
@@ -184,6 +184,64 @@ export class SoundManager {
 
         osc.start(now);
         osc.stop(now + 0.2);
+    }
+
+    /**
+     * 飞船引擎持续音
+     */
+    async playEngine() {
+        if (!this.isInitialized || this._engineRunning) return;
+        await this.resume();
+        this._engineRunning = true;
+    }
+
+    /**
+     * 开始引擎声循环（在游戏loop中调用）
+     */
+    startEngineHum() {
+        if (!this.isInitialized || this._engineOsc) return;
+        if (this.audioContext.state === 'suspended') this.audioContext.resume();
+        this._engineOsc = this.audioContext.createOscillator();
+        this._engineOsc.type = 'sawtooth';
+        this._engineOsc.frequency.value = 55;
+        const gn = this.audioContext.createGain();
+        gn.gain.value = 0.12;
+        const filter = this.audioContext.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 120;
+        this._engineOsc.connect(gn);
+        gn.connect(filter);
+        filter.connect(this.masterGain);
+        this._engineOsc.start();
+    }
+
+    stopEngineHum() {
+        if (this._engineOsc) {
+            try { this._engineOsc.stop(); } catch(e) {}
+            this._engineOsc = null;
+        }
+        this._engineRunning = false;
+    }
+
+    /**
+     * 播放击中敌舰音效
+     */
+    async playHit() {
+        if (!this.isInitialized) return;
+        await this.resume();
+        const ctx = this.audioContext;
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+        const gn = ctx.createGain();
+        gn.gain.setValueAtTime(0.12, now);
+        gn.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.connect(gn);
+        gn.connect(this.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.12);
     }
 
     /**
