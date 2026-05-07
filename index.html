@@ -93,7 +93,10 @@
                     <div class="data-card">
                         <div style="display: flex; gap: 4px;">
                             <button class="coord-mode-btn active" data-mode="single" id="coord-mode-single" style="flex: 1; padding: 8px; border: 1px solid rgba(255,255,255,0.2); background: var(--primary); color: var(--bg-dark); border-radius: 4px; cursor: pointer; font-size: 11px;">单轨迹检测</button>
-                            <button class="coord-mode-btn" data-mode="full" id="coord-mode-full" style="flex: 1; padding: 8px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 11px;">全轨迹检测(5项)</button>
+                            <button class="coord-mode-btn" data-mode="full" id="coord-mode-full" style="flex: 1; padding: 8px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 11px;">全轨迹检测(6项)</button>
+                        </div>
+                        <div style="margin-top: 4px;">
+                            <button id="coord-training-toggle" style="width: 100%; padding: 8px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 11px;">训练模式 (1分30秒)</button>
                         </div>
                     </div>
                     <div class="panel-title" id="coord-trajectory-title">轨迹选择</div>
@@ -104,6 +107,7 @@
                             <button class="traj-btn" data-traj="vertical_left" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直左</button>
                             <button class="traj-btn" data-traj="vertical_right" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直右</button>
                             <button class="traj-btn" data-traj="figure8" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">8字</button>
+                            <button class="traj-btn" data-traj="figure8_reverse" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">8字反</button>
                             <button class="traj-btn" data-traj="free" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: var(--warning); color: var(--bg-dark); border-radius: 4px; cursor: pointer; font-size: 10px;">自由(实验)</button>
                         </div>
                     </div>
@@ -134,7 +138,7 @@
                             <span class="data-label">漂移帧</span>
                             <span class="data-value" id="coord-drift-count" style="color:var(--text-muted)">0</span>
                         </div>
-                    </div>
+                                            </div>
                     <div id="coord-full-progress" style="display: none; margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px;">
                         <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">全轨迹检测进度</div>
                         <div id="coord-full-progress-text" style="font-size: 11px;">0/5 已完成</div>

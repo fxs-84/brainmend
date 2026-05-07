@@ -25,12 +25,13 @@ function setMode(mode) {
     }
     // 检测模式(integrated/coordination/rom/position)：侧边栏保持展开
 
-    // 离开游戏模式时隐藏游戏选择界面
+    // 离开游戏模式时隐藏游戏选择界面 + 恢复EMA追踪
     if (state.mode === 'game' && mode !== 'game') {
         const gameSelectPanel = document.getElementById('game-select-panel');
         if (gameSelectPanel) {
             gameSelectPanel.style.display = 'none';
         }
+        if (window._freezeGyroEMA) window._freezeGyroEMA(false);
     }
 
     const prevMode = state.mode;
@@ -144,15 +145,34 @@ function setMode(mode) {
 function updateCoordinationModeUI() {
     const singleBtn = document.getElementById('coord-mode-single');
     const fullBtn = document.getElementById('coord-mode-full');
+    const trainBtn = document.getElementById('coord-training-toggle');
     const trajCard = document.getElementById('coord-trajectory-card');
     const trajTitle = document.getElementById('coord-trajectory-title');
     const fullProgress = document.getElementById('coord-full-progress');
 
-    if (state.coordMode === 'single') {
+    if (state.coordTrainingMode) {
+        singleBtn.style.background = 'transparent';
+        singleBtn.style.color = 'var(--text)';
+        fullBtn.style.background = 'transparent';
+        fullBtn.style.color = 'var(--text)';
+        if (trainBtn) {
+            trainBtn.style.background = 'var(--primary)';
+            trainBtn.style.color = 'var(--bg-dark)';
+            trainBtn.textContent = '训练模式 (1分30秒)';
+        }
+        trajCard.style.display = 'block';
+        trajTitle.textContent = '轨迹选择';
+        fullProgress.style.display = 'none';
+    } else if (state.coordMode === 'single') {
         singleBtn.style.background = 'var(--primary)';
         singleBtn.style.color = 'var(--bg-dark)';
         fullBtn.style.background = 'transparent';
         fullBtn.style.color = 'var(--text)';
+        if (trainBtn) {
+            trainBtn.style.background = 'transparent';
+            trainBtn.style.color = 'var(--text)';
+            trainBtn.textContent = '训练模式 (1分30秒)';
+        }
         trajCard.style.display = 'block';
         trajTitle.textContent = '轨迹选择';
         fullProgress.style.display = 'none';
@@ -161,10 +181,15 @@ function updateCoordinationModeUI() {
         fullBtn.style.color = 'var(--bg-dark)';
         singleBtn.style.background = 'transparent';
         singleBtn.style.color = 'var(--text)';
+        if (trainBtn) {
+            trainBtn.style.background = 'transparent';
+            trainBtn.style.color = 'var(--text)';
+            trainBtn.textContent = '训练模式 (1分30秒)';
+        }
         trajCard.style.display = 'none';
         trajTitle.textContent = '轨迹选择';
         fullProgress.style.display = 'block';
-        document.getElementById('coord-full-progress-text').textContent = `${state.coordCurrentTrajectoryIndex}/5 已完成`;
+        document.getElementById('coord-full-progress-text').textContent = `${state.coordCurrentTrajectoryIndex}/6 已完成`;
     }
 }
 
@@ -451,7 +476,10 @@ function startDetection() {
 
     // 确定协调性检测的时长和轨迹
     if (state.mode === 'coordination') {
-        if (state.coordMode === 'full') {
+        if (state.coordTrainingMode) {
+            // 训练模式：当前轨迹1分30秒
+            state.testDuration = CONFIG.COORD_TRAINING_DURATION;
+        } else if (state.coordMode === 'full') {
             // 全模式：从第一轨迹开始
             state.coordCurrentTrajectoryIndex = 0;
             state.coordFullScores = [];
@@ -523,7 +551,7 @@ function startDetection() {
                         }
                         state.coordCurrentTrajectoryIndex++;
                         if (state.coordCurrentTrajectoryIndex < CONFIG.COORD_TRAJECTORIES.length) {
-                            const trajNames = { 'horizontal': '水平', 'vertical': '垂直', 'vertical_left': '垂直左', 'vertical_right': '垂直右', 'figure8': '8字' };
+                            const trajNames = { 'horizontal': '水平', 'vertical': '垂直', 'vertical_left': '垂直左', 'vertical_right': '垂直右', 'figure8': '8字', 'figure8_reverse': '8字反' };
                             coordBtn.textContent = `继续 (${state.coordCurrentTrajectoryIndex + 1}/${CONFIG.COORD_TRAJECTORIES.length})`;
                             coordBtn.disabled = false;
                             updateCoordinationFullProgressUI();
@@ -611,7 +639,7 @@ function startDetection() {
                 if (state.coordCurrentTrajectoryIndex < CONFIG.COORD_TRAJECTORIES.length) {
                     // 还有下一轨迹，显示继续按钮
                     const coordBtn = document.getElementById('action-btn-coord');
-                    const trajNames = { 'horizontal': '水平', 'vertical': '垂直', 'vertical_left': '垂直左', 'vertical_right': '垂直右', 'figure8': '8字' };
+                    const trajNames = { 'horizontal': '水平', 'vertical': '垂直', 'vertical_left': '垂直左', 'vertical_right': '垂直右', 'figure8': '8字', 'figure8_reverse': '8字反' };
                     coordBtn.textContent = `继续 (${state.coordCurrentTrajectoryIndex + 1}/${CONFIG.COORD_TRAJECTORIES.length})`;
                     coordBtn.disabled = false;
                     updateCoordinationFullProgressUI();
@@ -646,7 +674,8 @@ function updateCoordinationTrajectoryUI() {
             'vertical': '垂直',
             'vertical_left': '垂直左',
             'vertical_right': '垂直右',
-            'figure8': '8字'
+            'figure8': '8字',
+            'figure8_reverse': '8字反'
         };
         trajTitleEl.style.display = 'block';
         trajNameEl.textContent = trajNames[state.trajectoryType] || state.trajectoryType;
@@ -828,8 +857,24 @@ function init() {
         btn.addEventListener('click', () => {
             if (state.isRunning) return;
             state.coordMode = btn.dataset.mode;
+            state.coordTrainingMode = false;
             updateCoordinationModeUI();
         });
+    });
+
+    // 训练模式切换按钮
+    document.getElementById('coord-training-toggle').addEventListener('click', function() {
+        if (state.isRunning) return;
+        state.coordTrainingMode = !state.coordTrainingMode;
+        if (state.coordTrainingMode) {
+            this.style.background = 'var(--primary)';
+            this.style.color = 'var(--bg-dark)';
+            state.coordMode = 'single';
+        } else {
+            this.style.background = 'transparent';
+            this.style.color = 'var(--text)';
+        }
+        updateCoordinationModeUI();
     });
 
     // 轨迹按钮
@@ -927,10 +972,7 @@ function init() {
                 updatePositionGuide();
                 showPositionResults();
             } else {
-                // 播报方向指导
-                const dirBtns = document.querySelectorAll('.pos-dir-btn');
-                const dirName = Array.from(dirBtns).find(b => b.dataset.dir === state.positionTrainingStep)?.textContent || '';
-                if (dirName) speak('请闭眼，头向' + dirName + '转到最大范围');
+                // 方向提示已在选择方向时播报，直接开始执行
                 state.positionIsRunning = true;
                 executePositionStep();
             }
@@ -974,6 +1016,8 @@ function init() {
             document.getElementById('start-position-btn').disabled = false;
             document.getElementById('position-instruction').textContent =
                 '已选择: ' + b.textContent + '，请先归零';
+            // 选择方向后播报该方向的操作提示
+            speak('请闭眼，头向' + b.textContent + '转到最大范围');
         });
     });
 
@@ -1175,11 +1219,15 @@ function init() {
             document.exitFullscreen();
         }
     });
-    // 退出全屏时自动展开侧边栏
+    // 游戏模式下全屏自动折叠侧边栏，检查模块保持展开
     document.addEventListener('fullscreenchange', () => {
-        if (!document.fullscreenElement) {
-            const sp = document.getElementById('side-panel');
-            const stb = document.getElementById('sidebar-toggle');
+        if (state.mode !== 'game') return; // 检查模块不折叠
+        const sp = document.getElementById('side-panel');
+        const stb = document.getElementById('sidebar-toggle');
+        if (document.fullscreenElement) {
+            sp.classList.add('collapsed');
+            if (stb) { stb.textContent = '▶'; stb.style.display = 'block'; }
+        } else {
             sp.classList.remove('collapsed');
             if (stb) stb.textContent = '◀';
         }
@@ -1726,7 +1774,7 @@ function init() {
     let _frameCount = 0;  // 帧计数器
     let _eulerFrameCount = 0;  // 欧拉角帧计数
     let _lastMagFrameTime = 0;  // 上次收到磁力计帧的时间
-    let _lastYaw = null; // 上一帧Yaw值，用于检测角度跳变（360°边界）
+    let _lastYaw = null; // Yaw展开追踪，跨±180°边界保持连续
 
     function handleGyroscopeData(event) {
         const incoming = new Uint8Array(event.target.value.buffer,
@@ -1764,7 +1812,7 @@ function init() {
                 const angY = view.getInt16(4, true) / 32768 * 180; // Pitch 俯仰/点头
                 const angZ = view.getInt16(6, true) / 32768 * 180; // Roll  翻滚/侧屈
 
-                // Yaw 360°边界修正：传感器范围-180~180，跨边界时修正跳变
+                // Yaw 360°边界修正：传感器范围-180~180，跨边界时展开连续值
                 let rawYaw = -angX;
                 if (_lastYaw !== null) {
                     let delta = rawYaw - _lastYaw;
@@ -1772,13 +1820,10 @@ function init() {
                     if (delta < -180) delta += 360;
                     rawYaw = _lastYaw + delta;
                 }
-                // 不再做低通滤波——EMA漂移补偿在updateFromGyroscope中统一处理
-                // 双重滤波会造成信号延时被误判为漂移
                 window.updateFromGyroscope({ pitch: -angY, yaw: rawYaw, roll: angZ });
                 _lastYaw = rawYaw;
                 _frameCount++;
                 _eulerFrameCount++;
-                // 前50帧每帧都打印，之后每10帧打印一次
                 if (_frameCount <= 50 || _frameCount % 10 === 0) {
                     logGyroDebug(`📐 角度帧#${_frameCount} (type=0x${type.toString(16)}): Pitch=${angY.toFixed(1)}° Yaw=${angZ.toFixed(1)}° Roll=${angX.toFixed(1)}° → dotX=${state.dotX.toFixed(0)} dotY=${state.dotY.toFixed(0)}`);
                 }

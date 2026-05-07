@@ -105,8 +105,8 @@ function updateROM() {
 function updateCoordination(elapsed) {
     const smoothT = elapsed * CONFIG.TRAJECTORY_SPEED;
 
-    // 使用时间进度，兼容COORDINATION_DURATION设置
-    state.progress = Math.min(1, elapsed / CONFIG.COORDINATION_DURATION);
+    // 使用时间进度，按检测/训练时长计算
+    state.progress = Math.min(1, elapsed / (state.testDuration || CONFIG.COORDINATION_DURATION));
 
     const hLineLength = crosshairSize / 2 - 15;
     const vLineLength = ringRadius * 0.85;
@@ -128,6 +128,10 @@ function updateCoordination(elapsed) {
     } else if (state.trajectoryType === 'vertical_right') {
         targetX = hLineLength;
         targetY = Math.sin(smoothT) * vLineLength;
+    } else if (state.trajectoryType === 'figure8_reverse') {
+        // 8字反：从中心向左下开始
+        targetX = -Math.sin(smoothT) * hLineLength;
+        targetY = -Math.sin(smoothT) * Math.cos(smoothT) * vLineLength;
     } else {
         // figure8
         targetX = Math.sin(smoothT) * hLineLength;
@@ -144,16 +148,10 @@ function updateCoordination(elapsed) {
     // 1. 跟踪误差分数 (与红色目标距离)
     const trackingError = Math.sqrt((dotX - targetX) ** 2 + (dotY - targetY) ** 2);
 
-    // 漂移检测：水平方向偏差>10°视为漂移，连续3帧确认
-    const driftThresholdPx = hLineLength * 10 / state.yawRange; // ~67px = 10°
+    // 漂移检测：水平方向偏离 >5° 即时记录
+    const driftThresholdPx = hLineLength * 5 / state.yawRange;
     const isDriftFrame = Math.abs(dotX - targetX) > driftThresholdPx;
     if (isDriftFrame) {
-        state._driftStreak = (state._driftStreak || 0) + 1;
-    } else {
-        state._driftStreak = 0;
-    }
-    const confirmedDrift = state._driftStreak >= 3;
-    if (confirmedDrift) {
         state._driftCount = (state._driftCount || 0) + 1;
     }
 
@@ -167,11 +165,11 @@ function updateCoordination(elapsed) {
     const jerk = calculateJerk();
     const smoothnessScore = calculateSmoothnessScore(jerk);
 
-    // 更新状态：漂移帧不计入评分
+    // 更新状态：漂移帧不计入评分（仅检查当前帧，不累积）
     if (!state.coordScores) {
         state.coordScores = { tracking: [], trajectory: [], smoothness: [] };
     }
-    if (!confirmedDrift) {
+    if (!isDriftFrame) {
         state.coordScores.tracking.push(trackingScore);
         state.coordScores.trajectory.push(trajectoryScore);
         state.coordScores.smoothness.push(smoothnessScore);
@@ -303,7 +301,7 @@ function updateCoordinationDisplay(trackingScore, trajectoryScore, smoothnessSco
         driftEl.textContent = dc;
         driftEl.style.color = dc > 30 ? '#ef4444' : dc > 10 ? '#f59e0b' : '#9CA3AF';
     }
-}
+    }
 
 // ============================================================
 // 前庭功能间接评估

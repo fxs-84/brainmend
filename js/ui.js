@@ -4,6 +4,7 @@
 
 import { state } from './state.js';
 import { CONFIG } from './config.js';
+import { ROM_RULES, POSITION_RULES, COORDINATION_RULES, BALANCE_RULES, BRAIN_INFERENCE, REHAB_GENERATOR, calculateScores } from './assessment/anrm-knowledge.js';
 
 // JPS 分类函数
 function classifyJPS(error) {
@@ -212,21 +213,13 @@ function showROMResults() {
     });
     html += '</div>';
 
-    document.getElementById('result-position').parentElement.innerHTML = html;
-    document.getElementById('close-modal').textContent = '重新检测';
-    document.getElementById('result-position').textContent = 'ROM';
-    document.getElementById('close-modal').onclick = () => {
-        closeModal();
-        state.romStepIndex = 0;
-        state.romResults = {};
-        state.romIsWaitingForZero = false;
-        state.collectedPoints = [];
-        showROMInlineResults();
-        window.updateROMGuide();
-        document.getElementById('close-modal').textContent = '确定';
-        document.getElementById('close-modal').onclick = closeModal;
-    };
-    document.getElementById('result-modal').classList.add('show');
+    // 仅在 inline 区域显示结果，不弹模态框
+    document.getElementById('rom-results').innerHTML = html;
+    // 自动保存到 state（数据不丢，报告按钮可用）
+    if (state.clientInfo && state.clientInfo.name) {
+        const report = generateComprehensiveReport();
+        if (report.available.length > 0) savePatientData(state.clientInfo, report);
+    }
 }
 
 function deleteCollectedPoint(id) {
@@ -557,7 +550,8 @@ function showResults() {
         }
     }
 
-    document.getElementById('result-modal').classList.add('show');
+    // 单项检测不弹模态框——报告需等全部三项做完后点击"生成报告"
+    // document.getElementById('result-modal').classList.add('show');
 }
 
 // ============================================================
@@ -565,73 +559,91 @@ function showResults() {
 // ============================================================
 
 /**
- * 收集所有检测模式的数据并生成综合报告
+ * 收集所有检测数据，通过 ANRM 知识引擎生成综合报告
+ * 报告逻辑非硬编码——所有推断基于 ANRM 902/903/908/脑优化体系
  */
 function generateComprehensiveReport() {
-    const report = { available: [], scores: {}, details: {} };
+    const report = { available: [], scores: {}, details: {}, findings: [] };
 
-    // 位置觉数据
+    // 位置觉 → ANRM 评估
     if (state.positionResults && state.positionResults.length > 0) {
         const avgError = state.positionResults.reduce((s, r) => s + r.totalError, 0) / state.positionResults.length;
-        const posScore = Math.max(0, Math.round(100 - avgError * 10));
         report.available.push('position');
-        report.scores.position = posScore;
         report.details.position = { avgError: avgError.toFixed(1), results: [...state.positionResults] };
+        report.findings.push(...POSITION_RULES.evaluate(state.positionResults));
     }
 
-    // 协调性数据 → 拆分为协调性+稳定性两个维度
-    if (state.coordScores && state.coordScores.tracking && state.coordScores.tracking.length > 0) {
-        const avgTracking = state.coordScores.tracking.reduce((a, b) => a + b, 0) / state.coordScores.tracking.length;
-        const avgTrajectory = state.coordScores.trajectory.reduce((a, b) => a + b, 0) / state.coordScores.trajectory.length;
-        const avgSmoothness = state.coordScores.smoothness.reduce((a, b) => a + b, 0) / state.coordScores.smoothness.length;
-        // 协调性 = 跟踪能力（光点能否跟上红点）
-        const coordScore = Math.round(avgTracking * 100);
-        // 稳定性 = 轨迹+平稳（是否在轨道上平顺移动）
-        const stabScore = Math.round((avgTrajectory * 0.55 + avgSmoothness * 0.45) * 100);
-        // ANRM运动质量分类（基于smoothness）
-        let mqClass, mqInterpretation;
-        if (avgSmoothness > 0.8) { mqClass = '流畅型(Smooth)'; mqInterpretation = '小脑-脊髓通路完整，运动连续平滑'; }
-        else if (avgSmoothness > 0.5) { mqClass = '共济失调型(Ataxic)'; mqInterpretation = '运动中有震颤，可能伴小脑/前庭小脑功能障碍，建议检查扫视和VOR'; }
-        else if (avgSmoothness > 0.3) { mqClass = '运动减少型(Hypometric)'; mqInterpretation = '阶梯状运动，ROM受限，可能额叶/基底节受累，建议检查扫视'; }
-        else { mqClass = '代偿型(Compensatory)'; mqInterpretation = '浅层肌肉(SCM/斜方肌)主导，深层失能，心率易≥+10bpm，需先做肌肉训练'; }
+    // ROM → ANRM 评估
+    if (state.romResults && Object.keys(state.romResults).length > 0) {
+        report.available.push('rom');
+        report.details.rom = { angles: {...state.romResults}, count: Object.keys(state.romResults).length };
+        report.findings.push(...ROM_RULES.evaluate(state.romResults));
+    }
+
+    // 协调性 → ANRM 评估
+    // 优先用当前帧级评分数据(coordScores)，若已被清空则用持久化结果(result)
+    let mq = null;
+    const hasLiveScores = state.coordScores && state.coordScores.tracking && state.coordScores.tracking.length > 0;
+    const hasResult = state.results && state.results.coordination > 0;
+    if (hasLiveScores) {
         report.available.push('coordination');
         report.available.push('stability');
-        report.scores.coordination = coordScore;
-        report.scores.stability = stabScore;
+        const coordResult = COORDINATION_RULES.evaluate(state.coordScores, state.coordFullScores);
+        report.findings.push(...coordResult.findings);
+        mq = coordResult.mq;
+        const scores = state.coordScores;
+        const avgTracking = scores.tracking.reduce((a, b) => a + b, 0) / scores.tracking.length;
+        const avgTrajectory = scores.trajectory.reduce((a, b) => a + b, 0) / scores.trajectory.length;
+        const avgSmoothness = scores.smoothness.reduce((a, b) => a + b, 0) / scores.smoothness.length;
         report.details.coordination = { tracking: avgTracking.toFixed(2) };
-        report.details.stability = { trajectory: avgTrajectory.toFixed(2), smoothness: avgSmoothness.toFixed(2), mqClass, mqInterpretation };
+        report.details.stability = { trajectory: avgTrajectory.toFixed(2), smoothness: avgSmoothness.toFixed(2), mqClass: mq.class, mqInterpretation: mq.interpretation };
+    } else if (hasResult) {
+        report.available.push('coordination');
+        report.details.coordination = { score: state.results.coordination.toFixed(1) };
     }
 
-    // ROM数据
-    if (state.romResults && Object.keys(state.romResults).length > 0) {
-        const romKeys = Object.keys(state.romResults);
-        let totalRom = 0;
-        romKeys.forEach(k => { totalRom += Math.abs(state.romResults[k] || 0); });
-        const romScore = Math.min(100, Math.round(totalRom / romKeys.length * 2));
-        report.available.push('rom');
-        report.scores.rom = romScore;
-        report.details.rom = { angles: {...state.romResults}, count: romKeys.length };
-    }
+    // 评分计算（统一使用 ANRM 规则引擎）
+    report.scores = calculateScores(state.romResults, state.positionResults, state.coordScores);
 
-    // 综合评分（加权平均）
-    const weights = { position: 0.30, coordination: 0.25, stability: 0.25, rom: 0.20 };
-    let totalWeight = 0, weightedSum = 0;
+    // 综合评分 —— 短板惩罚加权：最低分维度拖低总分，反映"最弱环节决定功能上限"的临床原则
+    const weights = { position: 0.30, coordination: 0.20, stability: 0.25, rom: 0.25 };
+    let totalWeight = 0, weightedSum = 0, minScore = 100;
     for (const [key, w] of Object.entries(weights)) {
         if (report.scores[key] !== undefined) {
             weightedSum += report.scores[key] * w;
             totalWeight += w;
+            if (report.scores[key] < minScore) minScore = report.scores[key];
         }
     }
-    report.overall = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0;
+    const weightedAvg = totalWeight > 0 ? weightedSum / totalWeight : 0;
+    // 短板惩罚：最低分偏离均值越多，总分被拉得越低
+    const penalty = weightedAvg > 0 ? (0.4 + 0.6 * (minScore / weightedAvg)) : 1;
+    report.overall = Math.round(weightedAvg * Math.min(1, penalty));
 
-    // 前庭功能间接评估
+    // 平衡/前庭 → ANRM 评估
+    report.findings.push(...BALANCE_RULES.evaluate(
+        report.scores.rom || 0,
+        report.scores.position || 0,
+        report.scores.coordination || 0,
+        report.scores.stability || 0
+    ));
+
+    // 脑功能推断 → ANRM 知识引擎
+    const romFindings = report.findings.filter(f => f.category === 'ROM');
+    const posFindings = report.findings.filter(f => f.category === 'PositionSense');
+    const coordFindings = report.findings.filter(f => f.category === 'MotorControl' || f.category === 'Coordination');
+    report.brainRegions = BRAIN_INFERENCE.infer(romFindings, posFindings, coordFindings, mq);
+
+    // 前庭评估（兼容旧接口）
     const jpsError = report.details.position ? parseFloat(report.details.position.avgError) : 99;
     const smoothness = report.details.stability ? parseFloat(report.details.stability.smoothness) : 0;
-    const trajectory = report.details.stability ? parseFloat(report.details.stability.trajectory) : 0;
-    report.vestibular = evaluateVestibularFromAll(jpsError, smoothness, trajectory, report.scores.stability || 0);
+    report.vestibular = evaluateVestibularFromAll(jpsError, smoothness, report.details.stability ? parseFloat(report.details.stability.trajectory) : 0, report.scores.stability || 0);
 
-    // 康复建议
-    report.recommendations = generateRehabRecommendations(report);
+    // 康复建议 → ANRM 知识引擎
+    const rehab = REHAB_GENERATOR.generate(report.findings, state.clientInfo);
+    report.recommendations = rehab.specificRecommendations;
+    report.anrmPrinciples = rehab.anrmPrinciples;
+    report.trainingOrder = rehab.trainingOrder;
 
     return report;
 }
@@ -1015,48 +1027,93 @@ function inferBrainFunction(report) {
 /** 一键显示综合报告（按钮调用入口） */
 function showComprehensiveReport() {
     const report = generateComprehensiveReport();
-    if (report.available.length === 0) { alert('请先完成至少一项检测（位置觉/协调性/ROM）'); return; }
+    const required = ['position', 'rom', 'coordination'];
+    const missing = required.filter(k => !report.available.includes(k));
+    if (missing.length > 0) {
+        const names = { position: '位置觉', rom: 'ROM', coordination: '协调性' };
+        alert('以下检测尚未完成：' + missing.map(k => names[k]).join('、') + '\n请完成全部三项检测后再生成综合报告。');
+        return;
+    }
+    // 确保模态框可见
+    document.getElementById('result-modal').classList.add('show');
     updateScoreBars(
         report.scores.position || 0,
         report.scores.stability || 0,
         report.scores.rom || 0,
         report.scores.coordination || 0
     );
-    // 前庭CTSIB分类
+
+    // === 评估发现汇总（ANRM 知识引擎输出）===
+    const detailsContent = document.getElementById('report-details-content');
+    let html = '';
+
+    // 发现列表
+    if (report.findings.length > 0) {
+        html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">📋 评估发现</div>';
+        report.findings.forEach(f => {
+            const sevColors = { normal: '#22c55e', mild: '#eab308', moderate: '#f97316', significant: '#ef4444' };
+            const sevColor = sevColors[f.severity] || '#9CA3AF';
+            html += `<div style="margin-bottom:8px;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;border-left:3px solid ${sevColor};">
+                <div style="font-weight:600;font-size:11px;">${f.finding}</div>
+                <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">ANRM: ${f.anrmRef || ''}</div>`;
+            if (f.implications) {
+                f.implications.forEach(imp => {
+                    html += `<div style="font-size:9px;color:#9CA3AF;margin-top:1px;">→ ${imp}</div>`;
+                });
+            }
+            html += '</div>';
+        });
+    }
+
+    // 脑功能推断
+    if (report.brainRegions && report.brainRegions.length > 0) {
+        html += '<div style="font-size:11px;color:var(--text-muted);margin:12px 0 6px;">🧠 脑功能推断 (ANRM 体系)</div>';
+        report.brainRegions.forEach(r => {
+            const lc = r.likelihood === '高' ? '#ef4444' : r.likelihood === '中' ? '#f59e0b' : '#9CA3AF';
+            html += `<div style="padding:6px 0;font-size:10px;border-bottom:1px solid rgba(255,255,255,0.04);">
+                <span style="color:${lc}">[${r.likelihood}可能性]</span> <b>${r.region}</b>
+                <div style="color:#9CA3AF;margin-top:2px;">📊 ${r.evidence}</div>
+                <div style="color:#00D9A5;margin-top:2px;">💡 ${Array.isArray(r.recommendations) ? r.recommendations.join('；') : r.recommendation}</div>
+            </div>`;
+        });
+    }
+
+    // ANRM 核心原则
+    if (report.anrmPrinciples) {
+        html += '<div style="font-size:11px;color:var(--primary);margin:12px 0 6px;">📖 ANRM 康复核心原则</div>';
+        report.anrmPrinciples.forEach(p => {
+            html += `<div style="font-size:9px;color:var(--text-muted);margin-bottom:2px;">• ${p}</div>`;
+        });
+    }
+
+    // 训练顺序
+    if (report.trainingOrder) {
+        html += '<div style="font-size:11px;color:var(--success);margin:12px 0 6px;">🏃 建议训练顺序</div>';
+        report.trainingOrder.forEach((step, i) => {
+            html += `<div style="font-size:10px;color:var(--text);margin-bottom:3px;">${step}</div>`;
+        });
+    }
+
+    // 康复建议
+    html += '<div style="font-size:11px;color:var(--success);margin:12px 0 6px;">💪 具体康复建议</div>';
+    (report.recommendations || []).forEach(r => {
+        html += `<div style="font-size:10px;color:var(--text);margin-bottom:3px;">• ${r}</div>`;
+    });
+
+    detailsContent.innerHTML = html;
+    document.getElementById('report-details').style.display = 'block';
+
+    // 前庭
     const vDiv = document.getElementById('vestibular-assessment');
     vDiv.style.display = 'block';
     document.getElementById('vestibular-result').textContent =
         `[${report.vestibular.cls}] ${report.vestibular.assessment}`;
     document.getElementById('vestibular-result').style.color = report.vestibular.color;
     document.getElementById('vestibular-recommendation').textContent = report.vestibular.recommendation;
-    // 运动质量分类
-    if (report.details.stability && report.details.stability.mqClass) {
-        const mqInfo = document.createElement('div');
-        mqInfo.style.cssText = 'margin-top:4px;font-size:10px;color:#9CA3AF;';
-        mqInfo.textContent = `运动质量: ${report.details.stability.mqClass} — ${report.details.stability.mqInterpretation}`;
-        vDiv.appendChild(mqInfo);
-    }
-    // 脑功能推断
-    const brainFindings = inferBrainFunction(report);
-    if (brainFindings.length > 0) {
-        const reportDetails = document.getElementById('report-details');
-        let brainHtml = '<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">🧠 脑功能推断 (ANRM模型)</div>';
-        brainFindings.forEach(f => {
-            const lc = f.likelihood === '高' ? '#ef4444' : f.likelihood === '中' ? '#f59e0b' : '#9CA3AF';
-            brainHtml += `<div style="padding:3px 0;font-size:10px;border-bottom:1px solid rgba(255,255,255,0.04)">
-                <span style="color:${lc}">[${f.likelihood}]</span> <b>${f.region}</b><br>
-                <span style="color:#9CA3AF">📊 ${f.evidence}</span><br>
-                <span style="color:#00D9A5">💡 ${f.recommendation}</span>
-            </div>`;
-        });
-        if (!reportDetails.innerHTML) reportDetails.innerHTML = '';
-        reportDetails.innerHTML = brainHtml + reportDetails.innerHTML;
-        reportDetails.style.display = 'block';
-    }
-    // 康复建议(ANRM 6步)
-    const rehabDiv = document.getElementById('rehab-suggestions');
-    rehabDiv.style.display = 'block';
-    document.getElementById('rehab-suggestions-content').innerHTML = report.recommendations.map(r => '• ' + r).join('<br>');
+
+    // 前庭下方的康复建议区改为空（已在上方 details 区展示）
+    document.getElementById('rehab-suggestions').style.display = 'none';
+
     showHistoryComparison(report);
 }
 
@@ -1142,4 +1199,4 @@ window.drawRadarChart = drawRadarChart;
 window.showComprehensiveReport = showComprehensiveReport;
 window.showRecordsModal = showRecordsModal;
 
-export { renderCollectedPoints, updateDataDisplay, updateProgress, zeroPosition, collectPoint, showROMResults, showROMInlineResults, generateComprehensiveReport, savePatientData, getPatientRecords, promptSavePatient, showComprehensiveReport, showRecordsModal };
+export { renderCollectedPoints, updateDataDisplay, updateProgress, zeroPosition, collectPoint, showROMResults, showROMInlineResults, generateComprehensiveReport, savePatientData, getPatientRecords, promptSavePatient, showComprehensiveReport, showRecordsModal, showResults };

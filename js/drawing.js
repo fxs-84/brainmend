@@ -53,7 +53,7 @@ function drawStaticElements() {
     ctx.moveTo(leftX, actualCenterY);
     ctx.lineTo(rightX, actualCenterY);
     ctx.strokeStyle = CONFIG.COLORS.CROSSHAIR;
-    ctx.lineWidth = 10;
+    ctx.lineWidth = 26;
     ctx.stroke();
 
     // 中心垂直线（比外圆直径短很多）
@@ -62,7 +62,7 @@ function drawStaticElements() {
     ctx.moveTo(actualCenterX, actualCenterY - vLineLength);
     ctx.lineTo(actualCenterX, actualCenterY + vLineLength);
     ctx.strokeStyle = CONFIG.COLORS.CROSSHAIR;
-    ctx.lineWidth = 10;
+    ctx.lineWidth = 26;
     ctx.stroke();
 
     // 角落标记
@@ -98,6 +98,7 @@ function drawTrajectory(actualCenterX, actualCenterY, scale) {
     if (!isCoordOrIntegrated) return;
 
     const isFigure8 = state.trajectoryType === 'figure8';
+    const isFigure8Reverse = state.trajectoryType === 'figure8_reverse';
     const isHorizontal = state.trajectoryType === 'horizontal';
     const isVertical = state.trajectoryType === 'vertical';
     const isVerticalLeft = state.trajectoryType === 'vertical_left';
@@ -116,6 +117,9 @@ function drawTrajectory(actualCenterX, actualCenterY, scale) {
         if (isFigure8) {
             pathX = actualCenterX + Math.sin(tParam) * hLineLength;
             pathY = actualCenterY - Math.sin(tParam) * Math.cos(tParam) * vLineLength;
+        } else if (isFigure8Reverse) {
+            pathX = actualCenterX - Math.sin(tParam) * hLineLength;
+            pathY = actualCenterY + Math.sin(tParam) * Math.cos(tParam) * vLineLength;
         } else if (isHorizontal) {
             pathX = actualCenterX + Math.sin(tParam) * hLineLength;
             pathY = actualCenterY;
@@ -145,7 +149,7 @@ function drawTrajectory(actualCenterX, actualCenterY, scale) {
         }
     }
     ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
-    ctx.lineWidth = 10;
+    ctx.lineWidth = 26;
     ctx.stroke();
 }
 

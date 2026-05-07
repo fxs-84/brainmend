@@ -18,9 +18,10 @@ export const CONFIG = {
     COORD_TRAJ_THRESHOLD: 35,    // 轨迹偏离失败阈值(像素)
 
     // 协调性检测轨迹
-    COORD_TRAJECTORIES: ['horizontal', 'vertical', 'vertical_left', 'vertical_right', 'figure8'],
+    COORD_TRAJECTORIES: ['horizontal', 'vertical', 'vertical_left', 'vertical_right', 'figure8', 'figure8_reverse'],
     COORD_SINGLE_DURATION: 2 * (2 * Math.PI / 0.28),   // 单轨迹检测：2个完整周期
     COORD_FULL_DURATION: 20,     // 全轨迹检测：每轨迹20秒
+    COORD_TRAINING_DURATION: 90, // 训练模式：1分30秒
 
     // 轨迹参数
     INTEGRATED_DURATION: 60,      // 综合检测：60秒

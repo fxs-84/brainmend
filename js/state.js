@@ -110,6 +110,7 @@ const createState = () => ({
     // 协调性检测评分
     coordScores: null,  // { tracking: [], trajectory: [], smoothness: [] }
     coordMode: 'single',  // 'single' | 'full'
+    coordTrainingMode: false,  // 训练模式：每个轨迹90秒
     coordCurrentTrajectoryIndex: 0,  // 当前轨迹索引（全模式）
     coordFullScores: []  // 全模式：存储各轨迹的评分
 });
