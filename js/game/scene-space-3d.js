@@ -258,6 +258,7 @@ export class SceneSpace3D extends SceneBase {
                 c.z = SPAWN_Z + Math.random() * 5;
                 c.x = 0.15 + Math.random() * 0.7;
                 c.y = 0.25 + Math.random() * 0.5;
+                c.ok = false;
             }
         }
 
@@ -265,11 +266,10 @@ export class SceneSpace3D extends SceneBase {
         for (const g of this.gates) {
             g.z -= s;
             g.ph += dt * 1.5;
-            g.gl = Math.max(0, g.gl - dt * 1.2);
             if (g.z < 0.5) {
                 g.z = SPAWN_Z + Math.random() * 5;
                 g.x = 0.2 + Math.random() * 0.6;
-                g.gl = 0;
+                g.gl = 0; // 重生后重置
             }
         }
 
@@ -301,7 +301,7 @@ export class SceneSpace3D extends SceneBase {
         const out = [];
         const minD = Math.min(w, h);
         for (const g of this.gates) {
-            if (g.gl > 0.5 || g.z < 0.5 || g.z > SPAWN_Z) continue;
+            if (g.collected || g.z < 0.5 || g.z > SPAWN_Z) continue;
             const proj = this._proj(g.z, w, h);
             if (proj.t < 0.08) continue;
             const gx = proj.centerX + (g.x - 0.5) * w * proj.scale;
@@ -310,8 +310,7 @@ export class SceneSpace3D extends SceneBase {
             const dx = px * w - gx;
             const dy = py * h - gy;
             if (dx*dx + dy*dy < gr * gr) {
-                g.ok = true;
-                g.gl = 1;
+                g.collected = true;
                 out.push(g);
             }
         }
@@ -475,7 +474,7 @@ export class SceneSpace3D extends SceneBase {
         // 传送门
         const sortedGates = [...this.gates].sort((a, b) => b.z - a.z);
         for (const g of sortedGates) {
-            if (!g.ok) this._renderGate(ctx, w, h, g);
+            if (!g.collected) this._renderGate(ctx, w, h, g);
         }
 
         // 敌舰
@@ -573,7 +572,7 @@ export class SceneSpace3D extends SceneBase {
     }
 
     _renderGate(ctx, w, h, g) {
-        if (g.ok || g.z < 0.5 || g.z > SPAWN_Z) return;
+        if (g.collected || g.z < 0.5 || g.z > SPAWN_Z) return;
         const proj = this._proj(g.z, w, h);
         if (proj.t < 0.06) return;
 

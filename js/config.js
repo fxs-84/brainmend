@@ -44,14 +44,14 @@ export const CONFIG = {
         TARGET: '#EF4444',
         TARGET_GLOW: 'rgba(239, 68, 68, 0.8)',
         TARGET_GLOW_MID: 'rgba(239, 68, 68, 0.3)',
-        POSITION: '#00D9A5',
-        POSITION_GLOW: 'rgba(0, 217, 165, 0.8)',
-        POSITION_GLOW_MID: 'rgba(0, 217, 165, 0.3)',
-        TRAIL: 'rgba(0, 217, 165, 0.3)',
-        GRID: 'rgba(255, 255, 255, 0.03)',
-        CROSSHAIR: 'rgba(255, 255, 255, 0.4)',
-        RING_OUTER: 'rgba(255, 255, 255, 0.15)',
-        RING_INNER: 'rgba(255, 255, 255, 0.1)'
+        POSITION: '#00A878',
+        POSITION_GLOW: 'rgba(0, 168, 120, 0.8)',
+        POSITION_GLOW_MID: 'rgba(0, 168, 120, 0.3)',
+        TRAIL: 'rgba(0, 102, 204, 0.5)',
+        GRID: 'rgba(0, 0, 0, 0.16)',
+        CROSSHAIR: 'rgba(88, 28, 135, 0.35)',
+        RING_OUTER: 'rgba(0, 0, 0, 0.1)',
+        RING_INNER: 'rgba(0, 0, 0, 0.06)'
     },
 
     // ROM检测步骤

@@ -16,10 +16,12 @@ export class SpaceEngine {
         this.scene = new SceneSpace3D();
         this.player = { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5, r: 0.04 };
         this.gyro = { pitch: 0, yaw: 0, roll: 0 };
+        this._gyroBaseline = { pitch: null, yaw: null, roll: null };
         this.fb = { active: false, t: 0, d: 0.3 };
         this.score = 0;
         this.introTimer = 3.0;
         this.speedMul = 0.35;
+        this.difficulty = 'normal';
         this.onScoreUpdate = null;
         this.onGameOver = null;
         this.af = null;
@@ -59,6 +61,7 @@ export class SpaceEngine {
         }
         soundManager.init();
         soundManager.startEngineHum();
+        if (window._freezeGyroEMA) window._freezeGyroEMA(true);
         this.state = S.PLAYING;
         this.gameTime = 0;
         this.score = 0;
@@ -81,16 +84,22 @@ export class SpaceEngine {
     }
 
     onEntryZero() {
+        // 冻结全局EMA漂移，用当前值建立基线
+        if (window._freezeGyroEMA) window._freezeGyroEMA(true);
         if (window._resetGyroEMA) window._resetGyroEMA();
-        this.player.x = 0.5;
-        this.player.y = 0.5;
-        this.player.tx = 0.5;
-        this.player.ty = 0.5;
+        this._gyroBaseline = { pitch: null, yaw: null, roll: null };
+        this.gyro = { pitch: 0, yaw: 0, roll: 0 };
+        this.player.x = 0.5; this.player.y = 0.5;
+        this.player.tx = 0.5; this.player.ty = 0.5;
     }
 
     rezero() {
+        // 重置EMA基线 + 引擎基线
         if (window._resetGyroEMA) window._resetGyroEMA();
-        this.onEntryZero();
+        this._gyroBaseline = { pitch: null, yaw: null, roll: null };
+        this.gyro = { pitch: 0, yaw: 0, roll: 0 };
+        this.player.x = 0.5; this.player.y = 0.5;
+        this.player.tx = 0.5; this.player.ty = 0.5;
     }
 
     startLoop() { if (!this.af) this.af = requestAnimationFrame(this.loop); }
@@ -160,11 +169,11 @@ export class SpaceEngine {
             }
                     }
 
-        // 收集
-        for (const g of this.scene.checkGatePassage(this.player.x, this.player.y, this.canvas.width, this.canvas.height)) this.score += 100;
-        for (const s of this.scene.checkStarCollect(this.player.x, this.player.y, this.canvas.width, this.canvas.height)) this.score += 25;
-        for (const o of this.scene.checkOrbCollect(this.player.x, this.player.y, this.canvas.width, this.canvas.height)) this.score += 50;
-        this.score += 1 * dt;
+        // 收集（一次性，不会重复得分）
+        if (this.introTimer <= 0) {
+            for (const g of this.scene.checkGatePassage(this.player.x, this.player.y, this.canvas.width, this.canvas.height)) this.score += 100;
+            for (const s of this.scene.checkStarCollect(this.player.x, this.player.y, this.canvas.width, this.canvas.height)) this.score += 25;
+        }
 
         if (this.fb.active) { this.fb.t -= dt; if (this.fb.t <= 0) this.fb.active = false; }
 
@@ -173,7 +182,7 @@ export class SpaceEngine {
         if (this.shootCooldown <= 0 && this.introTimer <= 0 && this.state === S.PLAYING) {
             this.shootCooldown = 0.10;
             const rollRad = this.gyro.roll * Math.PI / 180;
-            const vx = -Math.sin(rollRad) * 0.6;  // 滚转影响水平方向
+            const vx = Math.sin(rollRad) * 0.6;  // 右滚=向右，左滚=向左
             const vy = -0.7;
             this.bullets.push(new Bullet(this.player.x, this.player.y - 0.04, {
                 vx, vy, speed: 0.8, radius: 0.004, color: '#00ffcc',
@@ -189,16 +198,19 @@ export class SpaceEngine {
         }
 
         // 敌舰管理（2D屏幕坐标，从上向下飞）
+        const diffCfg = { easy: { spd: 0.7, hpMul: 0.6, maxMul: 0.7, spawnInt: 1.5 },
+                          normal: { spd: 1.0, hpMul: 1.0, maxMul: 1.0, spawnInt: 1.0 },
+                          hard: { spd: 1.3, hpMul: 1.5, maxMul: 1.3, spawnInt: 0.7 } }[this.difficulty];
         if (this.introTimer <= 0) {
             this.enemySpawnTimer -= dt;
-            const maxEnemies = 3 + Math.floor(this.gameTime / 15);
+            const maxEnemies = Math.floor((3 + Math.floor(this.gameTime / 15)) * diffCfg.maxMul);
             if (this.enemySpawnTimer <= 0 && this.enemies.length < maxEnemies) {
-                this.enemySpawnTimer = 1.0;
+                this.enemySpawnTimer = diffCfg.spawnInt;
                 this.enemies.push({
                     x: 0.1 + Math.random() * 0.8,
                     y: -0.05,
-                    hp: 1 + Math.floor(this.gameTime / 40),
-                    speed: 0.12 + Math.random() * 0.06,
+                    hp: Math.ceil((1 + Math.floor(this.gameTime / 40)) * diffCfg.hpMul),
+                    speed: (0.12 + Math.random() * 0.06) * diffCfg.spd,
                     size: 0.08
                 });
             }
@@ -252,18 +264,31 @@ export class SpaceEngine {
         this.fb.t = this.fb.d;
         this.invincibleTimer = 1.0;
         soundManager.playExplosion();
+        soundManager.stopEngineHum();
         if (this.onGameOver) this.onGameOver(this.score, 'C', { time: this.gameTime });
         this.state = S.GAMEOVER;
         this._deathTime = this.gameTime;
         this.stopLoop();
     }
 
-    setGyroInput(p, y, r) { this.gyro = { pitch: p, yaw: y, roll: r }; }
+    setGyroInput(p, y, r) {
+        // 首次初始化：用当前值作为基线（替代全局EMA的漂移）
+        if (this._gyroBaseline.yaw === null) {
+            this._gyroBaseline = { pitch: p, yaw: y, roll: r };
+        }
+        this.gyro = {
+            pitch: p - this._gyroBaseline.pitch,
+            yaw: y - this._gyroBaseline.yaw,
+            roll: r - this._gyroBaseline.roll
+        };
+    }
 
     _shoot() {
         this.shootCooldown = 0.10;
+        const rollRad = this.gyro.roll * Math.PI / 180;
+        const vx = Math.sin(rollRad) * 0.6;
         this.bullets.push(new Bullet(this.player.x, this.player.y - 0.04, {
-            vx: 0, vy: -0.7, speed: 0.8, radius: 0.004, color: '#00ffcc',
+            vx, vy: -0.7, speed: 0.8, radius: 0.004, color: '#00ffcc',
             onFire: () => soundManager.playShoot()
         }));
     }
@@ -283,8 +308,10 @@ export class SpaceEngine {
         ctx.fillText('★'.repeat(stars) + '☆'.repeat(5 - stars), w - 16, 48);
 
         if (this.introTimer > 0) {
-            ctx.fillStyle = '#0ff'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center';
-            ctx.fillText('避岩石 · 收集水晶 · 穿传送门', w / 2, 30);
+            ctx.fillStyle = '#0ff'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('转头控制方向 | 侧倾改变弹道 | 击毁红色敌舰+200', w / 2, 28);
+            ctx.fillStyle = '#ff0'; ctx.font = '12px sans-serif';
+            ctx.fillText('收集水晶+25 | 穿传送门+100', w / 2, 46);
         }
 
         // flash
@@ -316,6 +343,8 @@ export class SpaceEngine {
         this.stopLoop();
         this.scene.cleanup();
         soundManager.stopEngineHum();
+        // 恢复全局EMA追踪
+        if (window._freezeGyroEMA) window._freezeGyroEMA(false);
         if (this._h) {
             document.removeEventListener('keydown', this._h);
             document.removeEventListener('keydown', this._shootH);

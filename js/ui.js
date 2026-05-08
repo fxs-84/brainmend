@@ -197,7 +197,7 @@ function showROMResults() {
     results.forEach(r => {
         const color = r.status === '正常' ? 'var(--success)' : r.status === '轻度受限' ? 'var(--warning)' : 'var(--danger)';
         html += `
-            <div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 10px; margin-bottom: 8px;">
+            <div style="background: rgba(0,0,0,0.03); border-radius: 8px; padding: 10px; margin-bottom: 8px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                     <span style="font-size: 12px; font-weight: 600;">${r.name}</span>
                     <span style="font-size: 12px; color: ${color}; font-weight: 600;">${r.status}</span>
@@ -205,7 +205,7 @@ function showROMResults() {
                 <div style="font-size: 18px; font-family: Consolas, monospace; margin-bottom: 4px;">
                     ${r.value}° <span style="font-size: 10px; color: var(--text-muted);">/ 正常${r.normal}°</span>
                 </div>
-                <div style="height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden;">
+                <div style="height: 4px; background: rgba(0,0,0,0.1); border-radius: 2px; overflow: hidden;">
                     <div style="height: 100%; width: ${r.percentage}%; background: ${color}; border-radius: 2px;"></div>
                 </div>
             </div>
@@ -357,7 +357,7 @@ function buildPositionDetails() {
     });
     const avgError = avg(state.positionResults.map(r => r.totalError));
     const overallCls = classifyJPS(avgError);
-    return html + `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.1);">
+    return html + `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(0,0,0,0.1);">
         <span>平均误差:</span>
         <span style="color: ${overallCls.color}; font-weight: 600;">${avgError.toFixed(1)}° (${overallCls.level})</span>
     </div></div>`;
@@ -740,7 +740,7 @@ function drawRadarChart(canvas, scores) {
             i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         }
         ctx.closePath();
-        ctx.strokeStyle = `rgba(255,255,255,${0.08 + level * 0.03})`;
+        ctx.strokeStyle = `rgba(0,0,0,${0.08 + level * 0.03})`;
         ctx.lineWidth = 1;
         ctx.stroke();
     }
@@ -751,7 +751,7 @@ function drawRadarChart(canvas, scores) {
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         ctx.lineTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r);
-        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.strokeStyle = 'rgba(0,0,0,0.1)';
         ctx.stroke();
     }
 
@@ -860,7 +860,7 @@ function showHistoryComparison(currentReport) {
             const d = new Date(r.date);
             const dateStr = `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
             const color = r.overall >= 70 ? '#22c55e' : r.overall >= 50 ? '#eab308' : '#ef4444';
-            html += `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:10px;border-bottom:1px solid rgba(255,255,255,0.05)">
+            html += `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:10px;border-bottom:1px solid rgba(0,0,0,0.05)">
                 <span>${r.name || '患者'} ${dateStr}</span>
                 <span style="color:${color}">${r.overall}分</span>
                 <span style="color:var(--text-muted);cursor:pointer" onclick="window._delRecord(${records.length-1-i})" title="删除">×</span>
@@ -1053,7 +1053,7 @@ function showComprehensiveReport() {
         report.findings.forEach(f => {
             const sevColors = { normal: '#22c55e', mild: '#eab308', moderate: '#f97316', significant: '#ef4444' };
             const sevColor = sevColors[f.severity] || '#9CA3AF';
-            html += `<div style="margin-bottom:8px;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;border-left:3px solid ${sevColor};">
+            html += `<div style="margin-bottom:8px;padding:8px;background:rgba(0,0,0,0.03);border-radius:6px;border-left:3px solid ${sevColor};">
                 <div style="font-weight:600;font-size:11px;">${f.finding}</div>
                 <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">ANRM: ${f.anrmRef || ''}</div>`;
             if (f.implications) {
@@ -1070,7 +1070,7 @@ function showComprehensiveReport() {
         html += '<div style="font-size:11px;color:var(--text-muted);margin:12px 0 6px;">🧠 脑功能推断 (ANRM 体系)</div>';
         report.brainRegions.forEach(r => {
             const lc = r.likelihood === '高' ? '#ef4444' : r.likelihood === '中' ? '#f59e0b' : '#9CA3AF';
-            html += `<div style="padding:6px 0;font-size:10px;border-bottom:1px solid rgba(255,255,255,0.04);">
+            html += `<div style="padding:6px 0;font-size:10px;border-bottom:1px solid rgba(0,0,0,0.04);">
                 <span style="color:${lc}">[${r.likelihood}可能性]</span> <b>${r.region}</b>
                 <div style="color:#9CA3AF;margin-top:2px;">📊 ${r.evidence}</div>
                 <div style="color:#00D9A5;margin-top:2px;">💡 ${Array.isArray(r.recommendations) ? r.recommendations.join('；') : r.recommendation}</div>
@@ -1131,7 +1131,7 @@ function showRecordsModal() {
             const d = new Date(r.date);
             const ds = `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
             const c = r.overall >= 70 ? '#22c55e' : r.overall >= 50 ? '#eab308' : '#ef4444';
-            html += `<div style="padding:8px;margin-bottom:4px;background:rgba(255,255,255,0.03);border-radius:6px;cursor:pointer" onclick="window._viewRecord(${records.length-1-i})">
+            html += `<div style="padding:8px;margin-bottom:4px;background:rgba(0,0,0,0.03);border-radius:6px;cursor:pointer" onclick="window._viewRecord(${records.length-1-i})">
                 <div style="display:flex;justify-content:space-between;align-items:center">
                     <span style="font-weight:600">${r.name || '匿名'}
                         ${r.gender ? '<span style="font-size:10px;color:var(--text-muted)">'+r.gender+'</span>' : ''}

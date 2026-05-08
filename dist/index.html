@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>颈椎检测康复训练游戏</title>
-  <script type="module" crossorigin src="./assets/index-D7q6Ghlk.js"></script>
+  <script type="module" crossorigin src="./assets/index-Cza97xxZ.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-lhHHWwHU.js">
   <link rel="modulepreload" crossorigin href="./assets/bullet-Cz6fGGYr.js">
   <link rel="modulepreload" crossorigin href="./assets/obstacle-B_Ja8--0.js">
   <link rel="modulepreload" crossorigin href="./assets/particle-BnwUJCTT.js">
   <link rel="modulepreload" crossorigin href="./assets/scene-base-h5q7y06u.js">
   <link rel="modulepreload" crossorigin href="./assets/sound-manager-D85V_UAg.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-PkJ8M8Pr.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-B9wohW-q.css">
 </head>
 <body>
     <div id="app">
@@ -23,15 +23,15 @@
                 <!-- 报告：下拉菜单 -->
                 <div style="position:relative;display:inline-block;margin-right:4px;" id="report-menu-wrap">
                     <button id="report-menu-btn" style="background: linear-gradient(135deg,#00D9A5,#0086FF); border: none; color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">报告 ▾</button>
-                    <div id="report-dropdown" style="display:none;position:absolute;top:100%;right:0;background:rgba(15,23,42,0.98);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 0;z-index:3000;min-width:120px;">
+                    <div id="report-dropdown" style="display:none;position:absolute;top:100%;right:0;background:rgba(255,255,255,0.98);border:1px solid rgba(0,0,0,0.15);border-radius:6px;padding:4px 0;z-index:3000;min-width:120px;">
                         <div id="gen-report-item" style="padding:6px 14px;font-size:11px;color:#fff;cursor:pointer;white-space:nowrap;">📊 生成报告</div>
                         <div id="records-item" style="padding:6px 14px;font-size:11px;color:#9CA3AF;cursor:pointer;white-space:nowrap;">📋 报告查询</div>
                     </div>
                 </div>
-                <button id="fullscreen-btn" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;" title="全屏">⛶</button>
-                <button id="toggle-input-mode" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">鼠标模式</button>
-                <button id="open-gyro-modal" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">蓝牙连接</button>
-                <button id="tts-toggle" style="background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-left: 5px;">语音关闭</button>
+                <button id="fullscreen-btn" style="background: var(--bg-panel); border: 1px solid rgba(0,0,0,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;" title="全屏">⛶</button>
+                <button id="toggle-input-mode" style="background: var(--bg-panel); border: 1px solid rgba(0,0,0,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">鼠标模式</button>
+                <button id="open-gyro-modal" style="background: var(--bg-panel); border: 1px solid rgba(0,0,0,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">蓝牙连接</button>
+                <button id="tts-toggle" style="background: var(--bg-panel); border: 1px solid rgba(0,0,0,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-left: 5px;">语音关闭</button>
             </div>
         </header>
         <main>
@@ -99,33 +99,36 @@
                     <div class="panel-title">检测模式</div>
                     <div class="data-card">
                         <div style="display: flex; gap: 4px;">
-                            <button class="coord-mode-btn active" data-mode="single" id="coord-mode-single" style="flex: 1; padding: 8px; border: 1px solid rgba(255,255,255,0.2); background: var(--primary); color: var(--bg-dark); border-radius: 4px; cursor: pointer; font-size: 11px;">单轨迹检测</button>
-                            <button class="coord-mode-btn" data-mode="full" id="coord-mode-full" style="flex: 1; padding: 8px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 11px;">全轨迹检测(5项)</button>
+                            <button class="coord-mode-btn active" data-mode="single" id="coord-mode-single" style="flex: 1; padding: 8px; border: 1px solid rgba(0,0,0,0.2); background: var(--primary); color: var(--bg-dark); border-radius: 4px; cursor: pointer; font-size: 11px;">单轨迹检测</button>
+                            <button class="coord-mode-btn" data-mode="full" id="coord-mode-full" style="flex: 1; padding: 8px; border: 1px solid rgba(0,0,0,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 11px;">全轨迹检测(6项)</button>
+                        </div>
+                        <div style="margin-top: 4px;">
+                            <button id="coord-training-toggle" style="width: 100%; padding: 8px; border: 1px solid rgba(0,0,0,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 11px;">训练模式 (1分30秒)</button>
                         </div>
                     </div>
                     <div class="panel-title" id="coord-trajectory-title">轨迹选择</div>
                     <div class="data-card" id="coord-trajectory-card">
                         <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-                            <button class="traj-btn active" data-traj="horizontal" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: var(--primary); color: var(--bg-dark); border-radius: 4px; cursor: pointer; font-size: 10px;">水平</button>
-                            <button class="traj-btn" data-traj="vertical" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直</button>
-                            <button class="traj-btn" data-traj="vertical_left" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直左</button>
-                            <button class="traj-btn" data-traj="vertical_right" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直右</button>
-                            <button class="traj-btn" data-traj="figure8" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">8字</button>
-                            <button class="traj-btn" data-traj="free" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); background: var(--warning); color: var(--bg-dark); border-radius: 4px; cursor: pointer; font-size: 10px;">自由(实验)</button>
+                            <button class="traj-btn active" data-traj="horizontal" style="padding: 6px 10px; border: 1px solid rgba(0,0,0,0.2); background: var(--primary); color: var(--bg-dark); border-radius: 4px; cursor: pointer; font-size: 10px;">水平</button>
+                            <button class="traj-btn" data-traj="vertical" style="padding: 6px 10px; border: 1px solid rgba(0,0,0,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直</button>
+                            <button class="traj-btn" data-traj="vertical_left" style="padding: 6px 10px; border: 1px solid rgba(0,0,0,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直左</button>
+                            <button class="traj-btn" data-traj="vertical_right" style="padding: 6px 10px; border: 1px solid rgba(0,0,0,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直右</button>
+                            <button class="traj-btn" data-traj="figure8" style="padding: 6px 10px; border: 1px solid rgba(0,0,0,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">8字</button>
+                            <button class="traj-btn" data-traj="figure8_reverse" style="padding: 6px 10px; border: 1px solid rgba(0,0,0,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">8字反</button>
                         </div>
                     </div>
                     <div class="panel-title" id="coord-current-trajectory" style="display: none;">当前轨迹: <span id="coord-current-traj-name">-</span></div>
                     <div class="panel-title">实时评分</div>
                     <div class="data-card" id="coord-scores">
-                        <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(0,0,0,0.05);">
                             <span class="data-label">跟踪</span>
                             <span class="data-value" id="coord-tracking-score" style="color: var(--primary)">0</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(0,0,0,0.05);">
                             <span class="data-label">轨迹</span>
                             <span class="data-value" id="coord-trajectory-score" style="color: var(--secondary)">0</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(0,0,0,0.05);">
                             <span class="data-label">平稳</span>
                             <span class="data-value" id="coord-smoothness-score" style="color: var(--warning)">0</span>
                         </div>
@@ -141,7 +144,7 @@
                             <span class="data-label">漂移帧</span>
                             <span class="data-value" id="coord-drift-count" style="color:var(--text-muted)">0</span>
                         </div>
-                    </div>
+                                            </div>
                     <div id="coord-full-progress" style="display: none; margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px;">
                         <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">全轨迹检测进度</div>
                         <div id="coord-full-progress-text" style="font-size: 11px;">0/5 已完成</div>
@@ -277,7 +280,7 @@
             </div>
 
             <!-- 前庭功能评估 -->
-            <div id="vestibular-assessment" style="display: none; margin-bottom: 15px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+            <div id="vestibular-assessment" style="display: none; margin-bottom: 15px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 8px; border: 1px solid rgba(0,0,0,0.1);">
                 <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">前庭功能间接评估</div>
                 <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;" id="vestibular-result">-</div>
                 <div style="font-size: 10px; color: var(--text-muted);" id="vestibular-recommendation">-</div>
@@ -291,7 +294,7 @@
 
             <div style="display:flex;gap:8px;margin-top:16px;">
                 <button class="modal-btn" id="comprehensive-btn" style="flex:1;background:linear-gradient(135deg,#00D9A5,#0086FF)">综合报告</button>
-                <button class="modal-btn" id="save-patient-btn" style="flex:1;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2)">保存数据</button>
+                <button class="modal-btn" id="save-patient-btn" style="flex:1;background:rgba(0,0,0,0.1);border:1px solid rgba(0,0,0,0.2)">保存数据</button>
                 <button class="modal-btn" id="close-modal" style="flex:1">确定</button>
             </div>
         </div>
@@ -321,7 +324,7 @@
                 <!-- UUID配置 -->
                 <div style="margin-bottom: 15px;">
                     <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">服务UUID (留空使用默认)</div>
-                    <input type="text" id="gyro-service-uuid" placeholder="180D" style="width: 100%; padding: 8px; background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: var(--text); font-size: 11px; box-sizing: border-box;">
+                    <input type="text" id="gyro-service-uuid" placeholder="180D" style="width: 100%; padding: 8px; background: var(--bg-panel); border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; color: var(--text); font-size: 11px; box-sizing: border-box;">
                     <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">常用: 180D(心率) 180F(电池) 181A(环境) 自定义陀螺仪请填入对应UUID</div>
                 </div>
 
@@ -365,7 +368,7 @@
                         <span style="font-size: 11px;">活动范围(ROM)</span>
                         <span id="game-rom-score" style="font-size: 11px; font-weight: 600;">--</span>
                     </div>
-                    <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                    <div style="height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden;">
                         <div id="game-rom-bar" style="height: 100%; width: 0%; background: #22c55e; transition: width 0.5s;"></div>
                     </div>
                     <div style="font-size: 9px; color: var(--text-muted); margin-top: 2px;">俯仰 <span id="game-pitch-range">0</span>° | 偏航 <span id="game-yaw-range">0</span>°</div>
@@ -376,7 +379,7 @@
                         <span style="font-size: 11px;">位置觉</span>
                         <span id="game-proprioception-score" style="font-size: 11px; font-weight: 600;">--</span>
                     </div>
-                    <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                    <div style="height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden;">
                         <div id="game-proprioception-bar" style="height: 100%; width: 0%; background: #84cc16; transition: width 0.5s;"></div>
                     </div>
                 </div>
@@ -386,7 +389,7 @@
                         <span style="font-size: 11px;">稳定性</span>
                         <span id="game-stability-score" style="font-size: 11px; font-weight: 600;">--</span>
                     </div>
-                    <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                    <div style="height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden;">
                         <div id="game-stability-bar" style="height: 100%; width: 0%; background: #eab308; transition: width 0.5s;"></div>
                     </div>
                 </div>
@@ -396,7 +399,7 @@
                         <span style="font-size: 11px;">协调性</span>
                         <span id="game-coordination-score" style="font-size: 11px; font-weight: 600;">--</span>
                     </div>
-                    <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                    <div style="height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden;">
                         <div id="game-coordination-bar" style="height: 100%; width: 0%; background: #8b5cf6; transition: width 0.5s;"></div>
                     </div>
                 </div>
@@ -406,7 +409,7 @@
                         <span style="font-size: 11px;">反应速度</span>
                         <span id="game-reaction-score" style="font-size: 11px; font-weight: 600;">--</span>
                     </div>
-                    <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                    <div style="height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden;">
                         <div id="game-reaction-bar" style="height: 100%; width: 0%; background: #06b6d4; transition: width 0.5s;"></div>
                     </div>
                 </div>
@@ -450,11 +453,11 @@
                 <div style="display:flex;gap:8px;margin-bottom:8px;">
                     <div style="flex:2">
                         <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">姓名 *</div>
-                        <input id="patient-name-input" placeholder="姓名" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
+                        <input id="patient-name-input" placeholder="姓名" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(0,0,0,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
                     </div>
                     <div style="flex:1">
                         <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">性别</div>
-                        <select id="patient-gender-input" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
+                        <select id="patient-gender-input" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(0,0,0,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
                             <option value="">-</option><option value="男">男</option><option value="女">女</option>
                         </select>
                     </div>
@@ -462,17 +465,17 @@
                 <div style="display:flex;gap:8px;">
                     <div style="flex:1">
                         <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">年龄</div>
-                        <input id="patient-age-input" placeholder="年龄" type="number" min="1" max="120" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
+                        <input id="patient-age-input" placeholder="年龄" type="number" min="1" max="120" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(0,0,0,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
                     </div>
                     <div style="flex:2">
                         <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">编号/病历号</div>
-                        <input id="patient-id-input" placeholder="编号" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
+                        <input id="patient-id-input" placeholder="编号" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(0,0,0,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
                     </div>
                 </div>
             </div>
             <div style="display:flex;gap:8px;">
                 <button class="modal-btn" id="login-ok-btn" style="flex:1;">确认登录</button>
-                <button class="modal-btn" id="login-cancel-btn" style="flex:1;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2)">取消</button>
+                <button class="modal-btn" id="login-cancel-btn" style="flex:1;background:rgba(0,0,0,0.1);border:1px solid rgba(0,0,0,0.2)">取消</button>
             </div>
         </div>
     </div>

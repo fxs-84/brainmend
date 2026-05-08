@@ -244,22 +244,53 @@ export class SceneValley extends SceneBase {
         const fade = Math.min(1, (MAX_Z-p.z)/2);
         const a = Math.min(1, fade*(0.5+p.d*0.5));
         const b = 1-p.d*0.2;
-        // 更丰富的山体颜色：远处偏蓝灰，近处偏暖绿
         const t = pp.t;
         const R = Math.round(45*b + t*20), G = Math.round(75*b + t*30), B = Math.round(35*b + t*10);
         const danger = p.z<0.4 ? Math.max(0,(0.4-p.z)/0.4) : 0;
-        // 山体阴影
-        ctx.beginPath(); ctx.moveTo(x-hw,by); ctx.quadraticCurveTo(x-hw*0.25,ty+mh*p.r*0.4,x,ty); ctx.quadraticCurveTo(x+hw*0.25,ty+mh*p.r*0.4,x+hw,by); ctx.closePath();
+
+        // 连绵山谷：从山峰向两侧延伸并填充到屏幕底部
+        // 峰顶到左侧屏幕边
+        ctx.beginPath();
+        ctx.moveTo(0, h);
+        ctx.lineTo(0, ty + mh * 0.1);
+        ctx.quadraticCurveTo(x-hw*0.5, ty+mh*0.3, x-hw, by);
+        ctx.lineTo(x-hw, h);
+        ctx.closePath();
+        const gradLeft = ctx.createLinearGradient(0, ty, 0, h);
+        gradLeft.addColorStop(0, `rgba(${Math.round(R*0.7)},${Math.round(G*0.7)},${Math.round(B*0.7)},${a})`);
+        gradLeft.addColorStop(0.5, `rgba(${R},${G},${B},${a})`);
+        gradLeft.addColorStop(1, `rgba(${Math.round(R*0.4)},${Math.round(G*0.4)},${Math.round(B*0.4)},${a})`);
+        ctx.fillStyle = gradLeft; ctx.fill();
+
+        // 峰顶到右侧屏幕边
+        ctx.beginPath();
+        ctx.moveTo(x+hw, h);
+        ctx.lineTo(x+hw, by);
+        ctx.quadraticCurveTo(x+hw*0.5, ty+mh*0.3, w, ty + mh * 0.1);
+        ctx.lineTo(w, h);
+        ctx.closePath();
+        const gradRight = ctx.createLinearGradient(0, ty, 0, h);
+        gradRight.addColorStop(0, `rgba(${Math.round(R*0.7)},${Math.round(G*0.7)},${Math.round(B*0.7)},${a})`);
+        gradRight.addColorStop(0.5, `rgba(${R},${G},${B},${a})`);
+        gradRight.addColorStop(1, `rgba(${Math.round(R*0.4)},${Math.round(G*0.4)},${Math.round(B*0.4)},${a})`);
+        ctx.fillStyle = gradRight; ctx.fill();
+
+        // 山峰主体（中间最亮）
+        ctx.beginPath();
+        ctx.moveTo(x-hw, by);
+        ctx.quadraticCurveTo(x-hw*0.25, ty+mh*p.r*0.4, x, ty);
+        ctx.quadraticCurveTo(x+hw*0.25, ty+mh*p.r*0.4, x+hw, by);
+        ctx.closePath();
         const grad = ctx.createLinearGradient(x-hw, by, x+hw, by);
         grad.addColorStop(0, `rgba(${Math.round(R*0.6)},${Math.round(G*0.6)},${Math.round(B*0.6)},${a})`);
         grad.addColorStop(0.5, `rgba(${R},${G},${B},${a})`);
         grad.addColorStop(1, `rgba(${Math.round(R*0.7)},${Math.round(G*0.7)},${Math.round(B*0.7)},${a})`);
         if (danger>0.05) { ctx.shadowColor=`rgba(255,50,20,${danger*0.6})`; ctx.shadowBlur=6+danger*14; }
         ctx.fillStyle = grad; ctx.fill(); ctx.shadowBlur=0;
+
         // 轮廓线
         ctx.strokeStyle = `rgba(${R+20},${G+15},${B+5},${a*0.4})`; ctx.lineWidth=1;
         ctx.beginPath(); ctx.moveTo(x-hw,by); ctx.quadraticCurveTo(x-hw*0.25,ty+mh*p.r*0.4,x,ty); ctx.quadraticCurveTo(x+hw*0.25,ty+mh*p.r*0.4,x+hw,by); ctx.stroke();
-        // 接近时红光预警
         if (danger>0.15) { ctx.strokeStyle=`rgba(255,60,25,${danger})`; ctx.lineWidth=1.5+danger*3; ctx.beginPath(); ctx.moveTo(x-hw,by); ctx.quadraticCurveTo(x-hw*0.25,ty+mh*p.r*0.4,x,ty); ctx.quadraticCurveTo(x+hw*0.25,ty+mh*p.r*0.4,x+hw,by); ctx.stroke(); }
         // 雪顶
         if (p.h>0.4 && p.z<4) { const sa=a*(p.z<2?0.7:(4-p.z)/2*0.7), sw=hw*0.3; ctx.fillStyle=`rgba(245,250,255,${sa})`; ctx.beginPath(); ctx.moveTo(x-sw,ty+mh*0.06); ctx.quadraticCurveTo(x,ty-mh*0.02,x+sw,ty+mh*0.06); ctx.quadraticCurveTo(x,ty+mh*0.14,x-sw,ty+mh*0.06); ctx.fill(); }

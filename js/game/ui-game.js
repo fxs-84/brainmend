@@ -10,6 +10,7 @@ export class GameUI {
         this.container = null;
         this.selectedScene = 'space';
         this.selectedMode = MotionMapper.MODES.SINGLE_YAW;
+        this.selectedDifficulty = 'normal';
 
         // 只在不存在时插入游戏选择界面
         if (!document.getElementById('game-select-panel')) {
@@ -51,20 +52,6 @@ export class GameUI {
                         ">
                             🚀 太空
                         </button>
-                        <button class="scene-btn" data-scene="road" style="
-                            flex: 1; padding: 12px; border: 2px solid transparent;
-                            border-radius: 8px; background: #1E293B; color: white;
-                            cursor: pointer; transition: all 0.2s;
-                        ">
-                            🛣️ 公路
-                        </button>
-                        <button class="scene-btn" data-scene="ball" style="
-                            flex: 1; padding: 12px; border: 2px solid transparent;
-                            border-radius: 8px; background: #1E293B; color: white;
-                            cursor: pointer; transition: all 0.2s;
-                        ">
-                            ⚽ 接球
-                        </button>
                         <button class="scene-btn" data-scene="valley" style="
                             flex: 1; padding: 12px; border: 2px solid transparent;
                             border-radius: 8px; background: #1E293B; color: white;
@@ -86,42 +73,7 @@ export class GameUI {
                 <div style="margin-bottom: 20px;">
                     <label style="display: block; margin-bottom: 8px; color: #9CA3AF;">运动模式</label>
                     <div style="display: flex; flex-direction: column; gap: 8px;">
-                        <button class="mode-btn active" data-mode="single_yaw" style="
-                            padding: 10px; border: 2px solid transparent;
-                            border-radius: 6px; background: #1E293B; color: white;
-                            cursor: pointer; text-align: left;
-                        ">
-                            单轴 - 左右转头
-                        </button>
-                        <button class="mode-btn" data-mode="single_pitch" style="
-                            padding: 10px; border: 2px solid transparent;
-                            border-radius: 6px; background: #1E293B; color: white;
-                            cursor: pointer; text-align: left;
-                        ">
-                            单轴 - 上下点头
-                        </button>
-                        <button class="mode-btn" data-mode="single_roll" style="
-                            padding: 10px; border: 2px solid transparent;
-                            border-radius: 6px; background: #1E293B; color: white;
-                            cursor: pointer; text-align: left;
-                        ">
-                            单轴 - 侧倾
-                        </button>
-                        <button class="mode-btn" data-mode="dual_pitch_yaw" style="
-                            padding: 10px; border: 2px solid transparent;
-                            border-radius: 6px; background: #1E293B; color: white;
-                            cursor: pointer; text-align: left;
-                        ">
-                            双轴 - 上下+左右
-                        </button>
-                        <button class="mode-btn" data-mode="triple" style="
-                            padding: 10px; border: 2px solid transparent;
-                            border-radius: 6px; background: #1E293B; color: white;
-                            cursor: pointer; text-align: left;
-                        ">
-                            三轴 - 综合模式
-                        </button>
-                        <button class="mode-btn" data-mode="shooting" style="
+                        <button class="mode-btn active" data-mode="shooting" style="
                             padding: 10px; border: 2px solid transparent;
                             border-radius: 6px; background: #1E293B; color: white;
                             cursor: pointer; text-align: left;
@@ -134,13 +86,6 @@ export class GameUI {
                             cursor: pointer; text-align: left;
                         ">
                             🚀 太空点头 - 上下躲避吃金币
-                        </button>
-                        <button class="mode-btn" data-mode="flight" style="
-                            padding: 10px; border: 2px solid transparent;
-                            border-radius: 6px; background: #1E293B; color: white;
-                            cursor: pointer; text-align: left;
-                        ">
-                            ✈️ 山谷飞行 - 全面姿态控制
                         </button>
                     </div>
                 </div>
@@ -200,6 +145,9 @@ export class GameUI {
                 btn.classList.add('active');
                 btn.style.borderColor = 'var(--primary)';
                 this.selectedScene = btn.dataset.scene;
+                // 山谷飞行和太空3D飞行需要同步更新selectedMode
+                if (btn.dataset.scene === 'valley') this.selectedMode = 'flight';
+                if (btn.dataset.scene === 'space3d') this.selectedMode = 'space3d';
             });
         });
     }
@@ -274,6 +222,13 @@ export class GameUI {
      * 开始游戏
      */
     async startGame() {
+        // 太空3D飞行模式：先选难度再开始
+        if (this.selectedScene === 'space3d' || this.selectedMode === 'flight') {
+            const diff = await this._showDiffDialog();
+            if (!diff) return; // 用户取消
+            this.selectedDifficulty = diff;
+        }
+
         // 隐藏选择界面
         const panel = document.getElementById('game-select-panel');
         if (panel) {
@@ -292,6 +247,31 @@ export class GameUI {
             this.engine.setMotionMode(modeToSet);
             this.engine.start();
         }
+    }
+
+    _showDiffDialog() {
+        return new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:5000;display:flex;align-items:center;justify-content:center;';
+            overlay.innerHTML = `
+                <div style="background:rgba(15,23,42,0.98);border:2px solid var(--primary);border-radius:16px;padding:30px;text-align:center;color:white;min-width:300px;">
+                    <h3 style="margin-bottom:20px;color:var(--primary);">选择难度</h3>
+                    <div style="display:flex;flex-direction:column;gap:10px;">
+                        <button data-d="easy" style="padding:14px;border:2px solid #10B981;border-radius:8px;background:#1E293B;color:#10B981;font-size:16px;font-weight:bold;cursor:pointer;">🟢 简单</button>
+                        <button data-d="normal" style="padding:14px;border:2px solid #F59E0B;border-radius:8px;background:#1E293B;color:#F59E0B;font-size:16px;font-weight:bold;cursor:pointer;">🟡 普通</button>
+                        <button data-d="hard" style="padding:14px;border:2px solid #EF4444;border-radius:8px;background:#1E293B;color:#EF4444;font-size:16px;font-weight:bold;cursor:pointer;">🔴 困难</button>
+                    </div>
+                    <button data-d="" style="margin-top:15px;padding:8px;background:transparent;border:none;color:#9CA3AF;cursor:pointer;font-size:12px;">取消</button>
+                </div>`;
+            document.body.appendChild(overlay);
+            overlay.addEventListener('click', (e) => {
+                const d = e.target.dataset.d;
+                if (d !== undefined) {
+                    document.body.removeChild(overlay);
+                    resolve(d || null);
+                }
+            });
+        });
     }
 
     /**
@@ -324,8 +304,8 @@ export class GameUI {
             return;
         }
 
-        // 太空3D飞行模式
-        if (sceneName === 'space3d' || this.selectedMode === 'flight') {
+        // 太空3D飞行模式（排除山谷）
+        if (sceneName === 'space3d' && this.selectedMode !== 'flight') {
             try {
                 if (!window.spaceEngine) {
                     const canvas = document.getElementById('crosshair-canvas');
@@ -340,6 +320,7 @@ export class GameUI {
                         console.log('Space game over:', { score, grade, info });
                     };
                 }
+                window.spaceEngine.difficulty = this.selectedDifficulty;
                 window.spaceEngine.start();
                 window.spaceEngine.onEntryZero();
             } catch (err) {

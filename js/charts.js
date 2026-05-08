@@ -8,8 +8,8 @@ const CHART_COLORS = {
     stability: '#F59E0B', // 黄色 - 稳定性
     rom: '#0086FF',       // 蓝色 - ROM
     coordination: '#8B5CF6', // 紫色 - 协调性
-    grid: 'rgba(255, 255, 255, 0.1)',
-    text: '#9CA3AF',
+    grid: 'rgba(0, 0, 0, 0.08)',
+    text: '#6b7280',
     fill: 'rgba(0, 217, 165, 0.2)'
 };
 

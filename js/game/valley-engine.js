@@ -30,8 +30,6 @@ export class ValleyEngine {
             this.canvas.addEventListener('touchstart', h, { passive: true });
             this._h = h;
         }
-        // 重置EMA基线，当前头部位置=屏幕中心零点
-        if (window._resetGyroEMA) window._resetGyroEMA();
         this.state = S.PLAYING; this.gameTime = 0; this.score = 0;
         this.player.x = 0.5; this.player.y = 0.5;
         this.player.tx = 0.5; this.player.ty = 0.5;
@@ -40,6 +38,18 @@ export class ValleyEngine {
         this.scene.updatePeakDensity(8, 0.30);
         this.lastTime = performance.now();
         if (!this.af) this.af = requestAnimationFrame(this.loop);
+    }
+
+    // 进入山谷飞行模式时调用：归零当前姿态作为起点
+    onEntryZero() {
+        if (window._resetGyroEMA) window._resetGyroEMA();
+        this.player.x = 0.5; this.player.y = 0.5;
+        this.player.tx = 0.5; this.player.ty = 0.5;
+    }
+
+    // 飞行中归零：重新建立EMA基线，当前位置成为新的中心
+    rezero() {
+        if (window._resetGyroEMA) window._resetGyroEMA();
     }
 
     startLoop() { if (!this.af) this.af = requestAnimationFrame(this.loop); }
@@ -57,9 +67,16 @@ export class ValleyEngine {
         // 难度递增
         this.speedMul = 0.35 + Math.min(1.5, this.gameTime / 30) * 0.15;
         this.scene.speedMul = this.speedMul;
-        // 输入
-        const tx = 0.5 + (this.gyro.yaw / 35) * 0.5;
-        const ty = 0.5 + (this.gyro.pitch / 22.5) * 0.5;
+        // 输入：pitch ±22.5° → 全屏Y（低头正值→下方，抬头负值→上方）
+        //      yaw ±35° → 全屏X（左负→左，右正→右）
+        // 死区：±1.5° 以内视为零点飘移，不影响位置
+        const YAW_DEAD = 1.5;
+        const PITCH_DEAD = 1.5;
+        const applyDead = (v, d) => Math.abs(v) < d ? 0 : (v - Math.sign(v) * d) / (1 - d / 35);
+        const rawYaw = this.gyro.yaw;
+        const rawPitch = this.gyro.pitch;
+        const tx = 0.5 + (applyDead(rawYaw, YAW_DEAD) / 35) * 0.5;
+        const ty = 0.5 + (applyDead(rawPitch, PITCH_DEAD) / 22.5) * 0.5;
         this.player.tx = Math.max(0, Math.min(1, tx));
         this.player.ty = Math.max(0, Math.min(1, ty));
         const sm = 0.08;

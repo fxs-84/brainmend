@@ -46,50 +46,30 @@ function drawStaticElements() {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // 水平线（与左右垂直线相交）
+    // 水平线：选中水平轨迹时变浅，突出光点运动
+    const hDim = state.trajectoryType === 'horizontal';
     const leftX = actualCenterX - crosshairSize / 2 + 15;
     const rightX = actualCenterX + crosshairSize / 2 - 15;
     ctx.beginPath();
     ctx.moveTo(leftX, actualCenterY);
     ctx.lineTo(rightX, actualCenterY);
     ctx.strokeStyle = CONFIG.COLORS.CROSSHAIR;
+    ctx.globalAlpha = hDim ? 0.45 : 1;
     ctx.lineWidth = 26;
     ctx.stroke();
 
-    // 中心垂直线（比外圆直径短很多）
+    // 中心垂直线：选中垂直轨迹时变浅
+    const vDim = state.trajectoryType === 'vertical' || state.trajectoryType === 'vertical_left' || state.trajectoryType === 'vertical_right';
     const vLineLength = ringRadius * 0.85;
     ctx.beginPath();
     ctx.moveTo(actualCenterX, actualCenterY - vLineLength);
     ctx.lineTo(actualCenterX, actualCenterY + vLineLength);
     ctx.strokeStyle = CONFIG.COLORS.CROSSHAIR;
+    ctx.globalAlpha = vDim ? 0.45 : 1;
     ctx.lineWidth = 26;
     ctx.stroke();
+    ctx.globalAlpha = 1;
 
-    // 角落标记
-    const markSize = 15;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.lineWidth = 5;
-
-    // 上
-    ctx.beginPath();
-    ctx.moveTo(actualCenterX - markSize, actualCenterY - crosshairSize / 2 + 10);
-    ctx.lineTo(actualCenterX + markSize, actualCenterY - crosshairSize / 2 + 10);
-    ctx.stroke();
-    // 下
-    ctx.beginPath();
-    ctx.moveTo(actualCenterX - markSize, actualCenterY + crosshairSize / 2 - 10);
-    ctx.lineTo(actualCenterX + markSize, actualCenterY + crosshairSize / 2 - 10);
-    ctx.stroke();
-    // 左
-    ctx.beginPath();
-    ctx.moveTo(actualCenterX - crosshairSize / 2 + 10, actualCenterY - markSize);
-    ctx.lineTo(actualCenterX - crosshairSize / 2 + 10, actualCenterY + markSize);
-    ctx.stroke();
-    // 右
-    ctx.beginPath();
-    ctx.moveTo(actualCenterX + crosshairSize / 2 - 10, actualCenterY - markSize);
-    ctx.lineTo(actualCenterX + crosshairSize / 2 - 10, actualCenterY + markSize);
-    ctx.stroke();
 }
 
 // 绘制轨迹路径
@@ -148,7 +128,7 @@ function drawTrajectory(actualCenterX, actualCenterY, scale) {
             ctx.lineTo(pathX, pathY);
         }
     }
-    ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
+    ctx.strokeStyle = CONFIG.COLORS.CROSSHAIR;
     ctx.lineWidth = 26;
     ctx.stroke();
 }
@@ -179,12 +159,6 @@ function drawTargetDot(actualCenterX, actualCenterY, scale, targetX, targetY) {
     ctx.fillStyle = CONFIG.COLORS.TARGET;
     ctx.fill();
 
-    // 边框
-    ctx.beginPath();
-    ctx.arc(tX, tY, dotRadius, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
 }
 
 // 绘制绿色位置点
@@ -215,13 +189,6 @@ function drawPositionDot(actualCenterX, actualCenterY, scale, dotX, dotY) {
     ctx.arc(pX, pY, dotRadius, 0, Math.PI * 2);
     ctx.fillStyle = locked ? '#ff8800' : CONFIG.COLORS.POSITION;
     ctx.fill();
-
-    // 边框（锁定态闪烁效果）
-    ctx.beginPath();
-    ctx.arc(pX, pY, dotRadius, 0, Math.PI * 2);
-    ctx.strokeStyle = locked ? 'rgba(255, 200, 50, 0.9)' : 'rgba(255, 255, 255, 0.8)';
-    ctx.lineWidth = locked ? 3 : 2;
-    ctx.stroke();
 
     // 锁定指示圈
     if (locked) {

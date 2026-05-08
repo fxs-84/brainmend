@@ -2511,19 +2511,16 @@ class GameUI {
                 <label style="display:block;margin-bottom:4px;color:#9CA3AF;font-size:11px;">场景</label>
                 <div style="display:flex;gap:6px;">
                     <button class="scene-btn active" data-scene="space" style="flex:1;padding:8px;border:2px solid transparent;border-radius:6px;background:#1E293B;color:white;cursor:pointer;font-size:11px;">🚀 太空</button>
-                    <button class="scene-btn" data-scene="road" style="flex:1;padding:8px;border:2px solid transparent;border-radius:6px;background:#1E293B;color:white;cursor:pointer;font-size:11px;">🛣️ 公路</button>
-                    <button class="scene-btn" data-scene="ball" style="flex:1;padding:8px;border:2px solid transparent;border-radius:6px;background:#1E293B;color:white;cursor:pointer;font-size:11px;">⚽ 接球</button>
+                    <button class="scene-btn" data-scene="valley" style="flex:1;padding:8px;border:2px solid transparent;border-radius:6px;background:#1E293B;color:white;cursor:pointer;font-size:11px;">✈️ 山谷</button>
                 </div>
             </div>
             <div style="margin-bottom:12px;">
                 <label style="display:block;margin-bottom:4px;color:#9CA3AF;font-size:11px;">运动模式</label>
                 <div style="display:flex;flex-direction:column;gap:4px;">
-                    <button class="mode-btn active" data-mode="single_yaw" style="padding:6px 8px;border:2px solid transparent;border-radius:4px;background:#1E293B;color:white;cursor:pointer;text-align:left;font-size:11px;">单轴 - 左右转头</button>
-                    <button class="mode-btn" data-mode="single_pitch" style="padding:6px 8px;border:2px solid transparent;border-radius:4px;background:#1E293B;color:white;cursor:pointer;text-align:left;font-size:11px;">单轴 - 上下点头</button>
-                    <button class="mode-btn" data-mode="single_roll" style="padding:6px 8px;border:2px solid transparent;border-radius:4px;background:#1E293B;color:white;cursor:pointer;text-align:left;font-size:11px;">单轴 - 侧倾</button>
-                    <button class="mode-btn" data-mode="dual_pitch_yaw" style="padding:6px 8px;border:2px solid transparent;border-radius:4px;background:#1E293B;color:white;cursor:pointer;text-align:left;font-size:11px;">双轴 - 上下+左右</button>
-                    <button class="mode-btn" data-mode="triple" style="padding:6px 8px;border:2px solid transparent;border-radius:4px;background:#1E293B;color:white;cursor:pointer;text-align:left;font-size:11px;">三轴 - 综合</button>
-                    <button class="mode-btn" data-mode="shooting" style="padding:6px 8px;border:2px solid #EF4444;border-radius:4px;background:#1E293B;color:#EF4444;cursor:pointer;text-align:left;font-size:11px;font-weight:bold;">🚀 射击模式</button>
+                    <button class="mode-btn active" data-mode="shooting" style="padding:6px 8px;border:2px solid #EF4444;border-radius:4px;background:#1E293B;color:#EF4444;cursor:pointer;text-align:left;font-size:11px;font-weight:bold;">🚀 射击模式</button>
+                    <button class="mode-btn" data-mode="nodding" style="padding:6px 8px;border:2px solid transparent;border-radius:4px;background:#1E293B;color:white;cursor:pointer;text-align:left;font-size:11px;">🚀 太空点头</button>
+                    <button class="mode-btn" data-mode="flight" style="padding:6px 8px;border:2px solid transparent;border-radius:4px;background:#1E293B;color:white;cursor:pointer;text-align:left;font-size:11px;">✈️ 山谷飞行</button>
+                    <button class="mode-btn" data-mode="space3d" style="padding:6px 8px;border:2px solid transparent;border-radius:4px;background:#1E293B;color:white;cursor:pointer;text-align:left;font-size:11px;">🌌 太空3D</button>
                 </div>
             </div>
             <button id="start-game-btn" style="width:100%;padding:10px;background:#00D9A5;border:none;border-radius:6px;color:#0F172A;font-size:13px;font-weight:bold;cursor:pointer;margin-top:4px;">开始游戏</button>
@@ -2572,11 +2569,17 @@ class GameUI {
         this.engine.setMotionMode(this.selectedMode);
 
         let scene;
-        switch (this.selectedScene) {
-            case 'space': scene = new SceneSpace(); break;
-            case 'road': scene = new SceneRoad(); break;
-            case 'ball': scene = new SceneBall(); break;
-            default: scene = new SceneSpace();
+        // 场景模式（flight/space3d/nodding）通过 selectedMode 判断
+        if (this.selectedMode === 'flight') {
+            scene = new SceneValley();
+        } else if (this.selectedMode === 'space3d') {
+            scene = new SceneSpace3D();
+        } else {
+            // 射击/点头模式使用 space 场景
+            switch (this.selectedScene) {
+                case 'valley': scene = new SceneValley(); break;
+                default: scene = new SceneSpace();
+            }
         }
 
         // 单轴上下模式：限制玩家只能在垂直中线移动，障碍物从右向左

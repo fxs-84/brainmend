@@ -81,9 +81,9 @@ function setMode(mode) {
         state._driftStreak = 0;
         state.coordFullScores = [];
         state.coordCurrentTrajectoryIndex = 0;
-        state.coordMode = 'single';
-        // 仅在首次进入时重置目标点，已选轨迹后不重置
+        // 仅在首次进入时重置为单轨迹模式，已选模式后不重置
         if (mode !== prevMode) {
+            state.coordMode = 'single';
             state.targetX = 0;
             state.targetY = 0;
         }
@@ -356,7 +356,7 @@ function executePositionStep() {
                 instruction.textContent = '闭眼回到初始位置后，点击采集';
                 startBtn.textContent = '采集锁定';
                 startBtn.disabled = false;
-                speak('闭眼回到初始位置，点击采集');
+                speak('闭眼回到初始位置，等待采集');
             } else {
                 instruction.textContent = '请回到初始位置，然后睁眼';
                 startBtn.textContent = '采集位置';
@@ -447,7 +447,7 @@ function showPositionResults() {
     const avgError = state.positionResults.reduce((sum, r) => sum + r.totalError, 0) / state.positionResults.length;
     const overallClass = classifyJPS(avgError);
     html += `
-        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0,0,0,0.1);">
             <div style="font-size: 10px; color: var(--text-muted);">平均误差: <span style="color: ${overallClass.color};">${avgError.toFixed(1)}°</span></div>
             <div style="font-size: 10px; color: var(--text-muted);">总体评级: <span style="color: ${overallClass.color};">${overallClass.level}</span></div>
         </div>
@@ -1400,7 +1400,7 @@ function init() {
         if (devices.length === 0) return '';
 
         return devices.map((d, i) => `
-            <div style="padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1);" data-device-id="${d.id}">
+            <div style="padding: 8px; border-bottom: 1px solid rgba(0,0,0,0.1);" data-device-id="${d.id}">
                 <div style="font-size: 12px; margin-bottom: 4px; display: flex; align-items: center;">
                     <span style="color: var(--primary); margin-right: 6px;">★</span>
                     ${d.name}

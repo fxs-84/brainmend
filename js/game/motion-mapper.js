@@ -42,8 +42,8 @@ export const MotionMapper = {
         switch (mode) {
             case this.MODES.SINGLE_PITCH:
                 // 仅Y轴：pitch控制垂直位置
-                // pitch负值=低头=屏幕上移，pitch正值=仰头=屏幕下移
-                y = 0.5 - pitch * 0.4;  // 映射范围约0.1-0.9
+                // pitch正值=低头=屏幕下移，pitch负值=仰头=屏幕上移
+                y = 0.5 + pitch * 0.4;  // 映射范围约0.1-0.9
                 break;
 
             case this.MODES.SINGLE_YAW:

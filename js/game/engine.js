@@ -55,6 +55,7 @@ export class GameEngine {
             height: 0.04,
             hitboxRadius: 0.02
         };
+        this.score = 0;
 
         // 障碍物列表
         this.obstacles = [];
@@ -99,6 +100,7 @@ export class GameEngine {
         this.enemyBullets = [];
         this.scoring.reset();
         this.difficulty.reset();
+        this.score = 0;
         if (this.currentScene) {
             this.currentScene.cleanup();
         }
@@ -141,7 +143,8 @@ export class GameEngine {
             case GameState.GAMEOVER:
                 this.stopGameLoop();
                 if (this.onGameOver) {
-                    this.onGameOver(this.scoring.getFinalScore(), this.scoring.getGrade());
+                    const score = this._noddingMode ? this.scoring.getCurrentScore() : this.scoring.getFinalScore();
+                    this.onGameOver(score, this.scoring.getGrade());
                 }
                 break;
 
@@ -197,10 +200,10 @@ export class GameEngine {
         }
 
         // 更新
-        this.update(this.deltaTime);
+        try { this.update(this.deltaTime); } catch(e) { console.error('update error:', e); }
 
         // 渲染
-        this.render();
+        try { this.render(); } catch(e) { console.error('render error:', e); }
 
         // 继续循环
         if (this.state === GameState.PLAYING || this.state === GameState.PAUSED) {
@@ -256,7 +259,7 @@ export class GameEngine {
             // 金币收集
             const collected = this.currentScene.checkCoinCollect(this.player.x, this.player.y);
             for (const c of collected) {
-                this.score += 10;
+                this.scoring.onCoinCollected(10);
                 if (this.currentScene.onCoinCollect) this.currentScene.onCoinCollect(c, this);
             }
         } else {
@@ -431,11 +434,20 @@ export class GameEngine {
         const width = this.canvas.width;
         const height = this.canvas.height;
 
-        // 清空画布
+        // 每帧彻底重置 Canvas 上下文（含 save/restore 栈 + 变换矩阵 + 所有绘制属性）
+        // ctx.reset() 是解决 "画面旋转/卡死" 的关键——
+        // 之前的 setTransform 只清变换矩阵，没清 save 栈，异常导致的 save/restore
+        // 不平衡会让栈越堆越深，最终 ctx.save() 抛异常，画面完全卡死
+        if (ctx.reset) {
+            ctx.reset();
+        } else {
+            // 旧浏览器回退：重置宽高等价于完全重置上下文
+            this.canvas.width = this.canvas.width;
+        }
         ctx.clearRect(0, 0, width, height);
 
         // 渲染背景（包含星空和粒子）
-        if (this.currentScene) {
+        if (this.currentScene && this.currentScene.renderBackground) {
             this.currentScene.renderBackground(ctx, width, height);
         }
 
@@ -607,7 +619,7 @@ export class GameEngine {
 
         ctx.fillStyle = 'white';
         ctx.font = '24px sans-serif';
-        ctx.fillText(`最终分数: ${Math.round(this.scoring.getFinalScore())}`, width / 2, height / 2);
+        ctx.fillText(`最终分数: ${Math.round(this._noddingMode ? this.scoring.getCurrentScore() : this.scoring.getFinalScore())}`, width / 2, height / 2);
 
         ctx.font = '32px sans-serif';
         ctx.fillText(`评级: ${this.scoring.getGrade()}`, width / 2, height / 2 + 40);
