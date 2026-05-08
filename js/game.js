@@ -469,14 +469,14 @@ class Coin extends Obstacle {
     }
 
     update(dt, speedMultiplier = 1) {
-        // X方向移动
         this.x += this.speedX * dt * speedMultiplier;
+        this.y += this.speedY * dt * speedMultiplier;
         this.phase += dt * 4;
         this.phaseTime += dt;
 
         // 上下摆动轨迹
         if (this.trajectory === 'zigzag') {
-            this.y = this.startY + Math.sin((this.phaseTime % 2.1) * 3) * 0.08;
+            this.y = this.startY + Math.sin((this.phaseTime % 2.1) * 3) * 0.08 + this.speedY * this.phaseTime;
         }
     }
 
@@ -1545,7 +1545,7 @@ class SceneSpace extends SceneBase {
                 const coinX = 1.1;  // 从右边出现
                 const trajectories = ['straight', 'zigzag'];
                 const trajectory = trajectories[Math.floor(Math.random() * trajectories.length)];
-                return new Coin({ x: coinX, y: coinY, speedX: -0.2 * sm, speedY: 0, trajectory, value: 10 });
+                return new Coin({ x: coinX, y: coinY, speedX: -0.5 * sm, speedY: 0, trajectory, value: 10 });
             }
             // 40%概率什么都不生成（空档让玩家休息）
             return null;

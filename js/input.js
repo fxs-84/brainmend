@@ -10,21 +10,29 @@ import { CONFIG } from './config.js';
 export let isDraggingDot = false;
 export let spacePressed = false;
 
-// 6轴模式：传感器Yaw=纯陀螺积分，无磁力计污染。
-// 陀螺仪有微小偏置(0.05-0.3°/s)，持续积分→角度慢慢漂移。
-// 静止时(速率<2°/s)估算偏置速率，逐帧累加扣除，运动中沿用最新估值。
+// 陀螺仪漂移校正：
+// - Yaw: 实时估算陀螺偏置速率并累加扣除
+// - Pitch/Roll: 自适应EMA——静止时快收敛消除拖尾，运动时慢收敛保留信号
+// - 死区: 微小信号归零，消除静止抖动
 
-let _yawBiasRate = 0;   // 陀螺偏置速率估算 (°/s)
-let _yawBiasAccum = 0;  // 累加偏置扣除量
+let _yawBiasRate = 0;
+let _yawBiasAccum = 0;
 let _lastBiasYaw = null;
 let _lastBiasTime = 0;
 
 let _emaPitch = null, _emaRoll = null;
 let _emaWarmup = 0;
-const EMA_ALPHA = 0.9995;
+let _stillFrames = 0;
+const EMA_SLOW = 0.993;
+const EMA_FAST = 0.95;
 const EMA_WARMUP = 0.9;
+const STILL_THRESHOLD = 1.5;
+const STILL_FRAMES_NEEDED = 45;
+const DEAD_ZONE = 0.3;
+const BIAS_LEARN_RATE = 0.01;
+
 window._resetGyroEMA = () => {
-    _emaPitch = null; _emaRoll = null; _emaWarmup = 0;
+    _emaPitch = null; _emaRoll = null; _emaWarmup = 0; _stillFrames = 0;
     _yawBiasRate = 0; _yawBiasAccum = 0;
     _lastBiasYaw = null; _lastBiasTime = 0;
 };
@@ -32,7 +40,6 @@ window._resetGyroEMA = () => {
 let _freezeEMA = false;
 window._freezeGyroEMA = (f) => { _freezeEMA = f; };
 
-// 中值滤波：消单帧毛刺（仅Pitch/Roll，Yaw在6轴下数据干净无需滤波）
 const _pBuf = [], _rBuf = [];
 function _m5(buf, v) { buf.push(v); if (buf.length > 5) buf.shift(); const s = [...buf].sort((a,b)=>a-b); return s[Math.floor(s.length/2)]; }
 
@@ -43,39 +50,68 @@ function updateFromGyroscope(gyroData) {
     let rawPitch = gyroData.pitch || 0;
     let rawRoll = gyroData.roll || 0;
 
-    // 中值滤波（仅Pitch/Roll）
     rawPitch = _m5(_pBuf, rawPitch);
     rawRoll = _m5(_rBuf, rawRoll);
 
-    // 陀螺偏置估算：速率<1°/s时才更新，避免干扰慢速主动运动
     const now = performance.now();
-    if (_lastBiasYaw !== null) {
+
+    // Yaw偏置估算：pitch/roll有运动时直接停止（头部联动，头动则三轴动）
+    if (_emaPitch !== null && _lastBiasYaw !== null) {
         const dt = (now - _lastBiasTime) / 1000;
         if (dt > 0.001 && dt < 0.5) {
             const rawRate = (rawYaw - _lastBiasYaw) / dt;
-            if (Math.abs(rawRate) < 1) {
-                _yawBiasRate += (rawRate - _yawBiasRate) * 0.002;
+            // pitch/roll有运动时直接停止bias更新（不用EMA滞后值判断）
+            const pitchMoving = Math.abs(rawPitch - _emaPitch) >= STILL_THRESHOLD;
+            const rollMoving = Math.abs(rawRoll - _emaRoll) >= STILL_THRESHOLD;
+            const isHeadStill = !pitchMoving && !rollMoving;
+            // 快速yaw运动或头部有运动时，停止bias累加
+            const isCalibrating = Math.abs(rawRate) < 1 && isHeadStill;
+            if (isCalibrating) {
+                _yawBiasRate += (rawRate - _yawBiasRate) * BIAS_LEARN_RATE;
+                _yawBiasAccum += _yawBiasRate * dt;
             }
-            _yawBiasAccum += _yawBiasRate * dt;
         }
     }
     _lastBiasYaw = rawYaw;
     _lastBiasTime = now;
 
-    // Yaw：直接差值 - 累加偏置扣除
     state.yaw = rawYaw - state.yawOffset - _yawBiasAccum;
 
-    // Pitch/Roll：EMA追踪慢漂
-    if (_emaPitch === null) { _emaPitch = rawPitch; _emaRoll = rawRoll; _emaWarmup = 0; }
+    // Pitch/Roll自适应EMA: 静止快收敛 / 运动慢跟踪
+    // 位置觉检测期间禁用快收敛，避免中途暂停导致基线偏移
+    if (_emaPitch === null) { _emaPitch = rawPitch; _emaRoll = rawRoll; _emaWarmup = 0; _stillFrames = 0; }
     if (!_freezeEMA) {
-        const a = _emaWarmup < 60 ? EMA_WARMUP : EMA_ALPHA;
+        const pitchDelta = Math.abs(rawPitch - _emaPitch);
+        const rollDelta = Math.abs(rawRoll - _emaRoll);
+        const inPositionTest = state.mode === 'position' && state.positionIsRunning === true;
+
+        if (pitchDelta < STILL_THRESHOLD && rollDelta < STILL_THRESHOLD) {
+            _stillFrames++;
+        } else {
+            _stillFrames = Math.max(0, _stillFrames - 3);
+        }
+
+        let a;
+        if (_emaWarmup < 60) {
+            a = EMA_WARMUP;
+        } else if (_stillFrames >= STILL_FRAMES_NEEDED && !inPositionTest) {
+            a = EMA_FAST;
+        } else {
+            a = EMA_SLOW;
+        }
         _emaWarmup++;
         _emaPitch = _emaPitch * a + rawPitch * (1 - a);
         _emaRoll = _emaRoll * a + rawRoll * (1 - a);
     }
 
-    state.pitch = (rawPitch - _emaPitch) - state.pitchOffset;
-    state.roll = (rawRoll - _emaRoll) - state.rollOffset;
+    let adjPitch = (rawPitch - _emaPitch) - state.pitchOffset;
+    let adjRoll = (rawRoll - _emaRoll) - state.rollOffset;
+
+    if (Math.abs(adjPitch) < DEAD_ZONE) adjPitch = 0;
+    if (Math.abs(adjRoll) < DEAD_ZONE) adjRoll = 0;
+
+    state.pitch = adjPitch;
+    state.roll = adjRoll;
 
     // 位置觉训练锁定：光点固定在采集位置
     if (state._posLocked) {

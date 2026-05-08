@@ -73,7 +73,7 @@ function setMode(mode) {
 
     // 协调性检测初始化
     if (mode === 'coordination') {
-        state.yawRange = 35;
+        state.yawRange = 30;
         state.pitchRange = 22.5;
         state.coordScores = { tracking: [], trajectory: [], smoothness: [] };
         state.coordFailTime = 0;
@@ -92,7 +92,7 @@ function setMode(mode) {
 
     // 游戏模式初始化
     if (mode === 'game') {
-        state.yawRange = 45;
+        state.yawRange = 30;
         state.pitchRange = 22.5;
         initGame();
     }
@@ -1187,19 +1187,39 @@ function init() {
     const reportDrop = document.getElementById('report-dropdown');
     reportBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        reportDrop.style.display = reportDrop.style.display === 'block' ? 'none' : 'block';
+        const isOpen = reportDrop.style.display === 'block';
+        reportDrop.style.display = isOpen ? 'none' : 'block';
+        reportBtn.setAttribute('aria-expanded', !isOpen);
     });
-    document.addEventListener('click', () => { reportDrop.style.display = 'none'; });
-    document.getElementById('gen-report-item').addEventListener('click', (e) => {
-        e.stopPropagation();
+    document.addEventListener('click', () => {
         reportDrop.style.display = 'none';
-        showComprehensiveReport();
+        reportBtn.setAttribute('aria-expanded', 'false');
     });
-    document.getElementById('records-item').addEventListener('click', (e) => {
-        e.stopPropagation();
-        reportDrop.style.display = 'none';
-        showRecordsModal();
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            reportDrop.style.display = 'none';
+            reportBtn.setAttribute('aria-expanded', 'false');
+        }
     });
+    function openReportItem(id, action) {
+        document.getElementById(id).addEventListener('click', (e) => {
+            e.stopPropagation();
+            reportDrop.style.display = 'none';
+            reportBtn.setAttribute('aria-expanded', 'false');
+            action();
+        });
+        document.getElementById(id).addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                reportDrop.style.display = 'none';
+                reportBtn.setAttribute('aria-expanded', 'false');
+                action();
+            }
+        });
+    }
+    openReportItem('gen-report-item', showComprehensiveReport);
+    openReportItem('records-item', showRecordsModal);
 
     // 综合报告按钮（模态框内）
     document.getElementById('comprehensive-btn').addEventListener('click', () => {
