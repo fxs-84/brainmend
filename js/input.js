@@ -30,6 +30,7 @@ const STILL_THRESHOLD = 1.5;
 const STILL_FRAMES_NEEDED = 45;
 const DEAD_ZONE = 0.3;
 const BIAS_LEARN_RATE = 0.01;
+const GAME_BIAS_LEARN_RATE = 0.05;
 
 window._resetGyroEMA = () => {
     _emaPitch = null; _emaRoll = null; _emaWarmup = 0; _stillFrames = 0;
@@ -71,7 +72,8 @@ function updateFromGyroscope(gyroData) {
             // 快速yaw运动或头部有运动时，停止bias累加
             const isCalibrating = Math.abs(rawRate) < 1 && isHeadStill;
             if (isCalibrating) {
-                _yawBiasRate += (rawRate - _yawBiasRate) * BIAS_LEARN_RATE;
+                const rate = isGameMode ? GAME_BIAS_LEARN_RATE : BIAS_LEARN_RATE;
+                _yawBiasRate += (rawRate - _yawBiasRate) * rate;
                 _yawBiasAccum += _yawBiasRate * dt;
             }
         }

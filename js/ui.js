@@ -1026,12 +1026,16 @@ function inferBrainFunction(report) {
 
 /** 一键显示综合报告（按钮调用入口） */
 function showComprehensiveReport() {
-    const report = generateComprehensiveReport();
-    const required = ['position', 'rom', 'coordination'];
-    const missing = required.filter(k => !report.available.includes(k));
-    if (missing.length > 0) {
-        const names = { position: '位置觉', rom: 'ROM', coordination: '协调性' };
-        alert('以下检测尚未完成：' + missing.map(k => names[k]).join('、') + '\n请完成全部三项检测后再生成综合报告。');
+    let report;
+    try {
+        report = generateComprehensiveReport();
+    } catch (e) {
+        console.error('报告生成失败:', e);
+        alert('报告生成失败，请重试。');
+        return;
+    }
+    if (report.available.length === 0) {
+        alert('请先完成至少一项检测后再生成报告。');
         return;
     }
     // 确保模态框可见

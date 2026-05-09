@@ -175,9 +175,6 @@ function updateCoordination(elapsed) {
         state.coordScores.smoothness.push(smoothnessScore);
     }
 
-    // 计算综合分数
-    const totalScore = trackingScore * 0.4 + trajectoryScore * 0.3 + smoothnessScore * 0.3;
-
     // 记录失败时间(用于判定是否合格)
     if (trackingError > CONFIG.COORD_FAIL_THRESHOLD || trajectoryDeviation > CONFIG.COORD_TRAJ_THRESHOLD) {
         state.coordFailTime = (state.coordFailTime || 0) + 1 / 60;
@@ -185,11 +182,17 @@ function updateCoordination(elapsed) {
         state.coordFailTime = Math.max(0, (state.coordFailTime || 0) - CONFIG.ERROR_DECAY);
     }
 
-    // 综合评分
-    state.results.coordination = Math.max(0, Math.min(100, totalScore));
+    // 计算累积平均分(所有帧平均值，非瞬时值)
+    const n = state.coordScores.tracking.length || 1;
+    const avgTracking = state.coordScores.tracking.reduce((a, b) => a + b, 0) / n;
+    const avgTrajectory = state.coordScores.trajectory.reduce((a, b) => a + b, 0) / n;
+    const avgSmoothness = state.coordScores.smoothness.reduce((a, b) => a + b, 0) / n;
 
-    // 更新实时显示数据
-    updateCoordinationDisplay(trackingScore, trajectoryScore, smoothnessScore, trackingError, trajectoryDeviation);
+    // 综合评分
+    state.results.coordination = Math.max(0, Math.min(100, avgTracking * 0.4 + avgTrajectory * 0.3 + avgSmoothness * 0.3));
+
+    // 更新实时显示数据（用累积平均分）
+    updateCoordinationDisplay(avgTracking, avgTrajectory, avgSmoothness, trackingError, trajectoryDeviation);
 }
 
 /**
@@ -220,12 +223,12 @@ function calculateTrajectoryScore(deviation) {
  * @returns {number} 0-100分数
  */
 function calculateSmoothnessScore(jerk) {
-    // 基础平稳分基于jerk
+    // 基础平稳分基于jerk (px/s²，时间归一化)
     let base;
-    if (jerk < 5) base = 100;
-    else if (jerk < 15) base = 80;
-    else if (jerk < 25) base = 60;
-    else if (jerk < 35) base = 40;
+    if (jerk < 300) base = 100;
+    else if (jerk < 800) base = 80;
+    else if (jerk < 1500) base = 60;
+    else if (jerk < 2500) base = 40;
     else base = 20;
     // 如果离目标太远，平稳没意义——限制最高分
     const dist = Math.sqrt((state.dotX - state.targetX) ** 2 + (state.dotY - state.targetY) ** 2);
@@ -259,23 +262,31 @@ function calculateTrajectoryDeviation(dotX, dotY, targetX, targetY, trajectoryTy
  * 计算加速度变化(jerk)
  */
 function calculateJerk() {
-    if (!state.coordLastVelocityX || !state.coordLastVelocityY) {
-        state.coordLastVelocityX = state.dotX;
-        state.coordLastVelocityY = state.dotY;
+    const now = performance.now();
+    const dt = Math.max(0.016, (now - (state._lastJerkTime || now)) / 1000); // 最小16ms防止零除
+    state._lastJerkTime = now;
+
+    if (state._lastDotX === undefined) {
+        state._lastDotX = state.dotX;
+        state._lastDotY = state.dotY;
+        state._lastVelX = 0;
+        state._lastVelY = 0;
         return 0;
     }
 
-    const velocityX = state.dotX - state.coordLastVelocityX;
-    const velocityY = state.dotY - state.coordLastVelocityY;
-    const accelerationX = velocityX - (state.coordLastVelocityX - (state.coordPrevVelocityX || 0));
-    const accelerationY = velocityY - (state.coordLastVelocityY - (state.coordPrevVelocityY || 0));
+    // 速度 = 位置变化/时间 (px/s)
+    const velX = (state.dotX - state._lastDotX) / dt;
+    const velY = (state.dotY - state._lastDotY) / dt;
+    state._lastDotX = state.dotX;
+    state._lastDotY = state.dotY;
 
-    state.coordPrevVelocityX = state.coordLastVelocityX;
-    state.coordPrevVelocityY = state.coordLastVelocityY;
-    state.coordLastVelocityX = velocityX;
-    state.coordLastVelocityY = velocityY;
+    // 加速度 = 速度变化/时间 (px/s²)
+    const accelX = (velX - state._lastVelX) / dt;
+    const accelY = (velY - state._lastVelY) / dt;
+    state._lastVelX = velX;
+    state._lastVelY = velY;
 
-    const jerk = Math.sqrt(accelerationX ** 2 + accelerationY ** 2);
+    const jerk = Math.sqrt(accelX ** 2 + accelY ** 2);
     return jerk;
 }
 

@@ -143,54 +143,25 @@ function setMode(mode) {
  * 更新协调性检测模式UI
  */
 function updateCoordinationModeUI() {
-    const singleBtn = document.getElementById('coord-mode-single');
-    const fullBtn = document.getElementById('coord-mode-full');
     const trainBtn = document.getElementById('coord-training-toggle');
     const trajCard = document.getElementById('coord-trajectory-card');
     const trajTitle = document.getElementById('coord-trajectory-title');
-    const fullProgress = document.getElementById('coord-full-progress');
 
     if (state.coordTrainingMode) {
-        singleBtn.style.background = 'transparent';
-        singleBtn.style.color = 'var(--text)';
-        fullBtn.style.background = 'transparent';
-        fullBtn.style.color = 'var(--text)';
         if (trainBtn) {
             trainBtn.style.background = 'var(--primary)';
             trainBtn.style.color = 'var(--bg-dark)';
             trainBtn.textContent = '训练模式 (1分30秒)';
         }
-        trajCard.style.display = 'block';
-        trajTitle.textContent = '轨迹选择';
-        fullProgress.style.display = 'none';
-    } else if (state.coordMode === 'single') {
-        singleBtn.style.background = 'var(--primary)';
-        singleBtn.style.color = 'var(--bg-dark)';
-        fullBtn.style.background = 'transparent';
-        fullBtn.style.color = 'var(--text)';
-        if (trainBtn) {
-            trainBtn.style.background = 'transparent';
-            trainBtn.style.color = 'var(--text)';
-            trainBtn.textContent = '训练模式 (1分30秒)';
-        }
-        trajCard.style.display = 'block';
-        trajTitle.textContent = '轨迹选择';
-        fullProgress.style.display = 'none';
     } else {
-        fullBtn.style.background = 'var(--primary)';
-        fullBtn.style.color = 'var(--bg-dark)';
-        singleBtn.style.background = 'transparent';
-        singleBtn.style.color = 'var(--text)';
         if (trainBtn) {
             trainBtn.style.background = 'transparent';
             trainBtn.style.color = 'var(--text)';
             trainBtn.textContent = '训练模式 (1分30秒)';
         }
-        trajCard.style.display = 'none';
-        trajTitle.textContent = '轨迹选择';
-        fullProgress.style.display = 'block';
-        document.getElementById('coord-full-progress-text').textContent = `${state.coordCurrentTrajectoryIndex}/6 已完成`;
     }
+    trajCard.style.display = 'block';
+    trajTitle.textContent = '轨迹选择';
 }
 
 function updateROMGuide() {
@@ -477,16 +448,8 @@ function startDetection() {
     // 确定协调性检测的时长和轨迹
     if (state.mode === 'coordination') {
         if (state.coordTrainingMode) {
-            // 训练模式：当前轨迹1分30秒
             state.testDuration = CONFIG.COORD_TRAINING_DURATION;
-        } else if (state.coordMode === 'full') {
-            // 全模式：从第一轨迹开始
-            state.coordCurrentTrajectoryIndex = 0;
-            state.coordFullScores = [];
-            state.trajectoryType = CONFIG.COORD_TRAJECTORIES[0];
-            state.testDuration = CONFIG.COORD_FULL_DURATION;
         } else {
-            // 单模式：使用当前选择的轨迹
             state.testDuration = CONFIG.COORD_SINGLE_DURATION;
         }
         state.coordScores = { tracking: [], trajectory: [], smoothness: [] };
@@ -496,76 +459,34 @@ function startDetection() {
         state.results.coordination = 0;
         updateCoordinationModeUI();
         updateCoordinationTrajectoryUI();
-        updateCoordinationFullProgressUI();
         // 语音播报完成后再启动红色光点移动
         speakWithCallback('请跟随红色光点，保持同步移动', () => {
-            if (state.coordMode === 'single') {
-        const btn = document.getElementById('action-btn-coord');
-        btn.textContent = '检测中...';
-        btn.disabled = true;
+            const btn = document.getElementById('action-btn-coord');
+            btn.textContent = '检测中...';
+            btn.disabled = true;
 
-        const startTime = Date.now();
-        function updateCoordLoop() {
-            if (!state.isRunning) return;
-            const elapsed = (Date.now() - startTime) / 1000;
-            updateCoordination(elapsed);
-            updateProgress();
+            const startTime = Date.now();
+            function updateCoordLoop() {
+                if (!state.isRunning) return;
+                const elapsed = (Date.now() - startTime) / 1000;
+                updateCoordination(elapsed);
+                updateProgress();
 
-            if (state.progress >= 1) {
-                state.isRunning = false;
-                const scores = state.coordScores;
-                if (scores && scores.tracking.length > 0) {
-                    const avgTracking = scores.tracking.reduce((a, b) => a + b, 0) / scores.tracking.length;
-                    const avgTrajectory = scores.trajectory.reduce((a, b) => a + b, 0) / scores.trajectory.length;
-                    const avgSmoothness = scores.smoothness.reduce((a, b) => a + b, 0) / scores.smoothness.length;
-                    state.results.coordination = avgTracking * 0.4 + avgTrajectory * 0.3 + avgSmoothness * 0.3;
+                if (state.progress >= 1) {
+                    state.isRunning = false;
+                    const scores = state.coordScores;
+                    if (scores && scores.tracking.length > 0) {
+                        const avgTracking = scores.tracking.reduce((a, b) => a + b, 0) / scores.tracking.length;
+                        const avgTrajectory = scores.trajectory.reduce((a, b) => a + b, 0) / scores.trajectory.length;
+                        const avgSmoothness = scores.smoothness.reduce((a, b) => a + b, 0) / scores.smoothness.length;
+                        state.results.coordination = avgTracking * 0.4 + avgTrajectory * 0.3 + avgSmoothness * 0.3;
+                    }
+                    stopDetection();
+                    return;
                 }
-                stopDetection();
-                return;
+                requestAnimationFrame(updateCoordLoop);
             }
             requestAnimationFrame(updateCoordLoop);
-        }
-        requestAnimationFrame(updateCoordLoop);
-            } else {
-                // Full mode: 启动通用检测循环
-                const coordBtn = document.getElementById('action-btn-coord');
-                if (coordBtn) {
-                    coordBtn.textContent = '检测中...';
-                    coordBtn.disabled = true;
-                }
-                const startTime = Date.now();
-                function updateFull() {
-                    if (!state.isRunning) return;
-                    const elapsed = (Date.now() - startTime) / 1000;
-                    updateCoordination(elapsed);
-                    updateProgress();
-                    if (state.progress >= 1) {
-                        state.isRunning = false;
-                        const scores = state.coordScores;
-                        if (scores && scores.tracking.length > 0) {
-                            const avgTracking = scores.tracking.reduce((a, b) => a + b, 0) / scores.tracking.length;
-                            const avgTrajectory = scores.trajectory.reduce((a, b) => a + b, 0) / scores.trajectory.length;
-                            const avgSmoothness = scores.smoothness.reduce((a, b) => a + b, 0) / scores.smoothness.length;
-                            const trajectoryScore = avgTracking * 0.4 + avgTrajectory * 0.3 + avgSmoothness * 0.3;
-                            state.coordFullScores.push({ trajectory: state.trajectoryType, score: trajectoryScore });
-                        }
-                        state.coordCurrentTrajectoryIndex++;
-                        if (state.coordCurrentTrajectoryIndex < CONFIG.COORD_TRAJECTORIES.length) {
-                            const trajNames = { 'horizontal': '水平', 'vertical': '垂直', 'vertical_left': '垂直左', 'vertical_right': '垂直右', 'figure8': '8字', 'figure8_reverse': '8字反' };
-                            coordBtn.textContent = `继续 (${state.coordCurrentTrajectoryIndex + 1}/${CONFIG.COORD_TRAJECTORIES.length})`;
-                            coordBtn.disabled = false;
-                            updateCoordinationFullProgressUI();
-                        } else {
-                            const totalScore = state.coordFullScores.reduce((sum, s) => sum + s.score, 0) / state.coordFullScores.length;
-                            state.results.coordination = totalScore;
-                            stopDetection();
-                        }
-                        return;
-                    }
-                    requestAnimationFrame(updateFull);
-                }
-                requestAnimationFrame(updateFull);
-            }
         });
         return;
     } else {
@@ -828,9 +749,6 @@ function init() {
         }
     }, 16);
 
-    // TTS切换按钮
-    document.getElementById('tts-toggle').addEventListener('click', toggleTTS);
-
     // 模式按钮
     document.querySelectorAll('.mode-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -849,16 +767,6 @@ function init() {
             } else if (!state.isRunning) {
                 setMode(targetMode);
             }
-        });
-    });
-
-    // 协调性检测模式按钮（单轨迹/全轨迹）
-    document.querySelectorAll('.coord-mode-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (state.isRunning) return;
-            state.coordMode = btn.dataset.mode;
-            state.coordTrainingMode = false;
-            updateCoordinationModeUI();
         });
     });
 
@@ -1118,60 +1026,6 @@ function init() {
     // 开始检测按钮（协调性检测）
     document.getElementById('action-btn-coord').addEventListener('click', () => {
         if (state.isRunning) return;
-
-        // 如果是全模式且已完成部分轨迹，检查是否需要继续
-        if (state.coordMode === 'full' && state.coordCurrentTrajectoryIndex > 0) {
-            const btn = document.getElementById('action-btn-coord');
-            const btnText = btn.textContent;
-            if (btnText.includes('继续')) {
-                // 继续下一个轨迹
-                state.trajectoryType = CONFIG.COORD_TRAJECTORIES[state.coordCurrentTrajectoryIndex];
-                state.coordScores = { tracking: [], trajectory: [], smoothness: [] };
-                state.progress = 0;
-                state.testDuration = CONFIG.COORD_FULL_DURATION;
-                state.isRunning = true;
-                btn.textContent = '检测中...';
-                btn.disabled = true;
-                updateCoordinationTrajectoryUI();
-                updateCoordinationFullProgressUI();
-
-                const startTime = Date.now();
-                function update() {
-                    if (!state.isRunning) return;
-                    const elapsed = (Date.now() - startTime) / 1000;
-                    updateCoordination(elapsed);
-                    updateProgress();
-
-                    if (state.progress >= 1) {
-                        state.isRunning = false;
-                        const scores = state.coordScores;
-                        if (scores && scores.tracking.length > 0) {
-                            const avgTracking = scores.tracking.reduce((a, b) => a + b, 0) / scores.tracking.length;
-                            const avgTrajectory = scores.trajectory.reduce((a, b) => a + b, 0) / scores.trajectory.length;
-                            const avgSmoothness = scores.smoothness.reduce((a, b) => a + b, 0) / scores.smoothness.length;
-                            const trajectoryScore = avgTracking * 0.4 + avgTrajectory * 0.3 + avgSmoothness * 0.3;
-                            state.coordFullScores.push({ trajectory: state.trajectoryType, score: trajectoryScore });
-                        }
-                        state.coordCurrentTrajectoryIndex++;
-                        if (state.coordCurrentTrajectoryIndex < CONFIG.COORD_TRAJECTORIES.length) {
-                            const coordBtn = document.getElementById('action-btn-coord');
-                            coordBtn.textContent = `继续 (${state.coordCurrentTrajectoryIndex + 1}/${CONFIG.COORD_TRAJECTORIES.length})`;
-                            coordBtn.disabled = false;
-                            updateCoordinationFullProgressUI();
-                        } else {
-                            const totalScore = state.coordFullScores.reduce((sum, s) => sum + s.score, 0) / state.coordFullScores.length;
-                            state.results.coordination = totalScore;
-                            stopDetection();
-                        }
-                        return;
-                    }
-                    requestAnimationFrame(update);
-                }
-                requestAnimationFrame(update);
-                return;
-            }
-        }
-
         setMode('coordination');
         startDetection();
     });
@@ -1219,12 +1073,12 @@ function init() {
             }
         });
     }
-    openReportItem('gen-report-item', showComprehensiveReport);
+    openReportItem('gen-report-item', () => setTimeout(showComprehensiveReport, 50));
     openReportItem('records-item', showRecordsModal);
 
     // 综合报告按钮（模态框内）
     document.getElementById('comprehensive-btn').addEventListener('click', () => {
-        showComprehensiveReport();
+        setTimeout(showComprehensiveReport, 50);
     });
 
     // 保存患者数据按钮
@@ -1339,36 +1193,6 @@ function init() {
     }, 1000);
 
     window.addEventListener('resize', resizeCanvas);
-
-    // 输入模式切换（鼠标/陀螺仪）
-    const toggleBtn = document.getElementById('toggle-input-mode');
-    toggleBtn.addEventListener('click', () => {
-        state.useGyroscope = !state.useGyroscope;
-        if (state.useGyroscope) {
-            toggleBtn.textContent = '陀螺仪模式';
-            toggleBtn.style.background = 'var(--primary)';
-            toggleBtn.style.color = 'var(--bg-dark)';
-            // 启用手机陀螺仪
-            enableDeviceOrientation();
-            // 显示提示
-            if (window.DeviceOrientationEvent) {
-                document.getElementById('connection-status').textContent = '陀螺仪已启用';
-            } else {
-                document.getElementById('connection-status').textContent = '不支持陀螺仪';
-            }
-        } else {
-            toggleBtn.textContent = '鼠标模式';
-            toggleBtn.style.background = 'var(--bg-panel)';
-            toggleBtn.style.color = 'var(--text)';
-            // 禁用手机陀螺仪
-            disableDeviceOrientation();
-            document.getElementById('connection-status').textContent = '等待连接...';
-        }
-        // 切换时重置归零偏移
-        state.pitchOffset = state.pitch;
-        state.yawOffset = state.yaw;
-        state.rollOffset = state.roll;
-    });
 
     // 陀螺仪蓝牙连接弹窗
     const gyroModal = document.getElementById('gyro-modal');

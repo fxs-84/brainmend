@@ -41,13 +41,13 @@ export const CONFIG = {
 
     // 颜色
     COLORS: {
-        TARGET: '#EF4444',
-        TARGET_GLOW: 'rgba(239, 68, 68, 0.8)',
-        TARGET_GLOW_MID: 'rgba(239, 68, 68, 0.3)',
-        POSITION: '#00A878',
-        POSITION_GLOW: 'rgba(0, 168, 120, 0.8)',
-        POSITION_GLOW_MID: 'rgba(0, 168, 120, 0.3)',
-        TRAIL: 'rgba(0, 102, 204, 0.5)',
+        TARGET: '#B91C1C',
+        TARGET_GLOW: 'rgba(185, 28, 28, 0.8)',
+        TARGET_GLOW_MID: 'rgba(185, 28, 28, 0.3)',
+        POSITION: '#1D4ED8',
+        POSITION_GLOW: 'rgba(29, 78, 216, 0.8)',
+        POSITION_GLOW_MID: 'rgba(29, 78, 216, 0.3)',
+        TRAIL: 'rgba(249, 115, 22, 0.5)',
         GRID: 'rgba(0, 0, 0, 0.16)',
         CROSSHAIR: 'rgba(88, 28, 135, 0.35)',
         RING_OUTER: 'rgba(0, 0, 0, 0.1)',
