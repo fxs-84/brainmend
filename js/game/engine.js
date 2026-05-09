@@ -289,8 +289,10 @@ export class GameEngine {
             ? this.currentScene.mapInputToPosition(inputPos, this.player)
             : inputPos;
 
-        this.player.x = mappedPos.x;
-        this.player.y = mappedPos.y;
+        // 平滑插值，避免陀螺仪噪声/抖动
+        const SMOOTH = 0.45;
+        this.player.x = this.player.x + (mappedPos.x - this.player.x) * SMOOTH;
+        this.player.y = this.player.y + (mappedPos.y - this.player.y) * SMOOTH;
     }
 
     /**

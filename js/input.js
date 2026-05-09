@@ -39,6 +39,7 @@ window._resetGyroEMA = () => {
 
 let _freezeEMA = false;
 window._freezeGyroEMA = (f) => { _freezeEMA = f; };
+let _lastRawPitch = null, _lastRawRoll = null;
 
 const _pBuf = [], _rBuf = [];
 function _m5(buf, v) { buf.push(v); if (buf.length > 5) buf.shift(); const s = [...buf].sort((a,b)=>a-b); return s[Math.floor(s.length/2)]; }
@@ -54,15 +55,18 @@ function updateFromGyroscope(gyroData) {
     rawRoll = _m5(_rBuf, rawRoll);
 
     const now = performance.now();
+    const isGameMode = state.mode === 'game';
 
-    // Yaw偏置估算：pitch/roll有运动时直接停止（头部联动，头动则三轴动）
+    // Yaw偏置估算（所有模块共用，帧间raw判断避免EMA滞后影响）
     if (_emaPitch !== null && _lastBiasYaw !== null) {
         const dt = (now - _lastBiasTime) / 1000;
         if (dt > 0.001 && dt < 0.5) {
             const rawRate = (rawYaw - _lastBiasYaw) / dt;
-            // pitch/roll有运动时直接停止bias更新（不用EMA滞后值判断）
-            const pitchMoving = Math.abs(rawPitch - _emaPitch) >= STILL_THRESHOLD;
-            const rollMoving = Math.abs(rawRoll - _emaRoll) >= STILL_THRESHOLD;
+            // 用帧间raw值变化率判断静止，不受EMA滞后影响
+            const pitchFrameMove = _lastRawPitch !== null ? Math.abs(rawPitch - _lastRawPitch) : 0;
+            const rollFrameMove = _lastRawRoll !== null ? Math.abs(rawRoll - _lastRawRoll) : 0;
+            const pitchMoving = pitchFrameMove >= 0.3;
+            const rollMoving = rollFrameMove >= 0.3;
             const isHeadStill = !pitchMoving && !rollMoving;
             // 快速yaw运动或头部有运动时，停止bias累加
             const isCalibrating = Math.abs(rawRate) < 1 && isHeadStill;
@@ -74,6 +78,8 @@ function updateFromGyroscope(gyroData) {
     }
     _lastBiasYaw = rawYaw;
     _lastBiasTime = now;
+    _lastRawPitch = rawPitch;
+    _lastRawRoll = rawRoll;
 
     state.yaw = rawYaw - state.yawOffset - _yawBiasAccum;
 
@@ -83,8 +89,6 @@ function updateFromGyroscope(gyroData) {
     if (!_freezeEMA) {
         const pitchDelta = Math.abs(rawPitch - _emaPitch);
         const rollDelta = Math.abs(rawRoll - _emaRoll);
-        const inPositionTest = state.mode === 'position' && state.positionIsRunning === true;
-
         if (pitchDelta < STILL_THRESHOLD && rollDelta < STILL_THRESHOLD) {
             _stillFrames++;
         } else {
@@ -94,7 +98,7 @@ function updateFromGyroscope(gyroData) {
         let a;
         if (_emaWarmup < 60) {
             a = EMA_WARMUP;
-        } else if (_stillFrames >= STILL_FRAMES_NEEDED && !inPositionTest) {
+        } else if (_stillFrames >= STILL_FRAMES_NEEDED) {
             a = EMA_FAST;
         } else {
             a = EMA_SLOW;
@@ -104,8 +108,16 @@ function updateFromGyroscope(gyroData) {
         _emaRoll = _emaRoll * a + rawRoll * (1 - a);
     }
 
-    let adjPitch = (rawPitch - _emaPitch) - state.pitchOffset;
-    let adjRoll = (rawRoll - _emaRoll) - state.rollOffset;
+    // 检测模块直接使用raw值（跳过EMA），避免极端保持时EMA收敛导致回零
+    // 游戏模块使用EMA平滑跟踪
+    let adjPitch, adjRoll;
+    if (isGameMode) {
+        adjPitch = (rawPitch - _emaPitch) - state.pitchOffset;
+        adjRoll = (rawRoll - _emaRoll) - state.rollOffset;
+    } else {
+        adjPitch = rawPitch - state.pitchOffset;
+        adjRoll = rawRoll - state.rollOffset;
+    }
 
     if (Math.abs(adjPitch) < DEAD_ZONE) adjPitch = 0;
     if (Math.abs(adjRoll) < DEAD_ZONE) adjRoll = 0;

@@ -438,7 +438,7 @@ function showPositionResults() {
         html += `
             <div style="padding: 2px 0;">
                 <span style="font-size: 10px;">${r.name}:</span>
-                <span style="font-size: 10px; color: ${classification.color};">${r.totalError.toFixed(1)}° ${classification.zh}</span>
+                <span style="font-size: 10px; color: ${classification.color};">${r.totalError.toFixed(1)}° ${classification.level}</span>
             </div>
         `;
     });
@@ -967,7 +967,8 @@ function init() {
                 state._posLockedY = state.dotY;
                 const dirBtns = document.querySelectorAll('.pos-dir-btn');
                 const dirName = Array.from(dirBtns).find(b => b.dataset.dir === state.positionTrainingStep)?.textContent || '';
-                state.positionResults.push({ name: dirName, totalError: 0 });
+                const totalError = Math.sqrt(state.yaw * state.yaw + state.pitch * state.pitch);
+                state.positionResults.push({ name: dirName, totalError: totalError });
                 speak('已采集，请睁眼，查看偏差');
                 updatePositionGuide();
                 showPositionResults();
