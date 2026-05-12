@@ -19,6 +19,11 @@ function setMode(mode) {
     if (mode === 'mode-select') {
         sp.classList.remove('collapsed');
         if (stb) stb.textContent = '◀';
+        const bar = document.getElementById('coord-bottom-bar');
+        if (bar) bar.style.display = 'none';
+        const area = document.getElementById('detection-area');
+        if (area) area.style.minWidth = '';
+        resizeCanvas();
     } else if (mode === 'game') {
         sp.classList.add('collapsed');
         if (stb) { stb.textContent = '▶'; stb.style.display = 'block'; }
@@ -450,7 +455,7 @@ function startDetection() {
         if (state.coordTrainingMode) {
             state.testDuration = CONFIG.COORD_TRAINING_DURATION;
         } else {
-            state.testDuration = CONFIG.COORD_SINGLE_DURATION;
+            state.testDuration = CONFIG.COORD_SINGLE_DURATION * state.zoomFactor;
         }
         state.coordScores = { tracking: [], trajectory: [], smoothness: [] };
         state.coordFailTime = 0;
@@ -629,6 +634,13 @@ function stopDetection() {
             coordBtn.disabled = false;
         }
         speak('跟踪结束');
+        // 展开侧边栏显示评分，隐藏底部按钮栏
+        const sp = document.getElementById('side-panel');
+        if (sp) sp.classList.remove('collapsed');
+        const stb = document.getElementById('sidebar-toggle');
+        if (stb) stb.textContent = '◀';
+        const bar = document.getElementById('coord-bottom-bar');
+        if (bar) bar.style.display = 'none';
     } else {
         document.getElementById('action-btn').textContent = '开始检测';
         document.getElementById('action-btn').disabled = false;
@@ -807,6 +819,17 @@ function init() {
                 state.targetX = 0;
                 state.targetY = 0;
             }
+
+            // 锁定检测区宽度，侧边栏收起后canvas不会变大，标靶振幅不变
+            const area = document.getElementById('detection-area');
+            area.style.minWidth = area.offsetWidth + 'px';
+            // 选择轨迹后隐藏侧边栏，显示右下角按钮
+            const sp = document.getElementById('side-panel');
+            if (sp) sp.classList.add('collapsed');
+            const stb = document.getElementById('sidebar-toggle');
+            if (stb) { stb.textContent = '▶'; stb.style.display = 'block'; }
+            const bar = document.getElementById('coord-bottom-bar');
+            if (bar) bar.style.display = 'flex';
         });
     });
 
@@ -1002,7 +1025,8 @@ function init() {
 
     // 鼠标滚轮缩放（检测中禁止缩放）
     canvas.addEventListener('wheel', e => {
-        if (state.isRunning) return;
+        // 仅检测模式允许滚轮缩放
+        if (state.isRunning || state.mode === 'game' || state.mode === 'mode-select') return;
         e.preventDefault();
         const zoomDelta = e.deltaY > 0 ? -0.1 : 0.1;
         const newZoom = Math.max(CONFIG.MIN_ZOOM, Math.min(CONFIG.MAX_ZOOM, state.zoomFactor + zoomDelta));
@@ -1023,11 +1047,22 @@ function init() {
         startDetection();
     });
 
-    // 开始检测按钮（协调性检测）
+    // 开始检测按钮（协调性检测 - 侧边栏）
     document.getElementById('action-btn-coord').addEventListener('click', () => {
         if (state.isRunning) return;
         setMode('coordination');
         startDetection();
+    });
+
+    // 底部栏按钮（协调性检测）
+    document.getElementById('action-btn-coord-bar').addEventListener('click', () => {
+        if (state.isRunning) return;
+        startDetection();
+    });
+    document.getElementById('zero-btn-coord-bar').addEventListener('click', zeroPosition);
+    document.getElementById('back-btn-coord-bar').addEventListener('click', () => {
+        if (state.isRunning) return;
+        setMode('mode-select');
     });
 
     // 关闭弹窗
@@ -1094,17 +1129,17 @@ function init() {
             document.exitFullscreen();
         }
     });
-    // 游戏模式下全屏自动折叠侧边栏，检查模块保持展开
     document.addEventListener('fullscreenchange', () => {
-        if (state.mode !== 'game') return; // 检查模块不折叠
-        const sp = document.getElementById('side-panel');
-        const stb = document.getElementById('sidebar-toggle');
-        if (document.fullscreenElement) {
-            sp.classList.add('collapsed');
-            if (stb) { stb.textContent = '▶'; stb.style.display = 'block'; }
-        } else {
-            sp.classList.remove('collapsed');
-            if (stb) stb.textContent = '◀';
+        if (state.mode === 'game') {
+            const sp = document.getElementById('side-panel');
+            const stb = document.getElementById('sidebar-toggle');
+            if (document.fullscreenElement) {
+                sp.classList.add('collapsed');
+                if (stb) { stb.textContent = '▶'; stb.style.display = 'block'; }
+            } else {
+                sp.classList.remove('collapsed');
+                if (stb) stb.textContent = '◀';
+            }
         }
     });
 
@@ -1185,13 +1220,6 @@ function init() {
         if (e.target === loginModal) loginModal.classList.remove('show');
     });
 
-    // 时钟
-    setInterval(() => {
-        const now = new Date();
-        document.getElementById('current-time').textContent =
-            now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-    }, 1000);
-
     window.addEventListener('resize', resizeCanvas);
 
     // 陀螺仪蓝牙连接弹窗
@@ -1244,14 +1272,11 @@ function init() {
         const devices = getPairedDevices();
         if (devices.length === 0) return '';
 
-        return devices.map((d, i) => `
-            <div style="padding: 8px; border-bottom: 1px solid rgba(0,0,0,0.1);" data-device-id="${d.id}">
-                <div style="font-size: 12px; margin-bottom: 4px; display: flex; align-items: center;">
-                    <span style="color: var(--primary); margin-right: 6px;">★</span>
-                    ${d.name}
-                </div>
-                <div style="font-size: 10px; color: var(--text-muted);">点击直接连接</div>
-            </div>
+        return '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">已配对设备（点击直接连接）</div>' +
+            devices.map((d, i) => `
+            <button class="paired-device-btn" data-device-id="${d.id}" style="display:block;width:100%;padding:10px;margin-bottom:4px;background:rgba(0,217,165,0.1);border:1px solid var(--primary);border-radius:6px;cursor:pointer;text-align:left;font-size:12px;">
+                <span style="color:var(--primary);">★</span> ${d.name}
+            </button>
         `).join('');
     }
 
@@ -1271,6 +1296,10 @@ function init() {
     }
 
     function showGyroModal() {
+        // 全屏下先退出，避免蓝牙弹窗强制退出导致全屏按钮失效
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        }
         gyroModal.classList.add('show');
         gyroDebug.style.display = 'block';
         if (bluetoothDevice && bluetoothDevice.gatt.connected) {
@@ -1291,13 +1320,14 @@ function init() {
             // 显示已保存的设备列表
             gyroDeviceList.innerHTML = renderPairedDevices();
 
-            // 为已保存的设备添加点击事件
-            gyroDeviceList.querySelectorAll('[data-device-id]').forEach(item => {
-                item.addEventListener('click', async () => {
-                    const deviceId = item.dataset.deviceId;
+            // 为已保存的设备按钮添加点击事件
+            gyroDeviceList.querySelectorAll('.paired-device-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const deviceId = btn.dataset.deviceId;
+                    logGyroDebug(`点击已配对设备, id=${deviceId}`);
                     await connectToSavedDevice(deviceId);
                 });
-                item.style.cursor = 'pointer';
             });
         }
     }
@@ -1317,18 +1347,44 @@ function init() {
         gyroDeviceList.innerHTML = '<div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px;">正在连接...</div>';
 
         try {
-            // 使用 acceptAllDevices 然后在返回的设备中找匹配的
-            const device = await navigator.bluetooth.requestDevice({
-                acceptAllDevices: true,
-                optionalServices: [
-                    '0000ffe5-0000-1000-8000-00805f9a34fb',
-                    '0000ffe0-0000-1000-8000-00805f9b34fb'
-                ]
-            });
+            let device = null;
+            // 获取已保存设备的名称
+            const savedDevices = getPairedDevices();
+            const savedInfo = savedDevices.find(d => d.id === deviceId);
+            const savedName = savedInfo ? savedInfo.name : '';
 
-            // 检查设备ID是否匹配
-            if (device.id !== deviceId) {
-                logGyroDebug(`设备不匹配，尝试连接...`);
+            // 方法1: getDevices() 已授权设备(无需弹窗)
+            if (navigator.bluetooth.getDevices) {
+                const devices = await navigator.bluetooth.getDevices();
+                logGyroDebug(`getDevices返回${devices.length}个设备`);
+                device = devices.find(d => d.id === deviceId || (savedName && d.name === savedName));
+                if (device) logGyroDebug(`一键连接: ${device.name}`);
+            }
+            // 方法2: requestDevice with name filter (会弹窗但可选)
+            if (!device && savedName) {
+                try {
+                    device = await navigator.bluetooth.requestDevice({
+                        filters: [{ name: savedName }],
+                        optionalServices: [
+                            '0000ffe5-0000-1000-8000-00805f9a34fb',
+                            '0000ffe0-0000-1000-8000-00805f9b34fb'
+                        ]
+                    });
+                    logGyroDebug(`按名称匹配: ${device.name}`);
+                } catch {
+                    // 按名称找不到，用通用选择器
+                }
+            }
+            // 方法3: 通用设备选择器
+            if (!device) {
+                logGyroDebug('弹出通用选择器...');
+                device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: [
+                        '0000ffe5-0000-1000-8000-00805f9a34fb',
+                        '0000ffe0-0000-1000-8000-00805f9b34fb'
+                    ]
+                });
             }
 
             bluetoothDevice = device;
@@ -1384,7 +1440,7 @@ function init() {
                 <div style="padding: 8px;">
                     <div style="font-size: 12px; margin-bottom: 4px;">${bluetoothDevice.name || '未知设备'}</div>
                     <div style="font-size: 10px; color: var(--text-muted);">点击"连接"按钮进行连接</div>
-                    <button id="gyro-connect-btn" style="margin-top: 8px; padding: 6px 12px; background: var(--primary); color: var(--bg-dark); border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">连接</button>
+                    <button id="gyro-connect-btn" style="margin-top: 8px; padding: 10px 20px; background: var(--primary); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; width: 100%;">连接</button>
                 </div>
             `;
 
@@ -1587,13 +1643,7 @@ function init() {
                 savePairedDevice(bluetoothDevice);
             }
 
-            // 自动切换到陀螺仪模式
-            if (!state.useGyroscope) {
-                state.useGyroscope = true;
-                toggleBtn.textContent = '陀螺仪模式';
-                toggleBtn.style.background = 'var(--primary)';
-                toggleBtn.style.color = 'var(--bg-dark)';
-            }
+            state.useGyroscope = true;
 
         } catch (err) {
             logGyroDebug(`❌ 连接失败: ${err.message}`);

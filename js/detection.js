@@ -103,7 +103,8 @@ function updateROM() {
  */
 
 function updateCoordination(elapsed) {
-    const smoothT = elapsed * CONFIG.TRAJECTORY_SPEED;
+    // 放大后角速度等比减慢，保持屏幕上像素移动速度不变
+    const smoothT = elapsed * CONFIG.TRAJECTORY_SPEED / Math.max(0.3, state.zoomFactor);
 
     // 使用时间进度，按检测/训练时长计算
     state.progress = Math.min(1, elapsed / (state.testDuration || CONFIG.COORDINATION_DURATION));

@@ -21,12 +21,19 @@
                         <div id="records-item" role="menuitem" tabindex="0" class="dropdown-item">📋 报告查询</div>
                     </div>
                 </div>
-                <button id="open-gyro-modal" style="background: var(--bg-panel); border: 1px solid rgba(0,0,0,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">蓝牙连接</button>
-                <button id="fullscreen-btn" style="background: var(--bg-panel); border: 1px solid rgba(0,0,0,0.2); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;" title="全屏">⛶</button>
+                <button id="open-gyro-modal" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">蓝牙连接</button>
+                <button id="fullscreen-btn" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;" title="全屏">⛶</button>
             </div>
         </header>
         <main>
-            <div id="detection-area"><canvas id="crosshair-canvas"></canvas></div>
+            <div id="detection-area">
+                    <canvas id="crosshair-canvas"></canvas>
+                    <div id="coord-bottom-bar" style="display:none;position:fixed;bottom:20px;right:20px;gap:8px;padding:10px 20px;background:rgba(255,255,255,0.95);border-radius:14px;box-shadow:0 2px 16px rgba(0,0,0,0.15);z-index:1000;">
+                        <button class="collect-btn" id="zero-btn-coord-bar" style="padding:10px 16px;background:var(--secondary);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;">⟳ 归零</button>
+                        <button class="action-btn" id="action-btn-coord-bar" style="padding:10px 24px;background:var(--primary);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;">开始检测</button>
+                        <button class="back-btn" id="back-btn-coord-bar" style="padding:10px 16px;background:rgba(0,0,0,0.08);color:var(--text);border:none;border-radius:8px;cursor:pointer;font-size:13px;">← 返回</button>
+                    </div>
+                </div>
             <div id="side-panel">
                 <div class="panel-title">状态</div>
                 <div class="data-card">
@@ -204,14 +211,7 @@
                 <!-- 光点位置和标靶缩放已移除，标靶用鼠标滚轮控制 -->
             </div>
         </main>
-        <div id="status-bar">
-            <div class="status-item">
-                <div class="status-dot" id="status-dot"></div>
-                <span id="connection-status">等待连接...</span>
-            </div>
-            <div class="status-item"><span id="current-time">--:--</span></div>
         </div>
-    </div>
 
     <!-- 结果弹窗 -->
     <div class="modal" id="result-modal">
