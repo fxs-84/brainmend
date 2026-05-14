@@ -1243,17 +1243,36 @@ class SceneSpace extends SceneBase {
 
     generateStars() {
         this.stars = [];
-        for (let i = 0; i < 150; i++) {
+        // 主星星层 - 较亮的星星
+        for (let i = 0; i < 120; i++) {
             this.stars.push({
                 x: Math.random(), y: Math.random(),
-                size: Math.random() * 0.004 + 0.002,
-                speed: Math.random() * 0.2 + 0.05,
-                brightness: Math.random(),
+                size: Math.random() * 0.005 + 0.003,
+                speed: Math.random() * 0.15 + 0.03,
+                brightness: Math.random() * 0.4 + 0.6,
                 twinklePhase: Math.random() * Math.PI * 2,
-                twinkleSpeed: 0.5 + Math.random() * 1.5,
-                color: Math.random() > 0.7 ? 'blue' : Math.random() > 0.8 ? 'yellow' : Math.random() > 0.88 ? 'orange' : Math.random() > 0.93 ? 'red' : 'white'
+                twinkleSpeed: 0.8 + Math.random() * 2,
+                color: Math.random() > 0.7 ? 'blue' : Math.random() > 0.8 ? 'yellow' : Math.random() > 0.88 ? 'orange' : Math.random() > 0.93 ? 'red' : 'white',
+                layer: 'main'
             });
         }
+        // 远景星星层 - 微小的暗淡星星增加深度
+        for (let i = 0; i < 200; i++) {
+            this.stars.push({
+                x: Math.random(), y: Math.random(),
+                size: Math.random() * 0.002 + 0.0005,
+                speed: Math.random() * 0.05 + 0.01,
+                brightness: Math.random() * 0.3 + 0.2,
+                twinklePhase: Math.random() * Math.PI * 2,
+                twinkleSpeed: 0.3 + Math.random() * 0.8,
+                color: Math.random() > 0.5 ? 'white' : 'blue',
+                layer: 'distant'
+            });
+        }
+        // 流星
+        this.shootingStars = [];
+        this.lastShootingStar = 0;
+        this.shootingStarInterval = 3 + Math.random() * 5;
     }
 
     init(engine) {
@@ -1298,27 +1317,60 @@ class SceneSpace extends SceneBase {
         super.update(dt);
 
         for (const star of this.stars) {
-            // 更新闪烁 - 始终更新，不受滚动方向影响
+            // 更新闪烁
             star.twinklePhase += star.twinkleSpeed * dt;
             star.brightness = 0.5 + Math.sin(star.twinklePhase) * 0.5;
 
-            // 单轴上下模式(scrollDirection='left')：背景静止，不滚动
+            // 单轴上下模式：背景静止
             if (this.scrollDirection === 'left') continue;
+
+            // 远景层移动更慢
+            const speedMult = star.layer === 'distant' ? 0.3 : 1;
 
             switch (this.scrollDirection) {
                 case 'right':
-                    star.x += star.speed * dt;
+                    star.x += star.speed * dt * speedMult;
                     if (star.x > 1) { star.x = 0; star.y = Math.random(); }
                     break;
                 case 'up':
-                    star.y -= star.speed * dt;
+                    star.y -= star.speed * dt * speedMult;
                     if (star.y < 0) { star.y = 1; star.x = Math.random(); }
                     break;
                 case 'down':
                 default:
-                    star.y += star.speed * dt;
+                    star.y += star.speed * dt * speedMult;
                     if (star.y > 1) { star.y = 0; star.x = Math.random(); }
                     break;
+            }
+        }
+
+        // 流星更新
+        this.lastShootingStar += dt;
+        if (this.lastShootingStar > this.shootingStarInterval) {
+            this.lastShootingStar = 0;
+            this.shootingStarInterval = 4 + Math.random() * 8;
+            // 随机生成流星
+            if (Math.random() > 0.3) {
+                this.shootingStars.push({
+                    x: Math.random() * 0.3 + 0.1,
+                    y: Math.random() * 0.3,
+                    length: Math.random() * 0.15 + 0.08,
+                    speed: Math.random() * 0.4 + 0.3,
+                    angle: Math.PI / 4 + Math.random() * 0.3,
+                    life: 1,
+                    decay: Math.random() * 0.5 + 0.5,
+                    width: Math.random() * 2 + 1
+                });
+            }
+        }
+        // 更新流星
+        for (let i = this.shootingStars.length - 1; i >= 0; i--) {
+            const s = this.shootingStars[i];
+            s.x += Math.cos(s.angle) * s.speed * dt;
+            s.y += Math.sin(s.angle) * s.speed * dt;
+            s.life -= s.decay * dt;
+            if (s.life <= 0 || s.x > 1.2 || s.y > 1.2) {
+                this.shootingStars.splice(i, 1);
             }
         }
     }
@@ -1349,43 +1401,51 @@ class SceneSpace extends SceneBase {
 
         // 星云层1 - 紫色星云(左下)
         const nebula1 = ctx.createRadialGradient(width * 0.1, height * 0.85, 0, width * 0.2, height * 0.8, width * 0.5);
-        nebula1.addColorStop(0, 'rgba(160, 60, 220, 0.2)');
-        nebula1.addColorStop(0.3, 'rgba(100, 40, 160, 0.1)');
-        nebula1.addColorStop(0.7, 'rgba(60, 20, 100, 0.05)');
+        nebula1.addColorStop(0, 'rgba(180, 80, 255, 0.25)');
+        nebula1.addColorStop(0.3, 'rgba(120, 50, 200, 0.15)');
+        nebula1.addColorStop(0.6, 'rgba(80, 30, 150, 0.08)');
         nebula1.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = nebula1;
         ctx.fillRect(0, 0, width, height);
 
         // 星云层2 - 蓝色星云(右上)
         const nebula2 = ctx.createRadialGradient(width * 0.85, height * 0.15, 0, width * 0.8, height * 0.25, width * 0.45);
-        nebula2.addColorStop(0, 'rgba(60, 140, 255, 0.18)');
-        nebula2.addColorStop(0.4, 'rgba(40, 90, 200, 0.09)');
+        nebula2.addColorStop(0, 'rgba(80, 160, 255, 0.22)');
+        nebula2.addColorStop(0.4, 'rgba(50, 100, 220, 0.12)');
         nebula2.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = nebula2;
         ctx.fillRect(0, 0, width, height);
 
         // 星云层3 - 粉红星云(中间)
         const nebula3 = ctx.createRadialGradient(width * 0.5, height * 0.6, 0, width * 0.5, height * 0.55, width * 0.3);
-        nebula3.addColorStop(0, 'rgba(255, 100, 150, 0.12)');
-        nebula3.addColorStop(0.5, 'rgba(200, 60, 120, 0.06)');
+        nebula3.addColorStop(0, 'rgba(255, 120, 180, 0.18)');
+        nebula3.addColorStop(0.5, 'rgba(220, 80, 140, 0.1)');
         nebula3.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = nebula3;
         ctx.fillRect(0, 0, width, height);
 
-        // 星云层4 - 青色星云(右上小)
+        // 星云层4 - 青色星云
         const nebula4 = ctx.createRadialGradient(width * 0.7, height * 0.3, 0, width * 0.7, height * 0.3, width * 0.2);
-        nebula4.addColorStop(0, 'rgba(0, 200, 200, 0.1)');
-        nebula4.addColorStop(0.6, 'rgba(0, 150, 180, 0.05)');
+        nebula4.addColorStop(0, 'rgba(0, 220, 220, 0.15)');
+        nebula4.addColorStop(0.6, 'rgba(0, 170, 200, 0.08)');
         nebula4.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = nebula4;
         ctx.fillRect(0, 0, width, height);
 
-        // 宇宙尘埃层
-        ctx.fillStyle = 'rgba(150, 120, 180, 0.04)';
-        for (let i = 0; i < 40; i++) {
+        // 星云层5 - 金色星云(左中)
+        const nebula5 = ctx.createRadialGradient(width * 0.2, height * 0.4, 0, width * 0.2, height * 0.4, width * 0.25);
+        nebula5.addColorStop(0, 'rgba(255, 200, 100, 0.12)');
+        nebula5.addColorStop(0.5, 'rgba(200, 150, 80, 0.06)');
+        nebula5.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = nebula5;
+        ctx.fillRect(0, 0, width, height);
+
+        // 宇宙尘埃层 - 更密更大
+        ctx.fillStyle = 'rgba(180, 150, 200, 0.05)';
+        for (let i = 0; i < 60; i++) {
             const dustX = Math.random() * width;
             const dustY = Math.random() * height;
-            const dustSize = Math.random() * 100 + 30;
+            const dustSize = Math.random() * 120 + 40;
             ctx.beginPath();
             ctx.arc(dustX, dustY, dustSize, 0, Math.PI * 2);
             ctx.fill();
@@ -1397,7 +1457,16 @@ class SceneSpace extends SceneBase {
             const size = star.size * Math.min(width, height);
             const b = star.brightness;
 
-            // 根据颜色设置星光的RGBA - 更亮
+            // 远景星星简单渲染
+            if (star.layer === 'distant') {
+                ctx.beginPath();
+                ctx.arc(x, y, size * 2, 0, Math.PI * 2);
+                ctx.fillStyle = star.color === 'blue' ? `rgba(150, 180, 255, ${b * 0.6})` : `rgba(255, 255, 255, ${b * 0.5})`;
+                ctx.fill();
+                continue;
+            }
+
+            // 主星星层 - 带光晕
             let coreColor, glowColor;
             switch (star.color) {
                 case 'blue':
@@ -1439,7 +1508,7 @@ class SceneSpace extends SceneBase {
             ctx.fillStyle = coreColor;
             ctx.fill();
 
-            // 十字光芒 - 更亮更大
+            // 十字光芒
             if (b > 0.8) {
                 const rayLength = size * 8 * b;
                 ctx.strokeStyle = coreColor;
@@ -1460,7 +1529,33 @@ class SceneSpace extends SceneBase {
             }
         }
 
-        // 边缘暗角效果 - 减弱
+        // 流星
+        for (const s of this.shootingStars) {
+            const sx = s.x * width, sy = s.y * height;
+            const tailX = sx - Math.cos(s.angle) * s.length * width;
+            const tailY = sy - Math.sin(s.angle) * s.length * height;
+
+            const grad = ctx.createLinearGradient(tailX, tailY, sx, sy);
+            grad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+            grad.addColorStop(0.7, `rgba(200, 220, 255, ${s.life * 0.5})`);
+            grad.addColorStop(1, `rgba(255, 255, 255, ${s.life})`);
+
+            ctx.beginPath();
+            ctx.moveTo(tailX, tailY);
+            ctx.lineTo(sx, sy);
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = s.width * s.life;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            // 流星头部光点
+            ctx.beginPath();
+            ctx.arc(sx, sy, s.width * 0.5 * s.life, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 255, 255, ${s.life})`;
+            ctx.fill();
+        }
+
+        // 边缘暗角效果
         const vignette = ctx.createRadialGradient(width / 2, height / 2, height * 0.25, width / 2, height / 2, height * 0.9);
         vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
         vignette.addColorStop(1, 'rgba(0, 0, 15, 0.3)');
