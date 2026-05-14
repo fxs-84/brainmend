@@ -466,6 +466,7 @@ function startDetection() {
         updateCoordinationTrajectoryUI();
         // 语音播报完成后再启动红色光点移动
         speakWithCallback('请跟随红色光点，保持同步移动', () => {
+
             const btn = document.getElementById('action-btn-coord');
             btn.textContent = '检测中...';
             btn.disabled = true;
@@ -1471,10 +1472,23 @@ function init() {
     const CMD_EULER_ONLY = new Uint8Array([0xFF, 0xAA, 0x02, 0x08, 0x00]);
     // 维特智能指令：读取欧拉角寄存器0x3D（寄存器0x27，值0x3D）
     const CMD_READ_ANGLE   = new Uint8Array([0xFF, 0xAA, 0x27, 0x3D, 0x00]);
-    // 维特智能指令：设置安装方向为垂直（寄存器0x23，值0x01）
-    const CMD_SET_VERTICAL  = new Uint8Array([0xFF, 0xAA, 0x23, 0x01, 0x00]);
+    // 维特智能指令：设置安装方向为水平（寄存器0x23，值0x00）
+    const CMD_SET_HORIZONTAL  = new Uint8Array([0xFF, 0xAA, 0x23, 0x00, 0x00]);
+    // 维特智能指令：Z轴角度复位（寄存器0x52，值0x00）
+    const CMD_RESET_Z_ANGLE = new Uint8Array([0xFF, 0xAA, 0x52, 0x00, 0x00]);
 
     let gyroWriteCharacteristic = null;
+
+    // Z轴角度复位：发送硬件命令让传感器重置yaw积分
+    window._resetZAngle = async () => {
+        if (!gyroWriteCharacteristic) return;
+        try {
+            await gyroWriteCharacteristic.writeValue(CMD_RESET_Z_ANGLE);
+            logGyroDebug('已发送Z轴角度复位指令');
+        } catch (e) {
+            // 静默忽略，不影响使用
+        }
+    };
 
     async function connectGyroscope() {
         if (!bluetoothDevice) return;
@@ -1592,10 +1606,15 @@ function init() {
             // 发送指令：开启角度数据输出
             if (gyroWriteCharacteristic) {
                 try {
-                    // 发送解锁指令
+                    // 发送解锁指令 + 水平安装 + Z轴复位
                     await gyroWriteCharacteristic.writeValue(new Uint8Array([0xFF, 0xAA, 0x69, 0x88, 0xB5]));
                     logGyroDebug('已发送解锁指令');
                     await new Promise(resolve => setTimeout(resolve, 200));
+                    await gyroWriteCharacteristic.writeValue(CMD_SET_HORIZONTAL);
+                    logGyroDebug('已发送水平安装方向指令');
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    await gyroWriteCharacteristic.writeValue(CMD_RESET_Z_ANGLE);
+                    logGyroDebug('已发送Z轴复位指令(连接初始化)');
 
                     // 设置输出内容：基础输出 + 欧拉角 (0x86)
                     await gyroWriteCharacteristic.writeValue(CMD_ENABLE_EULER);

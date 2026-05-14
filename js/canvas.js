@@ -23,6 +23,12 @@ function resizeCanvas() {
     centerY = canvas.height / 2;
     crosshairSize = Math.min(canvas.width, canvas.height) * 0.5 * state.zoomFactor;
     ringRadius = crosshairSize * 0.35;
+
+    // canvas尺寸变化后重算角度系数
+    const hLineLen = crosshairSize / 2 - 15;
+    const vLineLen = ringRadius * 0.85;
+    state.yawCoefficient = state.yawRange / hLineLen;
+    state.pitchCoefficient = state.pitchRange / vLineLen;
 }
 
 // ============================================================

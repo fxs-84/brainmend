@@ -10,16 +10,7 @@ import { CONFIG } from './config.js';
 export let isDraggingDot = false;
 export let spacePressed = false;
 
-// 陀螺仪漂移校正：
-// - Yaw: 实时估算陀螺偏置速率并累加扣除
-// - Pitch/Roll: 自适应EMA——静止时快收敛消除拖尾，运动时慢收敛保留信号
-// - 死区: 微小信号归零，消除静止抖动
-
-let _yawBiasRate = 0;
-let _yawBiasAccum = 0;
-let _lastBiasYaw = null;
-let _lastBiasTime = 0;
-
+// Pitch/Roll 自适应EMA — 不碰Yaw
 let _emaPitch = null, _emaRoll = null;
 let _emaWarmup = 0;
 let _stillFrames = 0;
@@ -29,18 +20,13 @@ const EMA_WARMUP = 0.9;
 const STILL_THRESHOLD = 1.5;
 const STILL_FRAMES_NEEDED = 45;
 const DEAD_ZONE = 0.3;
-const BIAS_LEARN_RATE = 0.01;
-const GAME_BIAS_LEARN_RATE = 0.05;
 
 window._resetGyroEMA = () => {
     _emaPitch = null; _emaRoll = null; _emaWarmup = 0; _stillFrames = 0;
-    _yawBiasRate = 0; _yawBiasAccum = 0;
-    _lastBiasYaw = null; _lastBiasTime = 0;
 };
 
 let _freezeEMA = false;
 window._freezeGyroEMA = (f) => { _freezeEMA = f; };
-let _lastRawPitch = null, _lastRawRoll = null;
 
 const _pBuf = [], _rBuf = [];
 function _m5(buf, v) { buf.push(v); if (buf.length > 5) buf.shift(); const s = [...buf].sort((a,b)=>a-b); return s[Math.floor(s.length/2)]; }
@@ -55,38 +41,12 @@ function updateFromGyroscope(gyroData) {
     rawPitch = _m5(_pBuf, rawPitch);
     rawRoll = _m5(_rBuf, rawRoll);
 
-    const now = performance.now();
     const isGameMode = state.mode === 'game';
 
-    // Yaw偏置估算（所有模块共用，帧间raw判断避免EMA滞后影响）
-    if (_emaPitch !== null && _lastBiasYaw !== null) {
-        const dt = (now - _lastBiasTime) / 1000;
-        if (dt > 0.001 && dt < 0.5) {
-            const rawRate = (rawYaw - _lastBiasYaw) / dt;
-            // 用帧间raw值变化率判断静止，不受EMA滞后影响
-            const pitchFrameMove = _lastRawPitch !== null ? Math.abs(rawPitch - _lastRawPitch) : 0;
-            const rollFrameMove = _lastRawRoll !== null ? Math.abs(rawRoll - _lastRawRoll) : 0;
-            const pitchMoving = pitchFrameMove >= 0.3;
-            const rollMoving = rollFrameMove >= 0.3;
-            const isHeadStill = !pitchMoving && !rollMoving;
-            // 快速yaw运动或头部有运动时，停止bias累加
-            const isCalibrating = Math.abs(rawRate) < 1 && isHeadStill;
-            if (isCalibrating) {
-                const rate = isGameMode ? GAME_BIAS_LEARN_RATE : BIAS_LEARN_RATE;
-                _yawBiasRate += (rawRate - _yawBiasRate) * rate;
-                _yawBiasAccum += _yawBiasRate * dt;
-            }
-        }
-    }
-    _lastBiasYaw = rawYaw;
-    _lastBiasTime = now;
-    _lastRawPitch = rawPitch;
-    _lastRawRoll = rawRoll;
+    // Yaw: 纯直通
+    state.yaw = rawYaw - state.yawOffset;
 
-    state.yaw = rawYaw - state.yawOffset - _yawBiasAccum;
-
-    // Pitch/Roll自适应EMA: 静止快收敛 / 运动慢跟踪
-    // 位置觉检测期间禁用快收敛，避免中途暂停导致基线偏移
+    // Pitch/Roll自适应EMA
     if (_emaPitch === null) { _emaPitch = rawPitch; _emaRoll = rawRoll; _emaWarmup = 0; _stillFrames = 0; }
     if (!_freezeEMA) {
         const pitchDelta = Math.abs(rawPitch - _emaPitch);
@@ -110,8 +70,7 @@ function updateFromGyroscope(gyroData) {
         _emaRoll = _emaRoll * a + rawRoll * (1 - a);
     }
 
-    // 检测模块直接使用raw值（跳过EMA），避免极端保持时EMA收敛导致回零
-    // 游戏模块使用EMA平滑跟踪
+    // 检测模块使用raw值，游戏模块使用EMA平滑跟踪
     let adjPitch, adjRoll;
     if (isGameMode) {
         adjPitch = (rawPitch - _emaPitch) - state.pitchOffset;
@@ -127,7 +86,7 @@ function updateFromGyroscope(gyroData) {
     state.pitch = adjPitch;
     state.roll = adjRoll;
 
-    // 位置觉训练锁定：光点固定在采集位置
+    // 位置觉训练锁定
     if (state._posLocked) {
         state.dotX = state._posLockedX;
         state.dotY = state._posLockedY;
@@ -154,7 +113,7 @@ function updateFromGyroscope(gyroData) {
 window.updateFromGyroscope = updateFromGyroscope;
 
 // ============================================================
-// 手机陀螺仪支持（DeviceOrientation API）
+// 手机陀螺仪支持
 // ============================================================
 let deviceOrientationEnabled = false;
 

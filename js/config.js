@@ -19,14 +19,14 @@ export const CONFIG = {
 
     // 协调性检测轨迹
     COORD_TRAJECTORIES: ['horizontal', 'vertical', 'vertical_left', 'vertical_right', 'figure8', 'figure8_reverse'],
-    COORD_SINGLE_DURATION: 2 * (2 * Math.PI / 0.42),   // 单轨迹检测：2个完整周期
+    COORD_SINGLE_DURATION: 2 * (2 * Math.PI / 0.50),   // 单轨迹检测：2个完整周期
     COORD_FULL_DURATION: 20,     // 全轨迹检测：每轨迹20秒
     COORD_TRAINING_DURATION: 90, // 训练模式：1分30秒
 
     // 轨迹参数
     INTEGRATED_DURATION: 60,      // 综合检测：60秒
-    COORDINATION_DURATION: 2 * (2 * Math.PI / 0.42),   // 协调性检测：2个完整周期
-    TRAJECTORY_SPEED: 0.42,
+    COORDINATION_DURATION: 2 * (2 * Math.PI / 0.50),   // 协调性检测：2个完整周期
+    TRAJECTORY_SPEED: 0.50,
 
     // 颈椎正常活动范围
     // 前屈: 35-45°, 后伸: 35-45°, 旋转: 60-80°

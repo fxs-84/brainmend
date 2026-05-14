@@ -453,4 +453,4 @@ function getVestibularAssessmentFromIntegrated() {
     });
 }
 
-export { updateIntegrated, updatePosition, updateStability, updateROM, updateCoordination };
+export { updateIntegrated, updatePosition, updateStability, updateROM, updateCoordination, evaluateVestibularFunction, getVestibularAssessmentFromIntegrated };

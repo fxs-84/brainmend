@@ -5,6 +5,7 @@
 import { state } from './state.js';
 import { CONFIG } from './config.js';
 import { ROM_RULES, POSITION_RULES, COORDINATION_RULES, BALANCE_RULES, BRAIN_INFERENCE, REHAB_GENERATOR, calculateScores } from './assessment/anrm-knowledge.js';
+import { evaluateVestibularFunction, getVestibularAssessmentFromIntegrated } from './detection.js';
 
 // JPS 分类函数
 function classifyJPS(error) {
@@ -44,6 +45,7 @@ function zeroPosition() {
         state.dotY = 0;
         state.displayDotX = 0;
         state.displayDotY = 0;
+        if (window._resetZAngle) window._resetZAngle();
     } else {
         // 鼠标模式：state.pitch 不含 offset，display = state.pitch - pitchOffset
         state.pitchOffset = state.pitch;
@@ -257,7 +259,6 @@ function updateProgress() {
         progressRing.classList.add('success');
     } else if (state.progress >= 0.5) {
         progressRing.classList.add('warning');
-        // 中途提示（只在50%时播报一次）
         if (window.TTS_CONFIG.enabled && state.lastAnnouncedProgress < 0.5) {
             if (state.mode === 'integrated' || state.mode === 'coordination') {
                 window.speak('继续跟踪');
@@ -537,18 +538,7 @@ function showResults() {
         romCanvas.style.display = 'none';
     }
 
-    // 语音播报结果
-    if (window.TTS_CONFIG.enabled) {
-        if (state.mode === 'integrated') {
-            window.speakResultsIntegrated({ position: positionScore, stability: stabilityScore, rom: romScore, coordination: coordinationScore });
-        } else if (state.mode === 'coordination') {
-            window.speakResultsCoordination(coordinationScore);
-        } else if (state.mode === 'rom') {
-            window.speakResultsROM(state.romResults);
-        } else if (state.mode === 'position') {
-            window.speakResultsPosition(state.positionResults);
-        }
-    }
+
 
     // 单项检测不弹模态框——报告需等全部三项做完后点击"生成报告"
     // document.getElementById('result-modal').classList.add('show');
