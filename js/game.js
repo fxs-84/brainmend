@@ -1243,7 +1243,7 @@ class SceneSpace extends SceneBase {
 
     generateStars() {
         this.stars = [];
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < 150; i++) {
             this.stars.push({
                 x: Math.random(), y: Math.random(),
                 size: Math.random() * 0.004 + 0.002,
@@ -1251,7 +1251,7 @@ class SceneSpace extends SceneBase {
                 brightness: Math.random(),
                 twinklePhase: Math.random() * Math.PI * 2,
                 twinkleSpeed: 0.5 + Math.random() * 1.5,
-                color: Math.random() > 0.75 ? 'blue' : Math.random() > 0.85 ? 'yellow' : Math.random() > 0.92 ? 'red' : 'white'
+                color: Math.random() > 0.7 ? 'blue' : Math.random() > 0.8 ? 'yellow' : Math.random() > 0.88 ? 'orange' : Math.random() > 0.93 ? 'red' : 'white'
             });
         }
     }
@@ -1324,45 +1324,68 @@ class SceneSpace extends SceneBase {
     }
 
     renderBackground(ctx, width, height) {
-        // 多层深空渐变背景
+        // 深空渐变背景 - 更亮更有太空感
         const bgGrad = ctx.createRadialGradient(width * 0.3, height * 0.3, 0, width * 0.5, height * 0.5, width);
-        bgGrad.addColorStop(0, '#1A1A3E');
-        bgGrad.addColorStop(0.3, '#0F172A');
-        bgGrad.addColorStop(0.7, '#0A0F1E');
-        bgGrad.addColorStop(1, '#050510');
+        bgGrad.addColorStop(0, '#2A1A4A');
+        bgGrad.addColorStop(0.25, '#1A1040');
+        bgGrad.addColorStop(0.6, '#0D0820');
+        bgGrad.addColorStop(1, '#050810');
         ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, width, height);
 
+        // 银河带效果 - 斜穿屏幕的淡色光带
+        ctx.save();
+        ctx.translate(width * 0.3, height * 0.5);
+        ctx.rotate(-0.3);
+        const milkyWay = ctx.createLinearGradient(-width, 0, width, 0);
+        milkyWay.addColorStop(0, 'rgba(100, 80, 150, 0)');
+        milkyWay.addColorStop(0.3, 'rgba(80, 60, 120, 0.03)');
+        milkyWay.addColorStop(0.5, 'rgba(100, 90, 180, 0.06)');
+        milkyWay.addColorStop(0.7, 'rgba(80, 60, 120, 0.03)');
+        milkyWay.addColorStop(1, 'rgba(100, 80, 150, 0)');
+        ctx.fillStyle = milkyWay;
+        ctx.fillRect(-width, -height, width * 3, height * 2);
+        ctx.restore();
+
         // 星云层1 - 紫色星云(左下)
-        const nebula1 = ctx.createRadialGradient(width * 0.1, height * 0.9, 0, width * 0.2, height * 0.8, width * 0.4);
-        nebula1.addColorStop(0, 'rgba(120, 40, 180, 0.15)');
-        nebula1.addColorStop(0.4, 'rgba(80, 20, 120, 0.08)');
+        const nebula1 = ctx.createRadialGradient(width * 0.1, height * 0.85, 0, width * 0.2, height * 0.8, width * 0.5);
+        nebula1.addColorStop(0, 'rgba(160, 60, 220, 0.2)');
+        nebula1.addColorStop(0.3, 'rgba(100, 40, 160, 0.1)');
+        nebula1.addColorStop(0.7, 'rgba(60, 20, 100, 0.05)');
         nebula1.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = nebula1;
         ctx.fillRect(0, 0, width, height);
 
         // 星云层2 - 蓝色星云(右上)
-        const nebula2 = ctx.createRadialGradient(width * 0.9, height * 0.15, 0, width * 0.8, height * 0.25, width * 0.35);
-        nebula2.addColorStop(0, 'rgba(40, 80, 180, 0.12)');
-        nebula2.addColorStop(0.5, 'rgba(20, 40, 100, 0.06)');
+        const nebula2 = ctx.createRadialGradient(width * 0.85, height * 0.15, 0, width * 0.8, height * 0.25, width * 0.45);
+        nebula2.addColorStop(0, 'rgba(60, 140, 255, 0.18)');
+        nebula2.addColorStop(0.4, 'rgba(40, 90, 200, 0.09)');
         nebula2.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = nebula2;
         ctx.fillRect(0, 0, width, height);
 
-        // 星云层3 - 红色星云(中间偏右)
-        const nebula3 = ctx.createRadialGradient(width * 0.6, height * 0.5, 0, width * 0.65, height * 0.55, width * 0.25);
-        nebula3.addColorStop(0, 'rgba(180, 60, 40, 0.08)');
-        nebula3.addColorStop(0.6, 'rgba(100, 30, 20, 0.04)');
+        // 星云层3 - 粉红星云(中间)
+        const nebula3 = ctx.createRadialGradient(width * 0.5, height * 0.6, 0, width * 0.5, height * 0.55, width * 0.3);
+        nebula3.addColorStop(0, 'rgba(255, 100, 150, 0.12)');
+        nebula3.addColorStop(0.5, 'rgba(200, 60, 120, 0.06)');
         nebula3.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = nebula3;
         ctx.fillRect(0, 0, width, height);
 
+        // 星云层4 - 青色星云(右上小)
+        const nebula4 = ctx.createRadialGradient(width * 0.7, height * 0.3, 0, width * 0.7, height * 0.3, width * 0.2);
+        nebula4.addColorStop(0, 'rgba(0, 200, 200, 0.1)');
+        nebula4.addColorStop(0.6, 'rgba(0, 150, 180, 0.05)');
+        nebula4.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = nebula4;
+        ctx.fillRect(0, 0, width, height);
+
         // 宇宙尘埃层
-        ctx.fillStyle = 'rgba(100, 80, 120, 0.03)';
-        for (let i = 0; i < 50; i++) {
+        ctx.fillStyle = 'rgba(150, 120, 180, 0.04)';
+        for (let i = 0; i < 40; i++) {
             const dustX = Math.random() * width;
             const dustY = Math.random() * height;
-            const dustSize = Math.random() * 80 + 20;
+            const dustSize = Math.random() * 100 + 30;
             ctx.beginPath();
             ctx.arc(dustX, dustY, dustSize, 0, Math.PI * 2);
             ctx.fill();
@@ -1374,31 +1397,35 @@ class SceneSpace extends SceneBase {
             const size = star.size * Math.min(width, height);
             const b = star.brightness;
 
-            // 根据颜色设置星光的RGBA
+            // 根据颜色设置星光的RGBA - 更亮
             let coreColor, glowColor;
             switch (star.color) {
                 case 'blue':
-                    coreColor = `rgba(180, 220, 255, ${b})`;
-                    glowColor = `rgba(100, 180, 255, ${b * 0.4})`;
+                    coreColor = `rgba(200, 240, 255, ${b})`;
+                    glowColor = `rgba(100, 180, 255, ${b * 0.5})`;
                     break;
                 case 'yellow':
-                    coreColor = `rgba(255, 255, 200, ${b})`;
-                    glowColor = `rgba(255, 220, 100, ${b * 0.4})`;
+                    coreColor = `rgba(255, 255, 220, ${b})`;
+                    glowColor = `rgba(255, 220, 100, ${b * 0.5})`;
                     break;
                 case 'red':
-                    coreColor = `rgba(255, 180, 180, ${b})`;
-                    glowColor = `rgba(255, 100, 100, ${b * 0.4})`;
+                    coreColor = `rgba(255, 200, 200, ${b})`;
+                    glowColor = `rgba(255, 120, 120, ${b * 0.5})`;
+                    break;
+                case 'orange':
+                    coreColor = `rgba(255, 180, 100, ${b})`;
+                    glowColor = `rgba(255, 150, 50, ${b * 0.5})`;
                     break;
                 default:
                     coreColor = `rgba(255, 255, 255, ${b})`;
-                    glowColor = `rgba(200, 220, 255, ${b * 0.4})`;
+                    glowColor = `rgba(200, 220, 255, ${b * 0.5})`;
             }
 
             // 星星外发光
-            const glowSize = size * (4 + b * 5);
+            const glowSize = size * (5 + b * 6);
             const gradient = ctx.createRadialGradient(x, y, 0, x, y, glowSize);
             gradient.addColorStop(0, coreColor);
-            gradient.addColorStop(0.15, glowColor);
+            gradient.addColorStop(0.1, glowColor);
             gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
             ctx.beginPath();
             ctx.arc(x, y, glowSize, 0, Math.PI * 2);
@@ -1406,18 +1433,18 @@ class SceneSpace extends SceneBase {
             ctx.fill();
 
             // 星星核心
-            const coreSize = size * (1.2 + b * 0.8);
+            const coreSize = size * (1.5 + b * 1);
             ctx.beginPath();
             ctx.arc(x, y, coreSize, 0, Math.PI * 2);
             ctx.fillStyle = coreColor;
             ctx.fill();
 
-            // 十字光芒 - 只有很亮时才出现
-            if (b > 0.85) {
-                const rayLength = size * 7 * b;
+            // 十字光芒 - 更亮更大
+            if (b > 0.8) {
+                const rayLength = size * 8 * b;
                 ctx.strokeStyle = coreColor;
-                ctx.lineWidth = size * 0.6 * b;
-                ctx.globalAlpha = (b - 0.85) * 6.67;
+                ctx.lineWidth = size * 0.7 * b;
+                ctx.globalAlpha = (b - 0.8) * 5;
 
                 ctx.beginPath();
                 ctx.moveTo(x - rayLength, y);
@@ -1433,10 +1460,10 @@ class SceneSpace extends SceneBase {
             }
         }
 
-        // 边缘暗角效果
-        const vignette = ctx.createRadialGradient(width / 2, height / 2, height * 0.3, width / 2, height / 2, height * 0.9);
+        // 边缘暗角效果 - 减弱
+        const vignette = ctx.createRadialGradient(width / 2, height / 2, height * 0.25, width / 2, height / 2, height * 0.9);
         vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
-        vignette.addColorStop(1, 'rgba(0, 0, 10, 0.4)');
+        vignette.addColorStop(1, 'rgba(0, 0, 15, 0.3)');
         ctx.fillStyle = vignette;
         ctx.fillRect(0, 0, width, height);
     }
