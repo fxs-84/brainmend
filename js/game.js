@@ -1277,6 +1277,49 @@ class SceneSpace extends SceneBase {
         this.shootingStars = [];
         this.lastShootingStar = 0;
         this.shootingStarInterval = 3 + Math.random() * 5;
+
+        // 天体 - 太阳/地球/木星
+        this.celestialBodies = [
+            {
+                name: 'sun',
+                x: 0.85,
+                y: 0.12,
+                radius: 0.045,
+                color1: '#FFDD44',
+                color2: '#FFAA00',
+                glowColor: 'rgba(255, 200, 50, 0.4)',
+                glowSize: 3.5,
+                pulsePhase: 0,
+                pulseSpeed: 0.3
+            },
+            {
+                name: 'earth',
+                x: 0.72,
+                y: 0.7,
+                radius: 0.022,
+                color1: '#4488FF',
+                color2: '#2266DD',
+                glowColor: 'rgba(100, 180, 255, 0.3)',
+                glowSize: 2.5,
+                pulsePhase: Math.PI * 0.5,
+                pulseSpeed: 0.5,
+                hasAtmosphere: true,
+                atmosphereColor: 'rgba(100, 180, 255, 0.15)'
+            },
+            {
+                name: 'jupiter',
+                x: 0.15,
+                y: 0.75,
+                radius: 0.055,
+                color1: '#DDAA77',
+                color2: '#BB8855',
+                glowColor: 'rgba(220, 180, 130, 0.25)',
+                glowSize: 2.2,
+                pulsePhase: Math.PI,
+                pulseSpeed: 0.2,
+                bands: true
+            }
+        ];
     }
 
     init(engine) {
@@ -1376,6 +1419,11 @@ class SceneSpace extends SceneBase {
             if (s.life <= 0 || s.x > 1.2 || s.y > 1.2) {
                 this.shootingStars.splice(i, 1);
             }
+        }
+
+        // 天体脉动更新
+        for (const body of this.celestialBodies) {
+            body.pulsePhase += body.pulseSpeed * dt;
         }
     }
 
@@ -1602,6 +1650,71 @@ class SceneSpace extends SceneBase {
             ctx.beginPath();
             ctx.arc(sx, sy, s.width * 0.6 * s.life, 0, Math.PI * 2);
             ctx.fillStyle = `rgba(255, 255, 255, ${s.life})`;
+            ctx.fill();
+        }
+
+        // ===== 天体(太阳/地球/木星) =====
+        for (const body of this.celestialBodies) {
+            const x = body.x * width;
+            const y = body.y * height;
+            const r = body.radius * Math.min(width, height);
+            const pulse = 0.85 + Math.sin(body.pulsePhase) * 0.15;
+
+            // 外层大光晕
+            const glowR = r * body.glowSize * pulse;
+            const outerGlow = ctx.createRadialGradient(x, y, r * 0.8, x, y, glowR);
+            outerGlow.addColorStop(0, body.glowColor);
+            outerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.beginPath();
+            ctx.arc(x, y, glowR, 0, Math.PI * 2);
+            ctx.fillStyle = outerGlow;
+            ctx.fill();
+
+            // 木星条纹
+            if (body.bands) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.clip();
+                const bandColors = ['#CC9966', '#AA7744', '#CCBB99', '#DDAA77', '#BB8855', '#CC9966'];
+                const bandHeight = r * 2 / bandColors.length;
+                for (let i = 0; i < bandColors.length; i++) {
+                    ctx.fillStyle = bandColors[i];
+                    ctx.fillRect(x - r, y - r + i * bandHeight, r * 2, bandHeight);
+                }
+                // 木星大红斑
+                ctx.beginPath();
+                ctx.ellipse(x + r * 0.3, y + r * 0.1, r * 0.15, r * 0.08, 0, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(200, 80, 60, 0.7)';
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 球体主体渐变
+            const sphereGrad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
+            sphereGrad.addColorStop(0, body.color1);
+            sphereGrad.addColorStop(0.7, body.color2);
+            sphereGrad.addColorStop(1, body.color1);
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fillStyle = sphereGrad;
+            ctx.fill();
+
+            // 地球大气层
+            if (body.hasAtmosphere) {
+                const atmoGrad = ctx.createRadialGradient(x, y, r * 0.9, x, y, r * 1.3);
+                atmoGrad.addColorStop(0, body.atmosphereColor);
+                atmoGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.beginPath();
+                ctx.arc(x, y, r * 1.3, 0, Math.PI * 2);
+                ctx.fillStyle = atmoGrad;
+                ctx.fill();
+            }
+
+            // 高光
+            ctx.beginPath();
+            ctx.arc(x - r * 0.35, y - r * 0.35, r * 0.25, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
             ctx.fill();
         }
 
