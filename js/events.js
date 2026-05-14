@@ -15,9 +15,11 @@ let lastZoomFactor = 1;
 function setMode(mode) {
     // 侧边栏：游戏模式自动折叠，检测模式保留操作面板
     const sp = document.getElementById('side-panel');
+    if (!sp) return;
     const stb = document.getElementById('sidebar-toggle');
     if (mode === 'mode-select') {
         sp.classList.remove('collapsed');
+        sp.style.display = '';
         if (stb) stb.textContent = '◀';
         const bar = document.getElementById('coord-bottom-bar');
         if (bar) bar.style.display = 'none';
@@ -26,7 +28,10 @@ function setMode(mode) {
         resizeCanvas();
     } else if (mode === 'game') {
         sp.classList.add('collapsed');
+        sp.style.display = 'none';
         if (stb) { stb.textContent = '▶'; stb.style.display = 'block'; }
+        const area = document.getElementById('detection-area');
+        if (area) { area.offsetWidth; resizeCanvas(); }
     }
     // 检测模式(integrated/coordination/rom/position)：侧边栏保持展开
 
@@ -830,7 +835,27 @@ function init() {
             const stb = document.getElementById('sidebar-toggle');
             if (stb) { stb.textContent = '▶'; stb.style.display = 'block'; }
             const bar = document.getElementById('coord-bottom-bar');
-            if (bar) bar.style.display = 'flex';
+            if (bar) {
+                bar.style.display = 'flex';
+                bar.style.cursor = 'move';
+                bar.onmousedown = function(e) {
+                    if (e.target.tagName === 'BUTTON') return;
+                    var offsetX = e.clientX - bar.offsetLeft;
+                    var offsetY = e.clientY - bar.offsetTop;
+                    function onMove(e) {
+                        bar.style.left = (e.clientX - offsetX) + 'px';
+                        bar.style.top = (e.clientY - offsetY) + 'px';
+                        bar.style.right = 'auto';
+                        bar.style.bottom = 'auto';
+                    }
+                    function onUp() {
+                        document.removeEventListener('mousemove', onMove);
+                        document.removeEventListener('mouseup', onUp);
+                    }
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('mouseup', onUp);
+                };
+            }
         });
     });
 
@@ -1139,6 +1164,7 @@ function init() {
                 if (stb) { stb.textContent = '▶'; stb.style.display = 'block'; }
             } else {
                 sp.classList.remove('collapsed');
+                sp.style.display = '';
                 if (stb) stb.textContent = '◀';
             }
         }
