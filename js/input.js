@@ -10,8 +10,8 @@ import { CONFIG } from './config.js';
 export let isDraggingDot = false;
 export let spacePressed = false;
 
-// Pitch/Roll 自适应EMA — 不碰Yaw
-let _emaPitch = null, _emaRoll = null;
+// Pitch/Roll 自适应EMA + Yaw 慢速漂移纠正
+let _emaPitch = null, _emaRoll = null, _emaYaw = null;
 let _emaWarmup = 0;
 let _stillFrames = 0;
 const EMA_SLOW = 0.993;
@@ -22,7 +22,7 @@ const STILL_FRAMES_NEEDED = 45;
 const DEAD_ZONE = 0.3;
 
 window._resetGyroEMA = () => {
-    _emaPitch = null; _emaRoll = null; _emaWarmup = 0; _stillFrames = 0;
+    _emaPitch = null; _emaRoll = null; _emaYaw = null; _emaWarmup = 0; _stillFrames = 0;
 };
 
 let _freezeEMA = false;
@@ -43,8 +43,22 @@ function updateFromGyroscope(gyroData) {
 
     const isGameMode = state.mode === 'game';
 
-    // Yaw: 纯直通
-    state.yaw = rawYaw - state.yawOffset;
+    // Yaw: 游戏模式自适应漂移纠正
+    // 只有几乎静止时才纠正漂移，主动转头时完全不干预
+    if (isGameMode && !window._noGyroEMA) {
+        // 初始化时把 yawOffset 纳入基线，state.yaw 起始为 0
+        if (_emaYaw === null) _emaYaw = rawYaw - state.yawOffset;
+        const yawDelta = Math.abs(rawYaw - _emaYaw);
+        // 静止(< 0.8°)快速拉回漂移，微动(0.8-3°)缓慢纠正，主动转头(>3°)几乎不碰
+        let a;
+        if (yawDelta < 0.8) a = 0.95;        // ~0.3s 时间常数
+        else if (yawDelta < 3) a = 0.992;     // ~2.5s 时间常数
+        else a = 0.998;                        // ~8s 时间常数
+        _emaYaw = _emaYaw * a + rawYaw * (1 - a);
+        state.yaw = (rawYaw - _emaYaw) - state.yawOffset;
+    } else {
+        state.yaw = rawYaw - state.yawOffset;
+    }
 
     // Pitch/Roll自适应EMA
     if (_emaPitch === null) { _emaPitch = rawPitch; _emaRoll = rawRoll; _emaWarmup = 0; _stillFrames = 0; }
@@ -72,7 +86,7 @@ function updateFromGyroscope(gyroData) {
 
     // 检测模块使用raw值，游戏模块使用EMA平滑跟踪
     let adjPitch, adjRoll;
-    if (isGameMode) {
+    if (isGameMode && !window._noGyroEMA) {
         adjPitch = (rawPitch - _emaPitch) - state.pitchOffset;
         adjRoll = (rawRoll - _emaRoll) - state.rollOffset;
     } else {

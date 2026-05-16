@@ -220,12 +220,13 @@ export class SceneSpaceNodding extends SceneBase {
         const minDim = Math.min(w, h);
         const shipR = pr * minDim; // 取消0.6系数
         for (const o of this.obstacles) {
-            if (o.x == null || o.y == null) continue;
-            const ox = o.x * w, oy = o.y * h;
-            const dx = px * w - ox, dy = py * h - oy;
+            if (o.x == null) continue;
+            if (o.type !== 'gate' && o.y == null) continue;
             if (o.type === 'gate') {
-                if (Math.abs(dx) < 28 && py >= o.yMin && py <= o.yMax) return true;
+                if (Math.abs(px * w - o.x * w) < 28 && py >= o.yMin && py <= o.yMax) return true;
             } else {
+                const ox = o.x * w, oy = o.y * h;
+                const dx = px * w - ox, dy = py * h - oy;
                 const or = o.r * minDim;
                 if (Math.sqrt(dx * dx + dy * dy) < shipR + or) return true;
             }

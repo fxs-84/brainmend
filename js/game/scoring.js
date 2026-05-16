@@ -31,6 +31,7 @@ export class ScoringSystem {
         this.obstaclesDodged = 0;
         this.totalObstacles = 0;
         this.nearMisses = 0;
+        this.coinsCollected = 0;
         this.positionHistory = [];
         this.maxHistoryLength = 60;
     }
@@ -47,15 +48,21 @@ export class ScoringSystem {
     }
 
     calculateFrameScore(player, obstacles, dt, difficultyLevel) {
-        this.survivalScore += 10 * dt * difficultyLevel;
+        // NaN 守卫：防止异常输入污染所有分数分量
+        const safeDt = isNaN(dt) ? 0 : dt;
+        const safeLevel = isNaN(difficultyLevel) ? 1 : difficultyLevel;
+        const px = isNaN(player.x) ? 0.5 : player.x;
+        const py = isNaN(player.y) ? 0.5 : player.y;
+
+        this.survivalScore += 10 * safeDt * safeLevel;
 
         const centerDistance = Math.sqrt(
-            Math.pow(player.x - 0.5, 2) +
-            Math.pow(player.y - 0.5, 2)
+            Math.pow(px - 0.5, 2) +
+            Math.pow(py - 0.5, 2)
         );
-        this.avoidScore += (1 - centerDistance * 2) * 5 * dt;
+        this.avoidScore += (1 - centerDistance * 2) * 5 * safeDt;
 
-        this.positionHistory.push({ x: player.x, y: player.y });
+        this.positionHistory.push({ x: px, y: py });
         if (this.positionHistory.length > this.maxHistoryLength) {
             this.positionHistory.shift();
         }
@@ -108,6 +115,7 @@ export class ScoringSystem {
     onCoinCollected(value = 100) {
         this.currentScore += value;
         this.avoidScore += value;
+        this.coinsCollected++;
     }
 
     getGrade(score) {

@@ -43,9 +43,14 @@ export class GameEngine {
         // 射击模式标志
         this.isShootingMode = false;
 
+        // 生命系统（射击模式）
+        this.maxHealth = 3;
+        this.health = this.maxHealth;
+        this.invincibleTime = 0;
+
         // 自动射击冷却
         this.autoFireCooldown = 0;
-        this.autoFireInterval = 0.2; // 秒
+        this.autoFireInterval = 0.1; // 秒
 
         // 玩家
         this.player = {
@@ -101,6 +106,8 @@ export class GameEngine {
         this.scoring.reset();
         this.difficulty.reset();
         this.score = 0;
+        this.health = this.maxHealth;
+        this.invincibleTime = 0;
         if (this.currentScene) {
             this.currentScene.cleanup();
         }
@@ -142,9 +149,21 @@ export class GameEngine {
 
             case GameState.GAMEOVER:
                 this.stopGameLoop();
+                // 最后一次渲染，显示游戏结束遮罩和最终分数
+                this.render();
                 if (this.onGameOver) {
-                    const score = this._noddingMode ? this.scoring.getCurrentScore() : this.scoring.getFinalScore();
-                    this.onGameOver(score, this.scoring.getGrade());
+                    let score, grade;
+                    if (this.isShootingMode) {
+                        score = this.score;
+                        grade = this.getShootingGrade();
+                    } else if (this._noddingMode) {
+                        score = this.scoring.getCurrentScore();
+                        grade = this.getNoddingGrade();
+                    } else {
+                        score = this.scoring.getFinalScore();
+                        grade = this.scoring.getGrade();
+                    }
+                    this.onGameOver(score, grade);
                 }
                 break;
 
@@ -217,6 +236,11 @@ export class GameEngine {
     update(dt) {
         if (this.state !== GameState.PLAYING) return;
 
+        // 更新无敌时间
+        if (this.invincibleTime > 0) {
+            this.invincibleTime -= dt;
+        }
+
         // 更新难度
         const difficultyLevel = this.difficulty.advance(this.gameTime);
 
@@ -266,14 +290,14 @@ export class GameEngine {
             this.checkCollisions();
         }
 
-        // 更新评分（点头模式只用金币积分）
-        if (!this._noddingMode) {
-            this.scoring.calculateFrameScore(this.player, this.obstacles, dt, difficultyLevel);
+        // 更新评分（点头模式只用金币积分，射击模式用动作计分不用被动帧分）
+        if (!this._noddingMode && !this.isShootingMode) {
+            this.scoring.calculateFrameScore(this.player, this.obstacles, dt, this.difficulty.getCurrentLevel());
         }
 
-        // 通知评分更新
+        // 通知评分更新（射击模式用自己的score）
         if (this.onScoreUpdate) {
-            this.onScoreUpdate(this.scoring.getCurrentScore());
+            this.onScoreUpdate(this.isShootingMode ? this.score : this.scoring.getCurrentScore());
         }
     }
 
@@ -330,6 +354,7 @@ export class GameEngine {
                 if (CollisionDetector.checkPlayerObstacle(this.player, obstacle, this.canvas)) {
                     obstacle.collect();
                     this.scoring.onCoinCollected(100);
+                    if (this.isShootingMode) this.score += 50;  // 射击模式：金币+50分
                     // 触发场景的金币收集效果
                     if (this.currentScene && this.currentScene.onCoinCollect) {
                         this.currentScene.onCoinCollect(obstacle, this);
@@ -366,6 +391,12 @@ export class GameEngine {
     updateEnemies(dt) {
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             this.enemies[i].update(dt);
+            // 射击模式：敌舰到达玩家水平线 = 扣1条命
+            if (this.isShootingMode && this.enemies[i].y >= this.player.y) {
+                this.enemies.splice(i, 1);
+                this.takeDamage();
+                return;
+            }
             if (this.enemies[i].isOffScreen(this.canvas.width, this.canvas.height)) {
                 this.enemies.splice(i, 1);
             }
@@ -398,6 +429,7 @@ export class GameEngine {
                         }
                         soundManager.playExplosion();
                         this.scoring.onObstacleDodged();
+                        this.score += 100;  // 射击模式：击毁敌舰+100分
                         this.enemies.splice(j, 1);
                     }
                     break;
@@ -421,10 +453,30 @@ export class GameEngine {
                 if (this.currentScene && this.currentScene.particles) {
                     this.currentScene.particles.emitExplosion(this.player.x, this.player.y);
                 }
-                this.scoring.onCollision();
-                this.setState(GameState.GAMEOVER);
+                // 移除碰撞的敌舰
+                const idx = this.enemies.indexOf(enemy);
+                if (idx >= 0) this.enemies.splice(idx, 1);
+                this.takeDamage();
                 return;
             }
+        }
+    }
+
+    /**
+     * 射击模式：玩家受到伤害（-1生命，无敌1.5秒）
+     */
+    takeDamage() {
+        if (this.invincibleTime > 0) return;  // 无敌中不受伤
+        this.health--;
+        this.invincibleTime = 1.5;
+        // 播放爆炸效果
+        if (this.currentScene && this.currentScene.particles) {
+            this.currentScene.particles.emitExplosion(this.player.x, this.player.y);
+        }
+        soundManager.playExplosion();
+        if (this.health <= 0) {
+            this.scoring.onCollision();
+            this.setState(GameState.GAMEOVER);
         }
     }
 
@@ -541,16 +593,27 @@ export class GameEngine {
         ctx.font = '16px sans-serif';
         ctx.textAlign = 'left';
 
-        // 分数
-        ctx.fillText(`分数: ${Math.round(this.scoring.getCurrentScore())}`, 10, 25);
-
-        // 难度等级
-        ctx.fillText(`难度: ${this.difficulty.getCurrentLevel()}`, 10, 50);
+        if (this.isShootingMode) {
+            // 射击模式：动作计分（击杀+金币），清晰直接
+            ctx.fillText(`分数: ${Math.round(this.score)}`, 10, 25);
+            ctx.fillText(`击毁: ${this.scoring.obstaclesDodged || 0}  金币: ${this.scoring.coinsCollected || 0}`, 10, 50);
+            // 生命值显示
+            let livesText = '';
+            for (let i = 0; i < this.health; i++) livesText += '❤️ ';
+            for (let i = this.health; i < this.maxHealth; i++) livesText += '\u{1F5A4} ';
+            ctx.fillText(`生命: ${livesText}`, 10, 75);
+        } else {
+            const currentScore = this.scoring.getCurrentScore();
+            const displayScore = isNaN(currentScore) ? 0 : Math.round(currentScore);
+            ctx.fillText(`分数: ${displayScore}`, 10, 25);
+            ctx.fillText(`难度: ${this.difficulty.getCurrentLevel()}`, 10, 50);
+        }
 
         // 时间
         const minutes = Math.floor(this.gameTime / 60);
         const seconds = Math.floor(this.gameTime % 60);
-        ctx.fillText(`时间: ${minutes}:${seconds.toString().padStart(2, '0')}`, 10, 75);
+        const timeY = this.isShootingMode ? 100 : 75;
+        ctx.fillText(`时间: ${minutes}:${seconds.toString().padStart(2, '0')}`, 10, timeY);
     }
 
     /**
@@ -605,6 +668,31 @@ export class GameEngine {
     }
 
     /**
+     * 射击模式评级（基于累积分数）
+     * 规则透明：击杀+100分，金币+50分
+     */
+    getShootingGrade() {
+        const s = this.score;
+        if (s >= 3000) return 'S';
+        if (s >= 2000) return 'A';
+        if (s >= 1000) return 'B';
+        if (s >= 400)  return 'C';
+        return 'D';
+    }
+
+    /**
+     * 点头模式评级（基于金币数）
+     */
+    getNoddingGrade() {
+        const c = this.scoring.coinsCollected || 0;
+        if (c >= 25) return 'S';
+        if (c >= 18) return 'A';
+        if (c >= 10) return 'B';
+        if (c >= 5)  return 'C';
+        return 'D';
+    }
+
+    /**
      * 渲染游戏结束覆盖层
      */
     renderGameOverOverlay(ctx) {
@@ -617,17 +705,57 @@ export class GameEngine {
         ctx.fillStyle = '#EF4444';
         ctx.textAlign = 'center';
         ctx.font = 'bold 36px sans-serif';
-        ctx.fillText('游戏结束', width / 2, height / 2 - 60);
+        ctx.fillText('游戏结束', width / 2, height / 2 - 100);
+
+        let rawScore, grade;
+        if (this.isShootingMode) {
+            rawScore = this.score;
+            grade = this.getShootingGrade();
+        } else if (this._noddingMode) {
+            rawScore = this.scoring.getCurrentScore();
+            grade = this.getNoddingGrade();
+        } else {
+            rawScore = this.scoring.getFinalScore();
+            grade = this.scoring.getGrade();
+        }
+        const displayScore = isNaN(rawScore) ? 0 : Math.round(rawScore);
 
         ctx.fillStyle = 'white';
         ctx.font = '24px sans-serif';
-        ctx.fillText(`最终分数: ${Math.round(this._noddingMode ? this.scoring.getCurrentScore() : this.scoring.getFinalScore())}`, width / 2, height / 2);
+        ctx.fillText(`最终分数: ${displayScore}`, width / 2, height / 2 - 40);
 
-        ctx.font = '32px sans-serif';
-        ctx.fillText(`评级: ${this.scoring.getGrade()}`, width / 2, height / 2 + 40);
+        // 评级颜色
+        const gradeColors = { S: '#FFD700', A: '#00D9A5', B: '#3B82F6', C: '#F59E0B', D: '#9CA3AF' };
+        ctx.fillStyle = gradeColors[grade] || 'white';
+        ctx.font = 'bold 40px sans-serif';
+        ctx.fillText(`评级: ${grade}`, width / 2, height / 2 + 15);
+
+        // 统计
+        ctx.font = '16px sans-serif';
+        ctx.fillStyle = '#9CA3AF';
+        const destroyed = this.scoring.obstaclesDodged || 0;
+        const coins = this.scoring.coinsCollected || 0;
+        const timeSec = Math.floor(this.gameTime);
+        if (this._noddingMode) {
+            ctx.fillText(`金币: ${coins}  存活: ${timeSec}秒`, width / 2, height / 2 + 50);
+        } else {
+            ctx.fillText(`击毁: ${destroyed}  金币: ${coins}  存活: ${timeSec}秒`, width / 2, height / 2 + 50);
+        }
+
+        // 积分规则说明
+        if (this.isShootingMode) {
+            ctx.font = '12px sans-serif';
+            ctx.fillStyle = '#6B7280';
+            ctx.fillText('积分规则: 击杀+100分  金币+50分 | S≥3000 A≥2000 B≥1000 C≥400', width / 2, height / 2 + 75);
+        } else if (this._noddingMode) {
+            ctx.font = '12px sans-serif';
+            ctx.fillStyle = '#6B7280';
+            ctx.fillText('积分规则: 金币+10分 | S≥25 A≥18 B≥10 C≥5 金币', width / 2, height / 2 + 75);
+        }
 
         ctx.font = '16px sans-serif';
-        ctx.fillText('按任意键返回菜单', width / 2, height / 2 + 90);
+        ctx.fillStyle = 'white';
+        ctx.fillText('按任意键返回菜单', width / 2, height / 2 + 105);
     }
 
     /**
@@ -648,6 +776,9 @@ export class GameEngine {
         } else {
             this.isShootingMode = false;
         }
+
+        // 点头模式：禁用全局陀螺仪EMA，避免自动回中
+        window._noGyroEMA = !!(scene && scene.constructor.name === 'SceneSpaceNodding');
     }
 
     /**
@@ -714,5 +845,6 @@ export class GameEngine {
         this.currentScene = null;
         this.isShootingMode = false;
         this._noddingMode = false;
+        window._noGyroEMA = false;
     }
 }

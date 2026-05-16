@@ -997,10 +997,10 @@ class InputAdapter {
     }
 
     getPosition() {
-        if (this.inputSource === 'gyroscope') {
-            const pitch = (state.pitch - state.pitchOffset) / 45;
-            const yaw = (state.yaw - state.yawOffset) / 80;
-            const roll = (state.roll - state.rollOffset) / 45;
+        if (this.inputSource === 'gyroscope' && window.state) {
+            const pitch = (window.state.pitch - window.state.pitchOffset) / 45;
+            const yaw = (window.state.yaw - window.state.yawOffset) / 80;
+            const roll = (window.state.roll - window.state.rollOffset) / 45;
             return MotionMapper.mapToGame({ pitch, yaw, roll }, this.motionMode);
         }
         // 鼠标模式：直接返回0-1范围的位置，不经过mapToGame映射
@@ -1050,6 +1050,8 @@ class ScoringSystem {
         this.avoidScore = 0;
         this.fluidityScore = 0;
         this.obstaclesDodged = 0;
+        this.nearMisses = 0;
+        this.enemiesDestroyed = 0;
         this.positionHistory = [];
         this.maxHistoryLength = 60;
     }
@@ -1063,10 +1065,16 @@ class ScoringSystem {
     }
 
     calculateFrameScore(player, obstacles, dt, difficultyLevel) {
-        this.survivalScore += 10 * dt * difficultyLevel;
-        const centerDistance = Math.sqrt(Math.pow(player.x - 0.5, 2) + Math.pow(player.y - 0.5, 2));
-        this.avoidScore += (1 - centerDistance * 2) * 5 * dt;
-        this.positionHistory.push({ x: player.x, y: player.y });
+        // NaN 守卫：防止异常输入污染所有分数分量
+        const safeDt = isNaN(dt) ? 0 : dt;
+        const safeLevel = isNaN(difficultyLevel) ? 1 : difficultyLevel;
+        const px = isNaN(player.x) ? 0.5 : player.x;
+        const py = isNaN(player.y) ? 0.5 : player.y;
+
+        this.survivalScore += 10 * safeDt * safeLevel;
+        const centerDistance = Math.sqrt(Math.pow(px - 0.5, 2) + Math.pow(py - 0.5, 2));
+        this.avoidScore += (1 - centerDistance * 2) * 5 * safeDt;
+        this.positionHistory.push({ x: px, y: py });
         if (this.positionHistory.length > this.maxHistoryLength) this.positionHistory.shift();
         if (this.positionHistory.length >= 10) {
             this.fluidityScore = this.calculateFluidity(this.positionHistory) * 100;
@@ -1088,8 +1096,8 @@ class ScoringSystem {
     }
 
     onCollision() {}
-    onCoinCollected(value) { this.currentScore += value; this.coinsCollected++; }
-    onEnemyDestroyed() { this.avoidScore += 100; }  // 击毁敌舰得分
+    onCoinCollected(value) { this.currentScore += value; this.avoidScore += value; this.coinsCollected++; }
+    onEnemyDestroyed() { this.avoidScore += 100; this.enemiesDestroyed++; }  // 击毁敌舰得分
     onObstacleDodged() { this.obstaclesDodged++; this.avoidScore += 50; }
     onNearMiss() { this.nearMisses++; this.avoidScore += 20; }
 
@@ -1627,6 +1635,142 @@ class SceneSpace extends SceneBase {
             }
         }
 
+        // ===== 天体(太阳/地球/木星) - 绘制在星星之后作为背景前景 =====
+        for (const body of this.celestialBodies) {
+            const x = body.x * width;
+            const y = body.y * height;
+            const r = body.radius * Math.min(width, height);
+            const pulse = 0.85 + Math.sin(body.pulsePhase) * 0.15;
+
+            // 太阳日冕层 - 太阳专属
+            if (body.name === 'sun') {
+                // 最外层日冕大光晕
+                const coronaGrad = ctx.createRadialGradient(x, y, r * 0.8, x, y, r * 3 * pulse);
+                coronaGrad.addColorStop(0, 'rgba(255, 200, 50, 0.6)');
+                coronaGrad.addColorStop(0.2, 'rgba(255, 160, 40, 0.4)');
+                coronaGrad.addColorStop(0.5, 'rgba(255, 120, 20, 0.15)');
+                coronaGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.beginPath();
+                ctx.arc(x, y, r * 3 * pulse, 0, Math.PI * 2);
+                ctx.fillStyle = coronaGrad;
+                ctx.fill();
+
+                // 日冕射线
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(x, y, r * 2, 0, Math.PI * 2);
+                ctx.clip();
+                const rayCount = 16;
+                for (let i = 0; i < rayCount; i++) {
+                    const angle = (i / rayCount) * Math.PI * 2;
+                    const rayLen = r * (1.8 + Math.sin(body.pulsePhase * 2 + i * 0.5) * 0.6) * pulse;
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x + Math.cos(angle) * rayLen, y + Math.sin(angle) * rayLen);
+                    ctx.strokeStyle = `rgba(255, 230, 120, ${0.25 + Math.sin(body.pulsePhase + i) * 0.1})`;
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            // 外层光晕
+            const glowR = r * body.glowSize * pulse;
+            const outerGlow = ctx.createRadialGradient(x, y, r * 0.8, x, y, glowR);
+            outerGlow.addColorStop(0, body.glowColor);
+            outerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.beginPath();
+            ctx.arc(x, y, glowR, 0, Math.PI * 2);
+            ctx.fillStyle = outerGlow;
+            ctx.fill();
+
+            // 木星条纹（先绘制条纹再画球体叠上去）
+            if (body.bands) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.clip();
+                const bandColors = ['#DDAa77', '#CC9966', '#DDBB88', '#BB8855', '#CCAADD', '#DDAA77'];
+                const bandHeight = r * 2 / bandColors.length;
+                for (let i = 0; i < bandColors.length; i++) {
+                    ctx.fillStyle = bandColors[i];
+                    ctx.fillRect(x - r, y - r + i * bandHeight, r * 2, bandHeight + 1);
+                }
+                // 木星大红斑
+                ctx.beginPath();
+                ctx.ellipse(x + r * 0.35, y + r * 0.15, r * 0.18, r * 0.1, 0.2, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(200, 80, 60, 0.75)';
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 地球大陆（先画海洋和陆地再画大气层）
+            if (body.name === 'earth') {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.clip();
+                // 海洋渐变
+                const oceanGrad = ctx.createRadialGradient(x - r * 0.4, y - r * 0.4, 0, x, y, r * 1.2);
+                oceanGrad.addColorStop(0, '#66AAFF');
+                oceanGrad.addColorStop(0.5, '#3388DD');
+                oceanGrad.addColorStop(1, '#2255AA');
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.fillStyle = oceanGrad;
+                ctx.fill();
+                // 大陆 - 绿色陆地
+                const continents = [
+                    { cx: -0.25, cy: -0.15, rx: 0.32, ry: 0.22, rot: 0.4 },
+                    { cx: 0.2, cy: 0.25, rx: 0.22, ry: 0.3, rot: -0.6 },
+                    { cx: -0.05, cy: 0.45, rx: 0.18, ry: 0.12, rot: 0.9 },
+                ];
+                ctx.fillStyle = '#2E8B57';
+                for (const c of continents) {
+                    ctx.beginPath();
+                    ctx.ellipse(x + c.cx * r, y + c.cy * r, c.rx * r, c.ry * r, c.rot, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                // 极地冰盖
+                ctx.fillStyle = 'rgba(240, 248, 255, 0.85)';
+                ctx.beginPath();
+                ctx.ellipse(x, y - r * 0.88, r * 0.42, r * 0.14, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(x, y + r * 0.88, r * 0.38, r * 0.12, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 球体主体渐变（所有天体共有）
+            const sphereGrad = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, 0, x, y, r);
+            sphereGrad.addColorStop(0, body.color1);
+            sphereGrad.addColorStop(0.6, body.color2);
+            sphereGrad.addColorStop(1, body.color1);
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fillStyle = sphereGrad;
+            ctx.fill();
+
+            // 地球大气层光晕
+            if (body.hasAtmosphere) {
+                const atmoGrad = ctx.createRadialGradient(x, y, r * 0.85, x, y, r * 1.5);
+                atmoGrad.addColorStop(0, 'rgba(100, 180, 255, 0.25)');
+                atmoGrad.addColorStop(0.4, 'rgba(100, 180, 255, 0.1)');
+                atmoGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.beginPath();
+                ctx.arc(x, y, r * 1.5, 0, Math.PI * 2);
+                ctx.fillStyle = atmoGrad;
+                ctx.fill();
+            }
+
+            // 高光
+            ctx.beginPath();
+            ctx.arc(x - r * 0.35, y - r * 0.35, r * 0.28, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+            ctx.fill();
+        }
+
         // ===== 流星 =====
         for (const s of this.shootingStars) {
             const sx = s.x * width, sy = s.y * height;
@@ -1650,71 +1794,6 @@ class SceneSpace extends SceneBase {
             ctx.beginPath();
             ctx.arc(sx, sy, s.width * 0.6 * s.life, 0, Math.PI * 2);
             ctx.fillStyle = `rgba(255, 255, 255, ${s.life})`;
-            ctx.fill();
-        }
-
-        // ===== 天体(太阳/地球/木星) =====
-        for (const body of this.celestialBodies) {
-            const x = body.x * width;
-            const y = body.y * height;
-            const r = body.radius * Math.min(width, height);
-            const pulse = 0.85 + Math.sin(body.pulsePhase) * 0.15;
-
-            // 外层大光晕
-            const glowR = r * body.glowSize * pulse;
-            const outerGlow = ctx.createRadialGradient(x, y, r * 0.8, x, y, glowR);
-            outerGlow.addColorStop(0, body.glowColor);
-            outerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-            ctx.beginPath();
-            ctx.arc(x, y, glowR, 0, Math.PI * 2);
-            ctx.fillStyle = outerGlow;
-            ctx.fill();
-
-            // 木星条纹
-            if (body.bands) {
-                ctx.save();
-                ctx.beginPath();
-                ctx.arc(x, y, r, 0, Math.PI * 2);
-                ctx.clip();
-                const bandColors = ['#CC9966', '#AA7744', '#CCBB99', '#DDAA77', '#BB8855', '#CC9966'];
-                const bandHeight = r * 2 / bandColors.length;
-                for (let i = 0; i < bandColors.length; i++) {
-                    ctx.fillStyle = bandColors[i];
-                    ctx.fillRect(x - r, y - r + i * bandHeight, r * 2, bandHeight);
-                }
-                // 木星大红斑
-                ctx.beginPath();
-                ctx.ellipse(x + r * 0.3, y + r * 0.1, r * 0.15, r * 0.08, 0, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(200, 80, 60, 0.7)';
-                ctx.fill();
-                ctx.restore();
-            }
-
-            // 球体主体渐变
-            const sphereGrad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
-            sphereGrad.addColorStop(0, body.color1);
-            sphereGrad.addColorStop(0.7, body.color2);
-            sphereGrad.addColorStop(1, body.color1);
-            ctx.beginPath();
-            ctx.arc(x, y, r, 0, Math.PI * 2);
-            ctx.fillStyle = sphereGrad;
-            ctx.fill();
-
-            // 地球大气层
-            if (body.hasAtmosphere) {
-                const atmoGrad = ctx.createRadialGradient(x, y, r * 0.9, x, y, r * 1.3);
-                atmoGrad.addColorStop(0, body.atmosphereColor);
-                atmoGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-                ctx.beginPath();
-                ctx.arc(x, y, r * 1.3, 0, Math.PI * 2);
-                ctx.fillStyle = atmoGrad;
-                ctx.fill();
-            }
-
-            // 高光
-            ctx.beginPath();
-            ctx.arc(x - r * 0.35, y - r * 0.35, r * 0.25, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
             ctx.fill();
         }
 
@@ -2316,6 +2395,8 @@ class GameEngine {
                 break;
             case GameState.GAMEOVER:
                 this.stopGameLoop();
+                // 最后一次渲染：显示游戏结束遮罩和最终分数
+                this.render();
                 // 生成颈椎能力评估报告
                 if (this.onCervicalReport) {
                     const gameStats = {
@@ -2375,11 +2456,11 @@ class GameEngine {
             this.invincibleTime -= dt;
         }
         this.checkCollisions();
-        this.scoring.calculateFrameScore(this.player, this.obstacles, dt, difficultyConfig.level);
+        this.scoring.calculateFrameScore(this.player, this.obstacles, dt, this.difficulty.getCurrentLevel());
 
         // 记录头部运动数据（用于颈椎能力评估）
         this.headRecorder.updateTime(dt);
-        const gyroData = { pitch: (state.pitch - state.pitchOffset) / 45, yaw: (state.yaw - state.yawOffset) / 80, roll: (state.roll - state.rollOffset) / 45 };
+        const gyroData = { pitch: (window.state.pitch - window.state.pitchOffset) / 45, yaw: (window.state.yaw - window.state.yawOffset) / 80, roll: (window.state.roll - window.state.rollOffset) / 45 };
         this.headRecorder.recordFrame(gyroData, this.player, dt);
     }
 
@@ -2696,11 +2777,13 @@ class GameEngine {
     }
 
     renderHUD(ctx) {
+        const currentScore = this.scoring.getCurrentScore();
+        const displayScore = isNaN(currentScore) ? 0 : Math.round(currentScore);
         ctx.fillStyle = 'white';
         ctx.font = '16px sans-serif';
         ctx.textAlign = 'left';
         ctx.fillText(`金币: ${this.scoring.coinsCollected}`, 10, 25);
-        ctx.fillText(`分数: ${Math.round(this.scoring.getCurrentScore())}`, 10, 50);
+        ctx.fillText(`分数: ${displayScore}`, 10, 50);
         ctx.fillText(`难度: ${this.difficulty.getCurrentLevel()}`, 10, 75);
         const minutes = Math.floor(this.gameTime / 60);
         const seconds = Math.floor(this.gameTime % 60);
@@ -2735,9 +2818,15 @@ class GameEngine {
             ctx.fillText('游戏结束', this.canvas.width / 2, this.canvas.height / 2 - 40);
             ctx.fillStyle = 'white';
             ctx.font = '20px sans-serif';
-            ctx.fillText(`最终分数: ${Math.round(this.scoring.getFinalScore())}`, this.canvas.width / 2, this.canvas.height / 2);
+            const finalScore = this.scoring.getFinalScore();
+            const displayFinal = isNaN(finalScore) ? 0 : Math.round(finalScore);
+            ctx.fillText(`最终分数: ${displayFinal}`, this.canvas.width / 2, this.canvas.height / 2);
             ctx.font = '24px sans-serif';
             ctx.fillText(`评级: ${this.scoring.getGrade()}`, this.canvas.width / 2, this.canvas.height / 2 + 35);
+            // 附加统计
+            ctx.font = '16px sans-serif';
+            ctx.fillStyle = '#9CA3AF';
+            ctx.fillText(`击毁: ${this.scoring.enemiesDestroyed || 0}  金币: ${this.scoring.coinsCollected || 0}`, this.canvas.width / 2, this.canvas.height / 2 + 70);
         }
     }
 

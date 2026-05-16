@@ -826,36 +826,6 @@ function init() {
                 state.targetY = 0;
             }
 
-            // 锁定检测区宽度，侧边栏收起后canvas不会变大，标靶振幅不变
-            const area = document.getElementById('detection-area');
-            area.style.minWidth = area.offsetWidth + 'px';
-            // 选择轨迹后隐藏侧边栏，显示右下角按钮
-            const sp = document.getElementById('side-panel');
-            if (sp) sp.classList.add('collapsed');
-            const stb = document.getElementById('sidebar-toggle');
-            if (stb) { stb.textContent = '▶'; stb.style.display = 'block'; }
-            const bar = document.getElementById('coord-bottom-bar');
-            if (bar) {
-                bar.style.display = 'flex';
-                bar.style.cursor = 'move';
-                bar.onmousedown = function(e) {
-                    if (e.target.tagName === 'BUTTON') return;
-                    var offsetX = e.clientX - bar.offsetLeft;
-                    var offsetY = e.clientY - bar.offsetTop;
-                    function onMove(e) {
-                        bar.style.left = (e.clientX - offsetX) + 'px';
-                        bar.style.top = (e.clientY - offsetY) + 'px';
-                        bar.style.right = 'auto';
-                        bar.style.bottom = 'auto';
-                    }
-                    function onUp() {
-                        document.removeEventListener('mousemove', onMove);
-                        document.removeEventListener('mouseup', onUp);
-                    }
-                    document.addEventListener('mousemove', onMove);
-                    document.addEventListener('mouseup', onUp);
-                };
-            }
         });
     });
 
@@ -1083,6 +1053,7 @@ function init() {
     // 底部栏按钮（协调性检测）
     document.getElementById('action-btn-coord-bar').addEventListener('click', () => {
         if (state.isRunning) return;
+        setMode('coordination');
         startDetection();
     });
     document.getElementById('zero-btn-coord-bar').addEventListener('click', zeroPosition);
@@ -1194,6 +1165,14 @@ function init() {
         const isCollapsed = sidePanel.classList.contains('collapsed');
         setSidebarCollapsed(!isCollapsed);
     });
+
+    // ResizeObserver：侧边栏折叠/展开/全屏切换时自动重算 canvas 坐标
+    if (window.ResizeObserver) {
+        const detectionArea = document.getElementById('detection-area');
+        if (detectionArea) {
+            new ResizeObserver(() => resizeCanvas()).observe(detectionArea);
+        }
+    }
 
 
     // 用户登录（点击名称切换客户）

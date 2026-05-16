@@ -62,16 +62,14 @@ export class SceneSpace3D extends SceneBase {
     _buildStars() {
         this.stars = [];
         // 分布在球壳上，从中心向外辐射
-        for (let i = 0; i < 350; i++) {
-            // 在单位球上均匀分布
+        for (let i = 0; i < 600; i++) {
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.acos(2 * Math.random() - 1);
-            const r = 1.0; // 单位球
             this.stars.push({
-                dx: Math.sin(phi) * Math.cos(theta), // -1..1
+                dx: Math.sin(phi) * Math.cos(theta),
                 dy: Math.sin(phi) * Math.sin(theta),
                 z: 3 + Math.random() * 42,
-                size: 0.5 + Math.random() * 2.5,
+                size: 0.4 + Math.random() * 3.0,
                 bright: 0.3 + Math.random() * 0.7,
                 hue: Math.random() * 40 + 200 + Math.random() * 60
             });
@@ -109,15 +107,15 @@ export class SceneSpace3D extends SceneBase {
         this.warpStreaks = [];
         for (let i = 0; i < 60; i++) {
             const angle = Math.random() * Math.PI * 2;
-            const dist = 0.3 + Math.random() * 0.5;
+            const dist = 0.2 + Math.random() * 0.6;
             this.warpStreaks.push({
                 angle,
                 dist,
-                z: 5 + Math.random() * 40,
-                len: 0.02 + Math.random() * 0.05,
-                spd: 1.5 + Math.random() * 2,
-                bright: 0.3 + Math.random() * 0.7,
-                hue: Math.random() * 60 + 180  // 青蓝色到白色
+                z: 3 + Math.random() * 42,
+                len: 0.03 + Math.random() * 0.10,
+                spd: 2.5 + Math.random() * 3.5,
+                bright: 0.4 + Math.random() * 0.6,
+                hue: Math.random() * 60 + 180
             });
         }
     }
@@ -206,9 +204,9 @@ export class SceneSpace3D extends SceneBase {
 
         this.scrollOffset += s * 0.3;
 
-        // 星空（3D星场，从中心辐射）
+        // 星空（3D星场，从中心辐射，高速飞来）
         for (const st of this.stars) {
-            st.z -= (6 + Math.abs(st.dx) * 12) * s;
+            st.z -= (12 + Math.abs(st.dx) * 22) * s;
             if (st.z < 0.5) {
                 st.z = MAX_Z + Math.random() * 5;
                 const theta = Math.random() * Math.PI * 2;
@@ -363,17 +361,24 @@ export class SceneSpace3D extends SceneBase {
             const nx = proj.centerX + cx * w * proj.scale * 0.3;
             const ny = proj.centerY + cy * h * proj.scale * 0.3;
 
-            // 线条长度随距离变化
-            const lineLen = ws.len * w * proj.scale * 1.5;
+            // 线条长度随距离变化，高速拉长
+            const lineLen = ws.len * w * proj.scale * 2.5;
+            const startX = nx - Math.cos(ws.angle) * lineLen * 0.3;
+            const startY = ny - Math.sin(ws.angle) * lineLen * 0.3;
             const endX = nx + Math.cos(ws.angle) * lineLen;
             const endY = ny + Math.sin(ws.angle) * lineLen;
 
             const alpha = ws.bright * (0.3 + proj.t * 0.7);
+            const grad = ctx.createLinearGradient(startX, startY, endX, endY);
+            grad.addColorStop(0, 'transparent');
+            grad.addColorStop(0.3, `hsla(${ws.hue}, 80%, ${60 + proj.t * 40}%, ${alpha * 0.40})`);
+            grad.addColorStop(0.7, `hsla(${ws.hue}, 90%, ${75 + proj.t * 25}%, ${alpha})`);
+            grad.addColorStop(1, 'transparent');
             ctx.beginPath();
-            ctx.moveTo(nx, ny);
+            ctx.moveTo(startX, startY);
             ctx.lineTo(endX, endY);
-            ctx.strokeStyle = `hsla(${ws.hue}, 80%, ${70 + proj.t * 30}%, ${alpha})`;
-            ctx.lineWidth = 0.5 + proj.t * 2;
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = 0.5 + proj.t * 3;
             ctx.stroke();
         }
 
@@ -419,8 +424,8 @@ export class SceneSpace3D extends SceneBase {
             const alpha = st.bright * (0.15 + proj.t * 0.85);
             if (alpha < 0.05) continue;
 
-            // 拉长成速度线
-            const streakLen = sr * proj.t * 3;
+            // 拉长成高速速度线
+            const streakLen = sr * proj.t * 6;
             const angle = Math.atan2(st.dy, st.dx);
             ctx.save();
             ctx.translate(sx, sy);
@@ -428,12 +433,16 @@ export class SceneSpace3D extends SceneBase {
             ctx.shadowColor = `hsla(${st.hue}, 40%, 85%, ${alpha})`;
             ctx.shadowBlur = sr * 0.5;
 
-            // 画一条速度线
+            // 速度线 - 尾迹渐隐
+            const trailGrad = ctx.createLinearGradient(-streakLen, 0, sr, 0);
+            trailGrad.addColorStop(0, 'transparent');
+            trailGrad.addColorStop(0.6, `hsla(${st.hue}, 30%, 90%, ${alpha * 0.6})`);
+            trailGrad.addColorStop(1, `hsla(${st.hue}, 20%, 95%, ${alpha})`);
+            ctx.strokeStyle = trailGrad;
+            ctx.lineWidth = 0.5 + sr * 0.4;
             ctx.beginPath();
             ctx.moveTo(-streakLen, 0);
             ctx.lineTo(sr, 0);
-            ctx.strokeStyle = `hsla(${st.hue}, 30%, 90%, ${alpha})`;
-            ctx.lineWidth = 0.5 + sr * 0.3;
             ctx.stroke();
 
             // 头部亮点

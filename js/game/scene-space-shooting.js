@@ -39,7 +39,7 @@ export class SceneSpaceShooting extends SceneBase {
 
         // 射击冷却
         this.shootCooldown = 0;
-        this.shootInterval = 0.15; // 秒
+        this.shootInterval = 0.08; // 秒
 
         // 玩家
         this.playerY = 0.95; // 玩家在屏幕最下方
@@ -418,8 +418,8 @@ export class SceneSpaceShooting extends SceneBase {
         return new ObstacleCoin({
             x: Math.random() * 0.6 + 0.2,
             y: -0.1,
-            speedX: (Math.random() - 0.5) * 0.02,
-            speedY: 0.12 + Math.random() * 0.10
+            speedX: (Math.random() - 0.5) * 0.03,
+            speedY: 0.28 + Math.random() * 0.20
         });
     }
 
@@ -463,6 +463,130 @@ export class SceneSpaceShooting extends SceneBase {
 
         // 粒子
         this.particles.render(ctx);
+
+        // ===== 太阳 - 右上角带日冕 =====
+        const sunX = width * 0.88;
+        const sunY = height * 0.12;
+        const sunR = minDim * 0.055;
+        // 太阳日冕光晕
+        const sunCorona = ctx.createRadialGradient(sunX, sunY, sunR * 0.5, sunX, sunY, sunR * 2.5);
+        sunCorona.addColorStop(0, 'rgba(255, 200, 50, 0.7)');
+        sunCorona.addColorStop(0.2, 'rgba(255, 160, 30, 0.4)');
+        sunCorona.addColorStop(0.5, 'rgba(255, 120, 20, 0.15)');
+        sunCorona.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.beginPath();
+        ctx.arc(sunX, sunY, sunR * 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = sunCorona;
+        ctx.fill();
+        // 太阳本体
+        const sunGrad = ctx.createRadialGradient(sunX - sunR * 0.3, sunY - sunR * 0.3, 0, sunX, sunY, sunR);
+        sunGrad.addColorStop(0, '#FFFFAA');
+        sunGrad.addColorStop(0.5, '#FFDD44');
+        sunGrad.addColorStop(1, '#FFAA00');
+        ctx.beginPath();
+        ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
+        ctx.fillStyle = sunGrad;
+        ctx.fill();
+        // 太阳高光
+        ctx.beginPath();
+        ctx.arc(sunX - sunR * 0.35, sunY - sunR * 0.35, sunR * 0.25, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.fill();
+
+        // ===== 木星 - 左下角带条纹和大红斑 =====
+        const jupX = width * 0.12;
+        const jupY = height * 0.85;
+        const jupR = minDim * 0.06;
+        // 木星光晕
+        const jupGlow = ctx.createRadialGradient(jupX, jupY, jupR * 0.8, jupX, jupY, jupR * 1.8);
+        jupGlow.addColorStop(0, 'rgba(220, 180, 130, 0.4)');
+        jupGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.beginPath();
+        ctx.arc(jupX, jupY, jupR * 1.8, 0, Math.PI * 2);
+        ctx.fillStyle = jupGlow;
+        ctx.fill();
+        // 木星裁剪绘制条纹
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(jupX, jupY, jupR, 0, Math.PI * 2);
+        ctx.clip();
+        const jupBands = ['#DDAA77', '#CC9966', '#DDBB88', '#BB8855', '#CCAADD', '#DDAA77'];
+        const jupBandH = jupR * 2 / jupBands.length;
+        for (let i = 0; i < jupBands.length; i++) {
+            ctx.fillStyle = jupBands[i];
+            ctx.fillRect(jupX - jupR, jupY - jupR + i * jupBandH, jupR * 2, jupBandH + 1);
+        }
+        // 大红斑
+        ctx.beginPath();
+        ctx.ellipse(jupX + jupR * 0.3, jupY + jupR * 0.1, jupR * 0.18, jupR * 0.1, 0.2, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(200, 80, 60, 0.8)';
+        ctx.fill();
+        ctx.restore();
+        // 木星渐变覆盖
+        const jupGrad = ctx.createRadialGradient(jupX - jupR * 0.3, jupY - jupR * 0.3, 0, jupX, jupY, jupR);
+        jupGrad.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
+        jupGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0)');
+        jupGrad.addColorStop(1, 'rgba(0, 0, 0, 0.3)');
+        ctx.beginPath();
+        ctx.arc(jupX, jupY, jupR, 0, Math.PI * 2);
+        ctx.fillStyle = jupGrad;
+        ctx.fill();
+
+        // ===== 地球 - 中间偏右带大陆和大气层 =====
+        const earthX = width * 0.78;
+        const earthY = height * 0.7;
+        const earthR = minDim * 0.035;
+        // 地球光晕
+        const earthGlow = ctx.createRadialGradient(earthX, earthY, earthR * 0.8, earthX, earthY, earthR * 1.8);
+        earthGlow.addColorStop(0, 'rgba(100, 180, 255, 0.4)');
+        earthGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.beginPath();
+        ctx.arc(earthX, earthY, earthR * 1.8, 0, Math.PI * 2);
+        ctx.fillStyle = earthGlow;
+        ctx.fill();
+        // 地球裁剪绘制海洋和陆地
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(earthX, earthY, earthR, 0, Math.PI * 2);
+        ctx.clip();
+        // 海洋
+        const earthOcean = ctx.createRadialGradient(earthX - earthR * 0.3, earthY - earthR * 0.3, 0, earthX, earthY, earthR);
+        earthOcean.addColorStop(0, '#66AAFF');
+        earthOcean.addColorStop(0.5, '#3388DD');
+        earthOcean.addColorStop(1, '#2255AA');
+        ctx.beginPath();
+        ctx.arc(earthX, earthY, earthR, 0, Math.PI * 2);
+        ctx.fillStyle = earthOcean;
+        ctx.fill();
+        // 大陆
+        ctx.fillStyle = '#2E8B57';
+        ctx.beginPath();
+        ctx.ellipse(earthX - earthR * 0.25, earthY - earthR * 0.15, earthR * 0.3, earthR * 0.2, 0.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(earthX + earthR * 0.2, earthY + earthR * 0.25, earthR * 0.2, earthR * 0.28, -0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(earthX - earthR * 0.1, earthY + earthR * 0.4, earthR * 0.15, earthR * 0.1, 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        // 极地冰盖
+        ctx.fillStyle = 'rgba(240, 248, 255, 0.85)';
+        ctx.beginPath();
+        ctx.ellipse(earthX, earthY - earthR * 0.88, earthR * 0.4, earthR * 0.12, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(earthX, earthY + earthR * 0.88, earthR * 0.35, earthR * 0.1, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        // 地球大气层
+        const earthAtmo = ctx.createRadialGradient(earthX, earthY, earthR * 0.85, earthX, earthY, earthR * 1.4);
+        earthAtmo.addColorStop(0, 'rgba(100, 180, 255, 0.25)');
+        earthAtmo.addColorStop(0.5, 'rgba(100, 180, 255, 0.1)');
+        earthAtmo.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.beginPath();
+        ctx.arc(earthX, earthY, earthR * 1.4, 0, Math.PI * 2);
+        ctx.fillStyle = earthAtmo;
+        ctx.fill();
     }
 
     renderDeepSpaceGradient(ctx, width, height) {

@@ -171,8 +171,8 @@ export class SpaceEngine {
 
         // 收集（一次性，不会重复得分）
         if (this.introTimer <= 0) {
-            for (const g of this.scene.checkGatePassage(this.player.x, this.player.y, this.canvas.width, this.canvas.height)) this.score += 100;
-            for (const s of this.scene.checkStarCollect(this.player.x, this.player.y, this.canvas.width, this.canvas.height)) this.score += 25;
+            for (const g of this.scene.checkGatePassage(this.player.x, this.player.y, this.canvas.width, this.canvas.height)) { this.score += 100; soundManager.playCoin(); }
+            for (const s of this.scene.checkStarCollect(this.player.x, this.player.y, this.canvas.width, this.canvas.height)) { this.score += 25; soundManager.playCoin(); }
         }
 
         if (this.fb.active) { this.fb.t -= dt; if (this.fb.t <= 0) this.fb.active = false; }

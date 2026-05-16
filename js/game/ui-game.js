@@ -312,10 +312,6 @@ export class GameUI {
                     const module = await import('./space-engine.js');
                     window.spaceEngine = new module.SpaceEngine(canvas);
                     window.spaceEngine.init();
-                    window.spaceEngine.onScoreUpdate = (score) => {
-                        const el = document.getElementById('game-score');
-                        if (el) el.textContent = '分数: ' + score;
-                    };
                     window.spaceEngine.onGameOver = (score, grade, info) => {
                         console.log('Space game over:', { score, grade, info });
                     };
@@ -337,10 +333,6 @@ export class GameUI {
                     const module = await import(`./valley-engine.js`);
                     window.valleyEngine = new module.ValleyEngine(canvas);
                     window.valleyEngine.init();
-                    window.valleyEngine.onScoreUpdate = (score) => {
-                        const el = document.getElementById('game-score');
-                        if (el) el.textContent = '分数: ' + score;
-                    };
                     window.valleyEngine.onGameOver = (score, grade, info) => {
                         console.log('Valley game over:', { score, grade, info });
                     };
