@@ -25,8 +25,9 @@ const CAR_TYPES = ['sedan', 'sedan', 'sedan', 'suv', 'sports', 'sedan', 'suv', '
 
 // 公路赛车专属车流密度配置（与 difficulty 解耦：难易度管分数/速度，车流密度管"热闹度"）
 const ROAD_TRAFFIC = {
-    spawnInterval: 900,    // ms（difficulty 默认 1500）
-    maxObstacles: 6,        // v13：路上最多同时 6 辆（加量后留玩家反应窗口）
+    spawnInterval: 400,    // v14：900→400ms（密集 spawn，强制玩家 1.5s 内必须转头）
+    maxObstacles: 4,        // v14：6→4（每波量少，节奏快但仍有反应窗口）
+    playerLaneTargetChance: 0.90,  // v14：70%→90%（玩家车道必须常驻威胁）
     convoyChance: 0.30,     // 30% 概率生成车队（相邻车道同时出）
     convoySizeRange: [2, 2], // 车队固定 2 辆
     coinChainChance: 0.35,  // v13：18%→35% 概率在 spawn 间隔里再发一串金币
@@ -55,6 +56,8 @@ export class SceneRoad extends SceneBase {
         this.playerSpeed = 1.0;
         // 加速道具临时加成（4 秒倒计时，>0 时 scrollMul × 1.5）
         this.boostTimer = 0;
+        // v14：玩家最近车道缓存（spawn 70% 概率追着玩家车道投）
+        this.playerLaneCache = -1;
         // v12：油污 debuff（0.5s 减速 + 玩家车变黑）
         this.oilDebuffTimer = 0;
         // v12：路面坑颠簸 timer（0.3s 屏幕抖 + 玩家车上下颠）
@@ -556,8 +559,12 @@ export class SceneRoad extends SceneBase {
             ? cfg.convoySizeRange[0] + Math.floor(Math.random() * (cfg.convoySizeRange[1] - cfg.convoySizeRange[0] + 1))
             : 1;
 
-        // 选 spawn 起始车道（车队从连续 2-3 车道开始）
-        const startLane = Math.floor(Math.random() * (this.lanes.length - spawnCount + 1));
+        // 选 spawn 起始车道（v14：70% 概率追玩家车道 → 强制转头）
+        const huntPlayerLane = this.playerLaneCache >= 0
+            && Math.random() < cfg.playerLaneTargetChance;
+        const startLane = huntPlayerLane
+            ? this.playerLaneCache
+            : Math.floor(Math.random() * (this.lanes.length - spawnCount + 1));
         const usedLanes = new Set();
         for (let i = 0; i < spawnCount; i++) {
             if (obstacleList.length >= cfg.maxObstacles) break;
@@ -587,11 +594,11 @@ export class SceneRoad extends SceneBase {
         // 否则 coinChain 3-5 枚金币 + 1 个 boost 会把 obstacleList 灌满到 5，
         // 后续 v12 五兄弟没有 lane 也没有空间）
         const v12Types = [
-            { type: 'spike',   Cls: ObstacleSpike,   chance: cfg.spikeChance,   y: 0.12 },
-            { type: 'rock',    Cls: ObstacleRock,    chance: cfg.rockChance,    y: 0.10 },
-            { type: 'oil',     Cls: ObstacleOil,     chance: cfg.oilChance,     y: 0.16 },
-            { type: 'pothole', Cls: ObstaclePothole, chance: cfg.potholeChance, y: 0.18 },
-            { type: 'cone',    Cls: ObstacleCone,    chance: cfg.coneChance,    y: 0.14 }
+            { type: 'spike',   Cls: ObstacleSpike,   chance: cfg.spikeChance,   y: -0.05, speedY: 0.50 },
+            { type: 'rock',    Cls: ObstacleRock,    chance: cfg.rockChance,    y: -0.05, speedY: 0.45 },
+            { type: 'oil',     Cls: ObstacleOil,     chance: cfg.oilChance,     y: -0.05, speedY: 0.40 },
+            { type: 'pothole', Cls: ObstaclePothole, chance: cfg.potholeChance, y: -0.05, speedY: 0.38 },
+            { type: 'cone',    Cls: ObstacleCone,    chance: cfg.coneChance,    y: -0.05, speedY: 0.42 }
         ];
         for (const t of v12Types) {
             if (obstacleList.length >= cfg.maxObstacles) break;
@@ -601,12 +608,20 @@ export class SceneRoad extends SceneBase {
                 if (!usedLanes.has(i)) freeLanes.push(i);
             }
             if (freeLanes.length === 0) continue;
-            const lane = freeLanes[Math.floor(Math.random() * freeLanes.length)];
+            // v14：v12 五兄弟也独立 70% 概率追玩家车道（玩家车道空闲时强制投）
+            const huntThisOne = this.playerLaneCache >= 0
+                && Math.random() < cfg.playerLaneTargetChance;
+            let lane;
+            if (huntThisOne) {
+                lane = freeLanes.includes(this.playerLaneCache) ? this.playerLaneCache : freeLanes[0];
+            } else {
+                lane = freeLanes[Math.floor(Math.random() * freeLanes.length)];
+            }
             usedLanes.add(lane);
             obstacleList.push(new t.Cls({
                 x: this.lanes[lane],
                 y: t.y,
-                speedY: 0.32
+                speedY: t.speedY
             }));
         }
 
@@ -660,6 +675,16 @@ export class SceneRoad extends SceneBase {
         // 缓存 pitch 速度倍率，下一帧 update() 用来缩放路面/景物滚动
         if (typeof inputPos.speed === 'number') {
             this.playerSpeed = inputPos.speed;
+        }
+        // v14：缓存玩家最近车道 → spawn 70% 概率追着投，强制玩家必须转头
+        if (typeof inputPos.x === 'number') {
+            const clampedX = Math.max(0, Math.min(1, inputPos.x));
+            let nearest = 0, minDist = Infinity;
+            for (let i = 0; i < this.lanes.length; i++) {
+                const d = Math.abs(this.lanes[i] - clampedX);
+                if (d < minDist) { minDist = d; nearest = i; }
+            }
+            this.playerLaneCache = nearest;
         }
         return { x: inputPos.x, y: 0.85 };
     }
