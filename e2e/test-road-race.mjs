@@ -97,7 +97,7 @@ const log = (msg) => console.log(`[road-race] ${msg}`);
         }
         log(`   ✓ motionMode=${engineState.motionMode}`);
 
-        log('11. 验证 3 车道布局（lanes 应为 [0.25, 0.5, 0.75]）');
+        log('11. 验证 5 车道布局（lanes 应为 [0.1, 0.3, 0.5, 0.7, 0.9]）');
         const laneInfo = await page.evaluate(() => {
             const eng = window.gameEngine;
             if (!eng || !eng.currentScene) return null;
@@ -107,10 +107,16 @@ const log = (msg) => console.log(`[road-race] ${msg}`);
             };
         });
         log(`   车道信息: ${JSON.stringify(laneInfo)}`);
-        if (!laneInfo || !laneInfo.lanes || laneInfo.lanes.length !== 3) {
-            throw new Error(`FAIL: 应有 3 车道，实际 ${laneInfo && laneInfo.lanes ? laneInfo.lanes.length : 'N/A'}`);
+        if (!laneInfo || !laneInfo.lanes || laneInfo.lanes.length !== 5) {
+            throw new Error(`FAIL: 应有 5 车道，实际 ${laneInfo && laneInfo.lanes ? laneInfo.lanes.length : 'N/A'}`);
         }
-        log('   ✓ 3 车道布局');
+        const expectedLanes = [0.1, 0.3, 0.5, 0.7, 0.9];
+        for (let i = 0; i < 5; i++) {
+            if (Math.abs(laneInfo.lanes[i] - expectedLanes[i]) > 0.001) {
+                throw new Error(`FAIL: lanes[${i}] 应为 ${expectedLanes[i]}，实际 ${laneInfo.lanes[i]}`);
+            }
+        }
+        log('   ✓ 5 车道布局');
 
         log('12. 模拟 yaw 输入 → 验证 player.x 跟随变化');
         // 通过设置 state.yaw 模拟右转

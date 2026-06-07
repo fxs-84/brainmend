@@ -392,6 +392,8 @@ export class ObstacleSpiral extends Obstacle {
 // OBSTACLE VEHICLE - 车辆
 // ============================================================
 
+import { drawCarTopDown } from './car-renderer.js';
+
 export class ObstacleVehicle extends Obstacle {
     constructor(config = {}) {
         super({
@@ -400,13 +402,15 @@ export class ObstacleVehicle extends Obstacle {
             radius: 0.045,
             speedY: config.speedY || 0.12,
             type: 'vehicle',
-            color: config.color || '#3B82F6',
             ...config
         });
 
-        this.width = 0.07;
-        this.height = 0.12;
+        this.width = 0.055;
+        this.height = 0.14;
         this.lane = config.lane ?? 0;
+        this.bodyColor = config.bodyColor || '#3B82F6';
+        this.trimColor = config.trimColor || '#1E3A8A';
+        this.carType = config.carType || 'sedan';
     }
 
     update(dt, speedMultiplier = 1) {
@@ -417,32 +421,13 @@ export class ObstacleVehicle extends Obstacle {
         const pos = this.getPixelPosition(ctx.canvas.width, ctx.canvas.height);
         const w = this.width * ctx.canvas.width;
         const h = this.height * ctx.canvas.height;
-
-        ctx.save();
-        ctx.translate(pos.x, pos.y);
-
-        // 车身
-        ctx.fillStyle = this.color;
-        ctx.fillRect(-w / 2, -h / 2, w, h);
-
-        // 车头（深色，向下）
-        ctx.fillStyle = 'rgba(0,0,0,0.35)';
-        ctx.fillRect(-w / 2 + 4, h / 2 - h * 0.25, w - 8, h * 0.22);
-
-        // 车窗
-        ctx.fillStyle = '#1E293B';
-        ctx.fillRect(-w / 3, -h * 0.35, w * 0.6, h * 0.45);
-
-        // 车顶反光
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.fillRect(-w / 3 + 2, -h * 0.3, w * 0.6 - 4, 2);
-
-        // 边框
-        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(-w / 2, -h / 2, w, h);
-
-        ctx.restore();
+        drawCarTopDown(ctx, pos.x, pos.y, w, h, {
+            body: this.bodyColor,
+            trim: this.trimColor,
+            windowTint: 'rgba(186,230,253,0.78)',
+            carType: this.carType,
+            isPlayer: false
+        });
     }
 }
 
