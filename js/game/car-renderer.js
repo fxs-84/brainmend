@@ -154,14 +154,30 @@ export function drawCarTopDown(ctx, px, py, carW, carH, opts = {}) {
             ctx.fillRect(px - w * 0.13 + i * w * 0.055, py - h * 0.505, w * 0.02, h * 0.02);
         }
     } else {
-        // 障碍车：尾灯
+        // 障碍车：前大灯（车头朝前 — 即使在远端也是车头标识）
+        const gh1 = ctx.createRadialGradient(px - w * 0.30, py - h * 0.50, 0, px - w * 0.30, py - h * 0.50, 10);
+        gh1.addColorStop(0, 'rgba(254,240,138,0.55)');
+        gh1.addColorStop(0.6, 'rgba(254,240,138,0.12)');
+        gh1.addColorStop(1, 'rgba(254,240,138,0)');
+        ctx.fillStyle = gh1;
+        ctx.fillRect(px - w * 0.45, py - h * 0.65, w * 0.35, h * 0.3);
+        const gh2 = ctx.createRadialGradient(px + w * 0.30, py - h * 0.50, 0, px + w * 0.30, py - h * 0.50, 10);
+        gh2.addColorStop(0, 'rgba(254,240,138,0.55)');
+        gh2.addColorStop(0.6, 'rgba(254,240,138,0.12)');
+        gh2.addColorStop(1, 'rgba(254,240,138,0)');
+        ctx.fillStyle = gh2;
+        ctx.fillRect(px + w * 0.10, py - h * 0.65, w * 0.35, h * 0.3);
+        // 大灯本体
+        ctx.fillStyle = '#FEF08A';
+        ctx.fillRect(px - w * 0.38, py - h * 0.51, w * 0.18, h * 0.05);
+        ctx.fillRect(px + w * 0.20, py - h * 0.51, w * 0.18, h * 0.05);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(px - w * 0.34, py - h * 0.50, w * 0.08, h * 0.02);
+        ctx.fillRect(px + w * 0.26, py - h * 0.50, w * 0.08, h * 0.02);
+        // 尾灯（双闪红，给"刹车中"信号）
         ctx.fillStyle = '#EF4444';
-        ctx.fillRect(px - w * 0.38, py + h * 0.46, w * 0.18, h * 0.05);
-        ctx.fillRect(px + w * 0.20, py + h * 0.46, w * 0.18, h * 0.05);
-        // 刹车灯高亮（如果减速中可加，这里只画静态）
-        ctx.fillStyle = '#FCA5A5';
-        ctx.fillRect(px - w * 0.36, py + h * 0.465, w * 0.06, h * 0.02);
-        ctx.fillRect(px + w * 0.30, py + h * 0.465, w * 0.06, h * 0.02);
+        ctx.fillRect(px - w * 0.38, py + h * 0.46, w * 0.16, h * 0.04);
+        ctx.fillRect(px + w * 0.22, py + h * 0.46, w * 0.16, h * 0.04);
     }
 
     // 车轮（4 个，从四角突出）

@@ -97,7 +97,7 @@ const log = (msg) => console.log(`[road-race] ${msg}`);
         }
         log(`   ✓ motionMode=${engineState.motionMode}`);
 
-        log('11. 验证 5 车道布局（lanes 应为 [0.1, 0.3, 0.5, 0.7, 0.9]）');
+        log('11. 验证 5 车道布局（lanes 应为 [0.18, 0.34, 0.5, 0.66, 0.82]）');
         const laneInfo = await page.evaluate(() => {
             const eng = window.gameEngine;
             if (!eng || !eng.currentScene) return null;
@@ -110,7 +110,7 @@ const log = (msg) => console.log(`[road-race] ${msg}`);
         if (!laneInfo || !laneInfo.lanes || laneInfo.lanes.length !== 5) {
             throw new Error(`FAIL: 应有 5 车道，实际 ${laneInfo && laneInfo.lanes ? laneInfo.lanes.length : 'N/A'}`);
         }
-        const expectedLanes = [0.1, 0.3, 0.5, 0.7, 0.9];
+        const expectedLanes = [0.18, 0.34, 0.5, 0.66, 0.82];
         for (let i = 0; i < 5; i++) {
             if (Math.abs(laneInfo.lanes[i] - expectedLanes[i]) > 0.001) {
                 throw new Error(`FAIL: lanes[${i}] 应为 ${expectedLanes[i]}，实际 ${laneInfo.lanes[i]}`);

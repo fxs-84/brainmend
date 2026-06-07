@@ -47,13 +47,14 @@ export class Obstacle {
 
     /**
      * 检查是否移出屏幕
+     * 子类可基于自身尺寸覆盖此方法，基类使用通用阈值
      */
     isOffScreen(canvasWidth, canvasHeight) {
         return (
-            this.y > 1.1 ||  // 下方超出
-            this.y < -0.1 ||  // 上方超出
-            this.x < -0.1 ||  // 左侧超出
-            this.x > 1.1     // 右侧超出
+            this.y > 1.15 ||
+            this.y < -0.15 ||
+            this.x < -0.15 ||
+            this.x > 1.15
         );
     }
 
@@ -432,14 +433,16 @@ export class ObstacleVehicle extends Obstacle {
         if (this.exhaustTimer >= this.exhaustInterval) {
             this.exhaustTimer = 0;
             // 排气管位置：稍低于车尾保险杠，营造"喷出"感
+            // 排气位置随透视 y 缩放（远小近大）
+            const sc = this._perspectiveScale();
             for (const offset of [-0.014, 0.014]) {
                 this.exhaustParticles.push({
-                    x: this.x + offset + (Math.random() - 0.5) * 0.004,
-                    y: this.y + this.height * 0.5 + 0.006,
+                    x: this.x + offset * sc + (Math.random() - 0.5) * 0.004 * sc,
+                    y: this.y + this.height * 0.5 * sc + 0.006 * sc,
                     life: 0.7,
                     age: 0,
                     vy: this.speedY + 0.06 + Math.random() * 0.04,
-                    size: 1.4 + Math.random() * 0.6
+                    size: (1.4 + Math.random() * 0.6) * sc
                 });
             }
         }
@@ -454,11 +457,39 @@ export class ObstacleVehicle extends Obstacle {
         }
     }
 
+    /**
+     * 透视缩放：远端车小，近端车大
+     * 玩家车位置 y=0.85 作为参考基准
+     * y=0.05（远端）→ scale 0.35
+     * y=0.50（中部）→ scale 0.65
+     * y=0.85（玩家）→ scale 1.0
+     */
+    _perspectiveScale() {
+        // 归一化 y 到 [0,1]，y/0.85 作为缩放因子
+        const p = Math.max(0, Math.min(1, this.y / 0.85));
+        return 0.35 + p * 0.65;
+    }
+
+    /**
+     * 车辆用 height 边界判定离屏（基类用固定阈值太宽）
+     */
+    isOffScreen(canvasWidth, canvasHeight) {
+        const sc = this._perspectiveScale();
+        const h = this.height * sc;
+        return (
+            this.y - h / 2 > 1.05 ||
+            this.y + h / 2 < -0.05 ||
+            this.x - this.width * sc / 2 > 1.1 ||
+            this.x + this.width * sc / 2 < -0.1
+        );
+    }
+
     render(ctx) {
         const cw = ctx.canvas.width;
         const ch = ctx.canvas.height;
+        const sc = this._perspectiveScale();
 
-        // 1. 尾气粒子（在车后画）
+        // 1. 尾气粒子（透视缩放）
         for (const p of this.exhaustParticles) {
             const px = p.x * cw;
             const py = p.y * ch;
@@ -469,11 +500,11 @@ export class ObstacleVehicle extends Obstacle {
             ctx.fill();
         }
 
-        // 2. 车体（带微震动）
+        // 2. 车体（透视缩放 + 微震动）
         const pos = this.getPixelPosition(cw, ch);
-        const w = this.width * cw;
-        const h = this.height * ch;
-        const wobbleX = Math.sin(this.wobblePhase) * this.wobbleAmplitude * cw;
+        const w = this.width * cw * sc;
+        const h = this.height * ch * sc;
+        const wobbleX = Math.sin(this.wobblePhase) * this.wobbleAmplitude * cw * sc;
 
         drawCarTopDown(ctx, pos.x + wobbleX, pos.y, w, h, {
             body: this.bodyColor,

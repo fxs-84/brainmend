@@ -23,8 +23,8 @@ export class SceneRoad extends SceneBase {
     constructor() {
         super();
         this.sceneType = 'road';
-        // 5 车道：0.1 / 0.3 / 0.5 / 0.7 / 0.9
-        this.lanes = [0.1, 0.3, 0.5, 0.7, 0.9];
+        // 5 车道：0.18 / 0.34 / 0.5 / 0.66 / 0.82（内收到路面内）
+        this.lanes = [0.18, 0.34, 0.5, 0.66, 0.82];
         this.roadLines = [];
         this.sceneryLeft = [];
         this.sceneryRight = [];
@@ -193,8 +193,9 @@ export class SceneRoad extends SceneBase {
             (this.lanes[2] + this.lanes[3]) / 2,
             (this.lanes[3] + this.lanes[4]) / 2
         ];
-        // 消失点：屏幕中心
+        // 消失点：屏幕中心；保留 18% 残差避免地平线处 5 线全坍缩成 1
         const vanishX = 0.5;
+        const pMin = 0.18;
 
         ctx.fillStyle = '#FFFFFF';
         for (const sepX of separators) {
@@ -205,11 +206,12 @@ export class SceneRoad extends SceneBase {
                 const y = roadTop + yNorm * dashH;
                 // 透视参数：yNorm=0 远端 / yNorm=1 近端
                 // 上下界已在前置 if 守门，p 自然落在 [-0.05, 1.1]，clamp 是冗余
-                const p = yNorm;
+                const p = pMin + (1 - pMin) * yNorm;
                 const xNorm = vanishX + (sepX - vanishX) * p;
                 const xPx = xNorm * width;
-                const dashW = 1 + p * 4.2;
-                const dashLen = 6 + p * 28;
+                // 最小可见宽度 + 长度，防止远端 dash 消失
+                const dashW = 1.5 + p * 4;
+                const dashLen = 8 + p * 26;
                 ctx.fillRect(xPx - dashW / 2, y, dashW, dashLen);
             }
         }
@@ -251,14 +253,17 @@ export class SceneRoad extends SceneBase {
         const palette = VEHICLE_PALETTE[Math.floor(Math.random() * VEHICLE_PALETTE.length)];
         const carType = CAR_TYPES[Math.floor(Math.random() * CAR_TYPES.length)];
 
+        // 从地平线处（roadTop 上方一点点）spawn，远小近大动画出现
+        const roadTopNorm = 0.22;
+        const spawnY = roadTopNorm - 0.08;
         return new ObstacleVehicle({
             x: laneX,
-            y: -0.12,
+            y: spawnY,
             lane: laneIdx,
             bodyColor: palette.body,
             trimColor: palette.trim,
             carType,
-            speedY: 0.4
+            speedY: 0.32
         });
     }
 
