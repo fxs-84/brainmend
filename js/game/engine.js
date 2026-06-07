@@ -182,6 +182,8 @@ export class GameEngine {
 
             case GameState.GAMEOVER:
                 this.stopGameLoop();
+                // v11：游戏结束停引擎音
+                soundManager.stopEngineHum();
                 // 最后一次渲染，显示游戏结束遮罩和最终分数
                 this.render();
                 if (this.onGameOver) {
@@ -332,6 +334,13 @@ export class GameEngine {
         if (this.onScoreUpdate) {
             this.onScoreUpdate(this.isShootingMode ? this.score : this.scoring.getCurrentScore());
         }
+
+        // v11：公路赛车模式同步引擎 RPM 到音效（speed 变 → 引擎声变）
+        if (this._roadMode && this.currentScene) {
+            const sp = this.currentScene.playerSpeed || 1.0;
+            const boostMul = (this.currentScene.boostTimer || 0) > 0 ? 1.5 : 1.0;
+            soundManager.setEngineRPM(sp * boostMul);
+        }
     }
 
     /**
@@ -388,6 +397,8 @@ export class GameEngine {
                     obstacle.collect();
                     this.scoring.onCoinCollected(100);
                     if (this.isShootingMode) this.score += 50;  // 射击模式：金币+50分
+                    // v11：金币拾取音效
+                    soundManager.playCoin();
                     // 触发场景的金币收集效果
                     if (this.currentScene && this.currentScene.onCoinCollect) {
                         this.currentScene.onCoinCollect(obstacle, this);
@@ -401,6 +412,8 @@ export class GameEngine {
                 if (CollisionDetector.checkPlayerObstacle(this.player, obstacle, this.canvas)) {
                     obstacle.collect();
                     this.score += 200;
+                    // v11：加速道具拾取音效
+                    soundManager.playBoost();
                     if (this.currentScene && this.currentScene.activateBoost) {
                         this.currentScene.activateBoost();
                     }
@@ -937,6 +950,10 @@ export class GameEngine {
         this.reset();
         this.lastTime = performance.now();
         this.startGameLoop();
+        // v11：公路赛车模式启动引擎持续音
+        if (this._roadMode) {
+            soundManager.startEngineHum();
+        }
     }
 
     /**
@@ -954,6 +971,8 @@ export class GameEngine {
      */
     cleanup() {
         this.stopGameLoop();
+        // v11：清理时停引擎音
+        soundManager.stopEngineHum();
         this._unbindGameOverHandler();
         if (this.currentScene) {
             this.currentScene.cleanup();

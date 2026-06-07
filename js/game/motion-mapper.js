@@ -77,9 +77,10 @@ export const MotionMapper = {
 
             case this.MODES.YAW_PITCH_SPEED:
                 // 公路赛车：yaw 控车道（同 SINGLE_YAW），pitch 控速度
-                // 仰头（pitch 负）→ 加速到 1.7x；低头（pitch 正）→ 减速到 0.4x
+                // 仰头（pitch 负）→ 加速；低头（pitch 正）→ 减速
+                // v11 灵敏度：±0.4 已接近极值（避免极端仰头时看不见屏幕）
                 x = 0.5 + yaw * 0.5;
-                speed = Math.max(0.4, Math.min(1.7, 1.0 - pitch * 0.65));
+                speed = Math.max(0.3, Math.min(1.8, 1.0 - pitch * 1.5));
                 break;
 
             default:

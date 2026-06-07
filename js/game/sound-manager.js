@@ -204,15 +204,41 @@ export class SoundManager {
         this._engineOsc = this.audioContext.createOscillator();
         this._engineOsc.type = 'sawtooth';
         this._engineOsc.frequency.value = 55;
-        const gn = this.audioContext.createGain();
-        gn.gain.value = 0.12;
+        // 副振：让引擎声更厚（八度叠加 + 5Hz 失谐做"啁啾"感）
+        this._engineOsc2 = this.audioContext.createOscillator();
+        this._engineOsc2.type = 'square';
+        this._engineOsc2.frequency.value = 60;
+        this._engineGn = this.audioContext.createGain();
+        this._engineGn.gain.value = 0.10;
+        this._engineGn2 = this.audioContext.createGain();
+        this._engineGn2.gain.value = 0.04;
         const filter = this.audioContext.createBiquadFilter();
         filter.type = 'lowpass';
-        filter.frequency.value = 120;
-        this._engineOsc.connect(gn);
-        gn.connect(filter);
+        filter.frequency.value = 200;
+        this._engineOsc.connect(this._engineGn);
+        this._engineOsc2.connect(this._engineGn2);
+        this._engineGn.connect(filter);
+        this._engineGn2.connect(filter);
         filter.connect(this.masterGain);
         this._engineOsc.start();
+        this._engineOsc2.start();
+    }
+
+    /**
+     * 调整引擎 RPM（频率）：speedMul=0.5 → 60Hz, speedMul=1.0 → 90Hz, speedMul=1.5 → 130Hz
+     * 同步调整增益让"加速时引擎声更猛"
+     */
+    setEngineRPM(speedMul) {
+        if (!this._engineOsc) return;
+        // 频率 40-180Hz 映射，speed ∈ [0.3, 1.8]
+        const f = 40 + Math.max(0, Math.min(1, (speedMul - 0.3) / 1.5)) * 140;
+        const target = Math.round(f);
+        this._engineOsc.frequency.setTargetAtTime(target, this.audioContext.currentTime, 0.08);
+        if (this._engineOsc2) this._engineOsc2.frequency.setTargetAtTime(target * 1.05, this.audioContext.currentTime, 0.08);
+        if (this._engineGn) {
+            const g = 0.06 + Math.max(0, Math.min(1, (speedMul - 0.3) / 1.5)) * 0.10;
+            this._engineGn.gain.setTargetAtTime(g, this.audioContext.currentTime, 0.10);
+        }
     }
 
     stopEngineHum() {
@@ -220,7 +246,50 @@ export class SoundManager {
             try { this._engineOsc.stop(); } catch(e) {}
             this._engineOsc = null;
         }
+        if (this._engineOsc2) {
+            try { this._engineOsc2.stop(); } catch(e) {}
+            this._engineOsc2 = null;
+        }
+        this._engineGn = null;
+        this._engineGn2 = null;
         this._engineRunning = false;
+    }
+
+    /**
+     * 加速道具拾取音效 - 上升滑音 + 噪声爆点
+     */
+    async playBoost() {
+        if (!this.isInitialized) return;
+
+        await this.resume();
+        const ctx = this.audioContext;
+        const now = ctx.currentTime;
+
+        // 主振：快速上升的"嗖"声
+        const osc = ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(200, now);
+        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.18);
+        const oscGn = ctx.createGain();
+        oscGn.gain.setValueAtTime(0.18, now);
+        oscGn.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+        osc.connect(oscGn);
+        oscGn.connect(this.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.25);
+
+        // 高频亮音（叮的一声）
+        const osc2 = ctx.createOscillator();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(2400, now);
+        osc2.frequency.exponentialRampToValueAtTime(3200, now + 0.10);
+        const osc2Gn = ctx.createGain();
+        osc2Gn.gain.setValueAtTime(0.10, now);
+        osc2Gn.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        osc2.connect(osc2Gn);
+        osc2Gn.connect(this.masterGain);
+        osc2.start(now);
+        osc2.stop(now + 0.15);
     }
 
     /**
