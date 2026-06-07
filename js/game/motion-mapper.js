@@ -15,7 +15,11 @@ export const MotionMapper = {
         DUAL_PITCH_YAW: 'dual_pitch_yaw',  // 低头/仰头 + 左转/右转
 
         // 三轴模式
-        TRIPLE: 'triple'                   // 全部运动
+        TRIPLE: 'triple',                  // 全部运动
+
+        // 公路赛车专属：yaw 控车道 + pitch 控速度
+        // 仰头（pitch 负）→ 加速；低头（pitch 正）→ 减速
+        YAW_PITCH_SPEED: 'yaw_pitch_speed'
     },
 
     // 模式对应的活动轴
@@ -24,20 +28,23 @@ export const MotionMapper = {
         single_yaw: ['yaw'],
         single_roll: ['roll'],
         dual_pitch_yaw: ['pitch', 'yaw'],
-        triple: ['pitch', 'yaw', 'roll']
+        triple: ['pitch', 'yaw', 'roll'],
+        yaw_pitch_speed: ['yaw', 'pitch']
     },
 
     /**
      * 将陀螺仪输入映射为游戏坐标
      * @param {object} input - { pitch, yaw, roll } 范围约 -1 到 1
      * @param {string} mode - 运动模式
-     * @returns {object} - { x, y } 范围 0 到 1，中心为 0.5
+     * @returns {object} - { x, y, speed } 范围 0-1，speed 默认 1.0
+     *   - speed: 1.0 = 基准速度；> 1 加速；< 1 减速（仅 YAW_PITCH_SPEED 模式非 1）
      */
     mapToGame(input, mode) {
         const { pitch = 0, yaw = 0, roll = 0 } = input;
 
         let x = 0.5;  // 默认居中
         let y = 0.5;
+        let speed = 1.0;
 
         switch (mode) {
             case this.MODES.SINGLE_PITCH:
@@ -68,6 +75,13 @@ export const MotionMapper = {
                 y = 0.5 - pitch * 0.4;
                 break;
 
+            case this.MODES.YAW_PITCH_SPEED:
+                // 公路赛车：yaw 控车道（同 SINGLE_YAW），pitch 控速度
+                // 仰头（pitch 负）→ 加速到 1.7x；低头（pitch 正）→ 减速到 0.4x
+                x = 0.5 + yaw * 0.5;
+                speed = Math.max(0.4, Math.min(1.7, 1.0 - pitch * 0.65));
+                break;
+
             default:
                 x = 0.5;
                 y = 0.5;
@@ -77,7 +91,7 @@ export const MotionMapper = {
         x = Math.max(0, Math.min(1, x));
         y = Math.max(0, Math.min(1, y));
 
-        return { x, y };
+        return { x, y, speed };
     },
 
     /**

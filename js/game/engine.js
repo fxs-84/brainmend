@@ -396,8 +396,21 @@ export class GameEngine {
                 }
             }
 
+            // 加速道具收集（公路赛车：吃到 → 临时 lineSpeed × 1.5 持续 4 秒）
+            if (obstacle.type === 'boost' && !obstacle.isCollected) {
+                if (CollisionDetector.checkPlayerObstacle(this.player, obstacle, this.canvas)) {
+                    obstacle.collect();
+                    this.score += 200;
+                    if (this.currentScene && this.currentScene.activateBoost) {
+                        this.currentScene.activateBoost();
+                    }
+                    continue;
+                }
+            }
+
             // 障碍物碰撞检测
-            if (obstacle.type !== 'coin' && CollisionDetector.checkPlayerObstacle(this.player, obstacle, this.canvas)) {
+            if (obstacle.type !== 'coin' && obstacle.type !== 'boost' &&
+                CollisionDetector.checkPlayerObstacle(this.player, obstacle, this.canvas)) {
                 // 撞了：移除障碍物（防止连续碰撞）
                 this.obstacles.splice(i, 1);
                 if (this._roadMode) {
@@ -655,6 +668,33 @@ export class GameEngine {
         const seconds = Math.floor(this.gameTime % 60);
         const timeY = (this.isShootingMode || this._roadMode) ? 100 : 75;
         ctx.fillText(`时间: ${minutes}:${seconds.toString().padStart(2, '0')}`, 10, timeY);
+
+        // 公路赛车：右侧速度指示器（pitch 控速 + 加速道具加成）
+        if (this._roadMode) {
+            const speedMul = (this.currentScene && typeof this.currentScene.playerSpeed === 'number')
+                ? this.currentScene.playerSpeed : 1.0;
+            const speedPct = Math.round(speedMul * 100);
+            const speedBarW = 120;
+            const speedBarX = ctx.canvas.width - speedBarW - 20;
+            const speedBarY = 22;
+            // 背景条
+            ctx.fillStyle = 'rgba(0,0,0,0.45)';
+            ctx.fillRect(speedBarX - 4, speedBarY - 14, speedBarW + 8, 24);
+            // 速度条（按当前倍率填充）
+            const fillW = Math.max(0, Math.min(speedBarW, ((speedMul - 0.4) / (1.7 - 0.4)) * speedBarW));
+            const barColor = speedMul >= 1.3 ? '#FCD34D' : speedMul >= 0.9 ? '#10B981' : '#60A5FA';
+            ctx.fillStyle = barColor;
+            ctx.fillRect(speedBarX, speedBarY, fillW, 10);
+            // 边框
+            ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(speedBarX, speedBarY, speedBarW, 10);
+            // 文字
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 13px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(`⚡ ${speedPct}%`, speedBarX, speedBarY - 2);
+        }
     }
 
     /**

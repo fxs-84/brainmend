@@ -674,3 +674,94 @@ export class ObstacleCoin extends Obstacle {
         return this.y > 1.1 || this.x < -0.1 || this.x > 1.1;
     }
 }
+
+// ============================================================
+// OBSTACLE BOOST - 加速道具（闪电图标）
+// 玩家撞到后 lineSpeed 临时翻倍 + 加分
+// ============================================================
+
+export class ObstacleBoost extends Obstacle {
+    constructor(config = {}) {
+        super({
+            x: config.x || 0.5,
+            y: config.y || -0.1,
+            radius: 0.038,
+            speedY: config.speedY || 0.32,
+            type: 'boost',
+            color: '#FCD34D',
+            ...config
+        });
+
+        this.rotationAngle = 0;
+        this.rotationSpeed = 3.5;
+        this.bobPhase = Math.random() * Math.PI * 2;
+        this.bobSpeed = 4;
+        this.bobAmplitude = 0.02;
+        this.isCollected = false;
+    }
+
+    update(dt, speedMultiplier = 1) {
+        this.y += this.speedY * dt * speedMultiplier;
+        this.rotationAngle += this.rotationSpeed * dt;
+        this.bobPhase += this.bobSpeed * dt;
+        this.renderY = this.y + Math.sin(this.bobPhase) * this.bobAmplitude;
+    }
+
+    render(ctx) {
+        if (this.isCollected) return;
+
+        const cw = ctx.canvas.width;
+        const ch = ctx.canvas.height;
+        const px = this.x * cw;
+        const py = this.renderY * ch;
+        const r = this.radius * Math.min(cw, ch);
+
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(this.rotationAngle);
+
+        // 外光晕
+        const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2.2);
+        glow.addColorStop(0, 'rgba(252,211,77,0.55)');
+        glow.addColorStop(0.4, 'rgba(252,211,77,0.2)');
+        glow.addColorStop(1, 'rgba(252,211,77,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 2.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 黄色圆盘
+        ctx.fillStyle = '#FCD34D';
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 深色描边
+        ctx.strokeStyle = '#92400E';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 闪电符号
+        ctx.fillStyle = '#7C2D12';
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.18, -r * 0.55);
+        ctx.lineTo(r * 0.22, -r * 0.10);
+        ctx.lineTo(r * 0.04, -r * 0.05);
+        ctx.lineTo(r * 0.22, r * 0.55);
+        ctx.lineTo(-r * 0.20, r * 0.05);
+        ctx.lineTo(-r * 0.02, r * 0.00);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    collect() {
+        this.isCollected = true;
+        this.active = false;
+    }
+
+    isOffScreen(canvasWidth, canvasHeight) {
+        return this.y > 1.1 || this.x < -0.1 || this.x > 1.1;
+    }
+}

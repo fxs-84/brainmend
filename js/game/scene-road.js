@@ -3,7 +3,7 @@
 // 5 车道 + yaw 换道 + 俯视真实感车体 + 路边视差景物 + 透视收敛
 // ============================================================
 
-import { ObstacleVehicle } from './obstacle.js';
+import { ObstacleVehicle, ObstacleCoin, ObstacleBoost } from './obstacle.js';
 import { SceneBase } from './scene-base.js';
 import { drawCarTopDown } from './car-renderer.js';
 
@@ -27,20 +27,27 @@ const ROAD_TRAFFIC = {
     spawnInterval: 900,    // ms（difficulty 默认 1500）
     maxObstacles: 5,        // 路上最多同时 5 辆（留玩家反应窗口，不被密度直接撞死）
     convoyChance: 0.30,     // 30% 概率生成车队（相邻车道同时出）
-    convoySizeRange: [2, 2] // 车队固定 2 辆
+    convoySizeRange: [2, 2], // 车队固定 2 辆
+    coinChainChance: 0.18,  // 18% 概率在 spawn 间隔里再发一串金币（纵向 3-5 枚）
+    coinChainLength: [3, 5],
+    boostChance: 0.06       // 6% 概率发一个加速道具
 };
 
 export class SceneRoad extends SceneBase {
     constructor() {
         super();
         this.sceneType = 'road';
-        // 5 车道：0.18 / 0.34 / 0.5 / 0.66 / 0.82（内收到路面内）
-        this.lanes = [0.18, 0.34, 0.5, 0.66, 0.82];
+        // 7 车道 → 6 条白色车道分隔线（用户要求 4 + 2 = 6）
+        this.lanes = [0.10, 0.23, 0.36, 0.5, 0.64, 0.77, 0.90];
         this.roadLines = [];
         this.sceneryLeft = [];
         this.sceneryRight = [];
         this.lineSpeed = 0.5;
         this.scrollDirection = 'up';
+        // 玩家当前速度倍率（1.0 基准；由 mapInputToPosition 写入）
+        this.playerSpeed = 1.0;
+        // 加速道具临时加成（4 秒倒计时，>0 时 scrollMul × 1.5）
+        this.boostTimer = 0;
         // 玩家排气尾烟
         this.playerExhaustParticles = [];
         this.playerExhaustTimer = 0;
@@ -56,17 +63,14 @@ export class SceneRoad extends SceneBase {
     }
 
     initScenery() {
+        // 5 种景物类型，每种有权重，越往后越稀有
+        const SCENERY_TYPES = ['tree', 'tree', 'tree', 'post', 'post', 'billboard', 'building', 'mountain'];
+        const pickType = () => SCENERY_TYPES[Math.floor(Math.random() * SCENERY_TYPES.length)];
         this.sceneryLeft = [];
         this.sceneryRight = [];
-        for (let i = 0; i < 10; i++) {
-            this.sceneryLeft.push({
-                y: i * 0.12,
-                type: Math.random() < 0.7 ? 'tree' : 'post'
-            });
-            this.sceneryRight.push({
-                y: i * 0.12,
-                type: Math.random() < 0.7 ? 'tree' : 'post'
-            });
+        for (let i = 0; i < 12; i++) {
+            this.sceneryLeft.push({ y: i * 0.1, type: pickType() });
+            this.sceneryRight.push({ y: i * 0.1, type: pickType() });
         }
     }
 
@@ -85,16 +89,21 @@ export class SceneRoad extends SceneBase {
 
     update(dt) {
         super.update(dt);
+        // 加速道具倒计时
+        if (this.boostTimer > 0) this.boostTimer -= dt;
+        // 玩家速度影响路面/景物的滚动速度（pitch 抬头加速 → 路面动得更快，主观感"加速"）
+        const boostMul = this.boostTimer > 0 ? 1.5 : 1.0;
+        const scrollMul = this.playerSpeed * boostMul;
         for (const line of this.roadLines) {
-            line.y += this.lineSpeed * dt;
+            line.y += this.lineSpeed * dt * scrollMul;
             if (line.y > 1.1) line.y = -0.05;
         }
         for (const s of this.sceneryLeft) {
-            s.y += this.lineSpeed * dt * 1.3;
+            s.y += this.lineSpeed * dt * 1.3 * scrollMul;
             if (s.y > 1.1) s.y = -0.05;
         }
         for (const s of this.sceneryRight) {
-            s.y += this.lineSpeed * dt * 1.3;
+            s.y += this.lineSpeed * dt * 1.3 * scrollMul;
             if (s.y > 1.1) s.y = -0.05;
         }
         this._updatePlayerExhaust(dt);
@@ -155,7 +164,7 @@ export class SceneRoad extends SceneBase {
         ctx.fillRect(0, roadTop + 4, width, 2);
         ctx.fillRect(0, height - 6, width, 2);
 
-        // 8. 5 车道：用 5 条深浅交替的色带 + 强对比白色实线分隔，5 车道永远肉眼可数
+        // 8. 7 车道：用 7 条深浅交替的色带 + 强对比白色实线分隔，6 条车道线永远肉眼可数
         this._renderLaneBands(ctx, width, height, roadTop);
 
         // 9. 路边景物（视差：景物滚 1.3x）
@@ -164,16 +173,17 @@ export class SceneRoad extends SceneBase {
     }
 
     /**
-     * 5 车道色带：5 段**完全不同**深浅的色带 + 4 条**完全实线**白色分隔
-     * 远端也保持强对比，5 车道永远肉眼可数
+     * N 车道色带：N 段**完全不同**深浅的色带 + (N-1) 条**完全实线**白色分隔
+     * 远端也保持强对比，车道永远肉眼可数
      */
     _renderLaneBands(ctx, width, height, roadTop) {
         const roadH = height - roadTop;
-        // 5 段**完全独立**的深浅（不重复），强制 5 段视觉可分
-        const bandShades = ['#16161A', '#22222A', '#2D2D36', '#22222A', '#16161A'];
-        const bandW = width / 5;
-        for (let i = 0; i < 5; i++) {
-            ctx.fillStyle = bandShades[i];
+        const N = this.lanes.length;
+        // N 段**完全独立**的深浅（交替强弱），强制 N 段视觉可分
+        const bandShades = ['#16161A', '#22222A', '#2D2D36', '#1B1B22', '#2D2D36', '#22222A', '#16161A'];
+        const bandW = width / N;
+        for (let i = 0; i < N; i++) {
+            ctx.fillStyle = bandShades[i % bandShades.length];
             ctx.fillRect(i * bandW, roadTop, bandW, roadH);
         }
         // 路面渐变叠层（保留远亮近暗的纵深感）
@@ -184,10 +194,10 @@ export class SceneRoad extends SceneBase {
         ctx.fillStyle = overlay;
         ctx.fillRect(0, roadTop, width, roadH);
 
-        // 4 条分隔线：直接从 lanes 数组计算边界，绝不硬编码
-        // lanes=[0.18,0.34,0.5,0.66,0.82] → 边界=(0.18+0.34)/2 等
+        // (N-1) 条分隔线：直接从 lanes 数组计算边界，绝不硬编码
+        // lanes=[...] → 边界=(lanes[i]+lanes[i+1])/2 等
         const sepXs = [];
-        for (let i = 0; i < this.lanes.length - 1; i++) {
+        for (let i = 0; i < N - 1; i++) {
             sepXs.push((this.lanes[i] + this.lanes[i + 1]) / 2);
         }
         // 远端 pMin=0.7（保留 70% 区分度）→ 地平线仍清晰分开
@@ -285,6 +295,7 @@ export class SceneRoad extends SceneBase {
             const x = isLeft ? baseX + 18 * scale : baseX - 18 * scale;
 
             if (item.type === 'tree') {
+                // 树：棕色树干 + 绿色树冠（双层）
                 ctx.fillStyle = '#78350F';
                 ctx.fillRect(x - 3 * scale, y - 28 * scale, 6 * scale, 28 * scale);
                 ctx.fillStyle = '#166534';
@@ -295,12 +306,67 @@ export class SceneRoad extends SceneBase {
                 ctx.beginPath();
                 ctx.arc(x, y - 36 * scale, 11 * scale, 0, Math.PI * 2);
                 ctx.fill();
-            } else {
+            } else if (item.type === 'post') {
+                // 路灯：金属杆 + 黄色灯泡
                 ctx.fillStyle = '#52525B';
                 ctx.fillRect(x - 1.5 * scale, y - 40 * scale, 3 * scale, 40 * scale);
                 ctx.fillStyle = '#FEF08A';
                 ctx.beginPath();
                 ctx.arc(x, y - 40 * scale, 4 * scale, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(254,240,138,0.45)';
+                ctx.beginPath();
+                ctx.arc(x, y - 40 * scale, 8 * scale, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (item.type === 'billboard') {
+                // 广告牌：双柱 + 彩色面板
+                ctx.fillStyle = '#374151';
+                ctx.fillRect(x - 1.5 * scale, y - 10 * scale, 3 * scale, 10 * scale);
+                ctx.fillRect(x - 1.5 * scale, y - 50 * scale, 3 * scale, 10 * scale);
+                const palette = ['#DC2626', '#2563EB', '#F59E0B', '#7C3AED', '#10B981'];
+                const c = palette[Math.floor(item.y * 1000) % palette.length];
+                ctx.fillStyle = c;
+                ctx.fillRect(x - 18 * scale, y - 50 * scale, 36 * scale, 40 * scale);
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillRect(x - 18 * scale, y - 50 * scale, 36 * scale, 40 * scale);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = `${Math.max(8, 10 * scale)}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('AD', x, y - 30 * scale);
+            } else if (item.type === 'building') {
+                // 远景建筑：矩形 + 顶部天线 + 几个亮窗
+                const bh = 55 * scale;
+                const bw = 28 * scale;
+                ctx.fillStyle = '#1E293B';
+                ctx.fillRect(x - bw / 2, y - bh, bw, bh);
+                ctx.fillStyle = '#0F172A';
+                ctx.fillRect(x - 1 * scale, y - bh - 8 * scale, 2 * scale, 8 * scale);
+                // 窗户（黄色亮点）
+                for (let r = 0; r < 4; r++) {
+                    for (let cc = 0; cc < 2; cc++) {
+                        if ((r * 2 + cc + Math.floor(item.y * 100)) % 3 === 0) {
+                            ctx.fillStyle = 'rgba(254,240,138,0.7)';
+                            ctx.fillRect(x - bw / 2 + 4 * scale + cc * 12 * scale, y - bh + 6 * scale + r * 12 * scale, 4 * scale, 6 * scale);
+                        }
+                    }
+                }
+            } else if (item.type === 'mountain') {
+                // 远山小三角（与天空相接）
+                ctx.fillStyle = '#1E3A5F';
+                ctx.beginPath();
+                ctx.moveTo(x - 22 * scale, y);
+                ctx.lineTo(x, y - 35 * scale);
+                ctx.lineTo(x + 22 * scale, y);
+                ctx.closePath();
+                ctx.fill();
+                // 雪顶
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.beginPath();
+                ctx.moveTo(x - 6 * scale, y - 22 * scale);
+                ctx.lineTo(x, y - 35 * scale);
+                ctx.lineTo(x + 6 * scale, y - 22 * scale);
+                ctx.closePath();
                 ctx.fill();
             }
         }
@@ -328,7 +394,8 @@ export class SceneRoad extends SceneBase {
 
     /**
      * 覆写基类 spawn 节流：使用公路赛车专属车流配置（与 difficulty 解耦）
-     * 35% 概率触发"车队 convoys"：相邻 2-3 车道同时出车，营造真高速的密集车流
+     * 30% 概率触发"车队 convoys"：相邻 2 车道同时出车
+     * 18% 概率额外发一串金币（纵向 3-5 枚），6% 概率发一个加速道具
      */
     trySpawnObstacle(obstacleList, difficultyConfig) {
         const cfg = ROAD_TRAFFIC;
@@ -370,11 +437,67 @@ export class SceneRoad extends SceneBase {
             });
             obstacleList.push(car);
         }
+
+        // 金币链：在车队旁边的空闲车道纵向铺 3-5 枚金币
+        if (obstacleList.length < cfg.maxObstacles && Math.random() < cfg.coinChainChance) {
+            // 找一条车队没用过的车道
+            const freeLanes = [];
+            for (let i = 0; i < this.lanes.length; i++) {
+                if (!usedLanes.has(i)) freeLanes.push(i);
+            }
+            if (freeLanes.length > 0) {
+                const coinLane = freeLanes[Math.floor(Math.random() * freeLanes.length)];
+                const coinX = this.lanes[coinLane];
+                const [cMin, cMax] = cfg.coinChainLength;
+                const chainLen = cMin + Math.floor(Math.random() * (cMax - cMin + 1));
+                const roadTopNorm = 0.22;
+                // 纵向间距 0.07（屏幕上）
+                for (let k = 0; k < chainLen; k++) {
+                    if (obstacleList.length >= cfg.maxObstacles) break;
+                    const cy = roadTopNorm - 0.08 - k * 0.07;
+                    obstacleList.push(new ObstacleCoin({
+                        x: coinX,
+                        y: cy,
+                        speedY: 0.30,
+                        speedX: 0
+                    }));
+                }
+            }
+        }
+
+        // 加速道具：6% 概率单独刷一个（与车队/金币不冲突）
+        if (obstacleList.length < cfg.maxObstacles && Math.random() < cfg.boostChance) {
+            const freeLanes = [];
+            for (let i = 0; i < this.lanes.length; i++) {
+                if (!usedLanes.has(i)) freeLanes.push(i);
+            }
+            if (freeLanes.length > 0) {
+                const boostLane = freeLanes[Math.floor(Math.random() * freeLanes.length)];
+                obstacleList.push(new ObstacleBoost({
+                    x: this.lanes[boostLane],
+                    y: 0.14,
+                    speedY: 0.30
+                }));
+            }
+        }
+
         this.lastSpawnTime = this.gameTime;
     }
 
     mapInputToPosition(inputPos, player) {
+        // 缓存 pitch 速度倍率，下一帧 update() 用来缩放路面/景物滚动
+        if (typeof inputPos.speed === 'number') {
+            this.playerSpeed = inputPos.speed;
+        }
         return { x: inputPos.x, y: 0.85 };
+    }
+
+    /**
+     * 激活加速道具：lineSpeed 临时翻倍 + 持续 4 秒
+     * 玩家通过此方法能直观感受到"吃了道具"的主观加速
+     */
+    activateBoost() {
+        this.boostTimer = 4.0;
     }
 
     _updatePlayerExhaust(dt) {

@@ -91,13 +91,13 @@ const log = (msg) => console.log(`[road-race] ${msg}`);
         }
         log('   ✓ sceneType=road, _roadMode=true, maxHealth=3');
 
-        log('10. 验证 SINGLE_YAW 模式生效');
-        if (!engineState.motionMode || !engineState.motionMode.toUpperCase().includes('SINGLE_YAW')) {
-            throw new Error(`FAIL: motionMode 应为 SINGLE_YAW，实际 '${engineState.motionMode}'`);
+        log('10. 验证 YAW_PITCH_SPEED 模式生效（v9 引入：yaw 控车道 + pitch 控速度）');
+        if (!engineState.motionMode || !engineState.motionMode.toUpperCase().includes('YAW_PITCH_SPEED')) {
+            throw new Error(`FAIL: motionMode 应为 YAW_PITCH_SPEED，实际 '${engineState.motionMode}'`);
         }
         log(`   ✓ motionMode=${engineState.motionMode}`);
 
-        log('11. 验证 5 车道布局（lanes 应为 [0.18, 0.34, 0.5, 0.66, 0.82]）');
+        log('11. 验证 7 车道布局（lanes 应为 [0.10, 0.23, 0.36, 0.5, 0.64, 0.77, 0.90]，6 条分隔线）');
         const laneInfo = await page.evaluate(() => {
             const eng = window.gameEngine;
             if (!eng || !eng.currentScene) return null;
@@ -107,16 +107,16 @@ const log = (msg) => console.log(`[road-race] ${msg}`);
             };
         });
         log(`   车道信息: ${JSON.stringify(laneInfo)}`);
-        if (!laneInfo || !laneInfo.lanes || laneInfo.lanes.length !== 5) {
-            throw new Error(`FAIL: 应有 5 车道，实际 ${laneInfo && laneInfo.lanes ? laneInfo.lanes.length : 'N/A'}`);
+        if (!laneInfo || !laneInfo.lanes || laneInfo.lanes.length !== 7) {
+            throw new Error(`FAIL: 应有 7 车道，实际 ${laneInfo && laneInfo.lanes ? laneInfo.lanes.length : 'N/A'}`);
         }
-        const expectedLanes = [0.18, 0.34, 0.5, 0.66, 0.82];
-        for (let i = 0; i < 5; i++) {
+        const expectedLanes = [0.10, 0.23, 0.36, 0.5, 0.64, 0.77, 0.90];
+        for (let i = 0; i < 7; i++) {
             if (Math.abs(laneInfo.lanes[i] - expectedLanes[i]) > 0.001) {
                 throw new Error(`FAIL: lanes[${i}] 应为 ${expectedLanes[i]}，实际 ${laneInfo.lanes[i]}`);
             }
         }
-        log('   ✓ 5 车道布局');
+        log('   ✓ 7 车道布局');
 
         log('12. 模拟 yaw 输入 → 验证 player.x 跟随变化');
         // 通过设置 state.yaw 模拟右转

@@ -282,7 +282,8 @@ export class GameUI {
         if (!handledByScene) {
             // 运动模式映射
             let modeToSet = this.selectedMode;
-            if (this.selectedMode === 'shooting' || this.selectedMode === 'road') modeToSet = MotionMapper.MODES.SINGLE_YAW;
+            if (this.selectedMode === 'shooting') modeToSet = MotionMapper.MODES.SINGLE_YAW;
+            if (this.selectedMode === 'road') modeToSet = MotionMapper.MODES.YAW_PITCH_SPEED;
             if (this.selectedMode === 'nodding' || this.selectedMode === 'tunnel') modeToSet = MotionMapper.MODES.SINGLE_PITCH;
             this.engine.setMotionMode(modeToSet);
             this.engine.start();
