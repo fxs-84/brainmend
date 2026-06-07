@@ -80,6 +80,10 @@ export class SceneRoad extends SceneBase {
         this.initScenery();
         this.playerExhaustParticles = [];
         this.playerExhaustTimer = 0;
+        // v10：远景动态状态重置（云朵位置/山相位从 0 开始）
+        this.clouds = null;
+        this.mountainPhases = null;
+        this.playerSpeed = 1.0;
     }
 
     cleanup() {
@@ -113,35 +117,58 @@ export class SceneRoad extends SceneBase {
         // 压缩天空区域：35% → 22%，给车道腾空间
         const roadTop = height * 0.22;
 
-        // 1. 天空渐变（更紧凑）
+        // ---- 时间循环（60s 一圈：白天→黄昏→夜晚→黎明→白天） ----
+        const dayPhase = ((this.gameTime || 0) % 60) / 60;  // [0,1)
+        // 4 个时段的关键帧（顶→底 渐变两端色）
+        const SKY_PRESETS = [
+            { top: '#0F172A', mid: '#1E3A8A', bot: '#60A5FA' },  // 白天
+            { top: '#1E1B4B', mid: '#7C2D12', bot: '#FB923C' },  // 黄昏
+            { top: '#020617', mid: '#0F172A', bot: '#1E293B' },  // 夜晚
+            { top: '#312E81', mid: '#7C3AED', bot: '#F472B6' }   // 黎明
+        ];
+        const skyNow = this._lerpSkyPreset(SKY_PRESETS, dayPhase);
+
+        // 1. 天空渐变（时间循环）
         const sky = ctx.createLinearGradient(0, 0, 0, roadTop);
-        sky.addColorStop(0, '#0F172A');
-        sky.addColorStop(0.5, '#1E3A8A');
-        sky.addColorStop(1, '#60A5FA');
+        sky.addColorStop(0, skyNow.top);
+        sky.addColorStop(0.5, skyNow.mid);
+        sky.addColorStop(1, skyNow.bot);
         ctx.fillStyle = sky;
         ctx.fillRect(0, 0, width, roadTop);
 
-        // 2. 太阳（更小、贴近角落）
-        const sunX = width * 0.82, sunY = height * 0.08, sunR = 16;
-        const sunGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunR * 4);
-        sunGlow.addColorStop(0, 'rgba(253,224,71,0.9)');
-        sunGlow.addColorStop(0.3, 'rgba(253,224,71,0.35)');
-        sunGlow.addColorStop(1, 'rgba(253,224,71,0)');
+        // 2. 太阳（白天/黄昏）或 月亮（夜晚）
+        const isNight = dayPhase > 0.5 && dayPhase < 0.75;
+        const isDusk = dayPhase > 0.25 && dayPhase < 0.5;
+        const sunAngle = (dayPhase * Math.PI * 2) - Math.PI / 2;  // 从地平线→天顶→地平线
+        const sunArcX = width * 0.5 + Math.cos(sunAngle) * width * 0.45;
+        const sunArcY = roadTop * 0.5 + Math.sin(sunAngle) * roadTop * 0.6;
+        const sunColor = isNight ? '#F8FAFC' : isDusk ? '#FCA5A5' : '#FDE047';
+        const sunGlowColor = isNight ? '254,250,250' : isDusk ? '252,165,165' : '253,224,71';
+        const sunR = isNight ? 12 : 16;
+        const sunGlow = ctx.createRadialGradient(sunArcX, sunArcY, 0, sunArcX, sunArcY, sunR * 4);
+        sunGlow.addColorStop(0, `rgba(${sunGlowColor},0.9)`);
+        sunGlow.addColorStop(0.3, `rgba(${sunGlowColor},0.35)`);
+        sunGlow.addColorStop(1, `rgba(${sunGlowColor},0)`);
         ctx.fillStyle = sunGlow;
-        ctx.fillRect(sunX - sunR * 4, sunY - sunR * 4, sunR * 8, sunR * 8);
-        ctx.fillStyle = '#FDE047';
+        ctx.fillRect(sunArcX - sunR * 4, sunArcY - sunR * 4, sunR * 8, sunR * 8);
+        ctx.fillStyle = sunColor;
         ctx.beginPath();
-        ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
+        ctx.arc(sunArcX, sunArcY, sunR, 0, Math.PI * 2);
         ctx.fill();
 
-        // 3. 远景城市建筑剪影（提供纵深）
+        // 3. 云朵（独立水平漂移，3-5 朵）
+        this._renderClouds(ctx, width, roadTop, isNight);
+
+        // 4. 远景城市建筑剪影（最远一层）
         this._renderSkyline(ctx, width, roadTop);
 
-        // 4. 双层远山（压缩到 sky 区域内）
-        this._renderMountains(ctx, width, height, roadTop * 0.72, roadTop, '#1E3A5F', 0.4);
-        this._renderMountains(ctx, width, height, roadTop * 0.90, roadTop, '#0F1F3A', 0.55);
+        // 5. 三层视差远山（每层独立滚动速度，制造深度）
+        // 远山：基础 y + parallaxPhase * 0.04
+        this._renderMountainLayer(ctx, width, height, roadTop, 0, '#1E3A5F', 0.35, 0.7);
+        this._renderMountainLayer(ctx, width, height, roadTop, 1, '#0F1F3A', 0.5, 0.85);
+        this._renderMountainLayer(ctx, width, height, roadTop, 2, '#020617', 0.65, 1.0);
 
-        // 5. 地平线雾气（增强空气透视）
+        // 6. 地平线雾气（增强空气透视）
         const hazeGrad = ctx.createLinearGradient(0, roadTop - 6, 0, roadTop + 10);
         hazeGrad.addColorStop(0, 'rgba(147,197,253,0)');
         hazeGrad.addColorStop(0.5, 'rgba(255,255,255,0.45)');
@@ -149,7 +176,7 @@ export class SceneRoad extends SceneBase {
         ctx.fillStyle = hazeGrad;
         ctx.fillRect(0, roadTop - 6, width, 16);
 
-        // 6. 路面（远端较亮，营造距离感）
+        // 7. 路面（远端较亮，营造距离感）
         const roadGrad = ctx.createLinearGradient(0, roadTop, 0, height);
         roadGrad.addColorStop(0, '#52525B');
         roadGrad.addColorStop(0.4, '#27272A');
@@ -157,19 +184,115 @@ export class SceneRoad extends SceneBase {
         ctx.fillStyle = roadGrad;
         ctx.fillRect(0, roadTop, width, height - roadTop);
 
-        // 7. 草地路肩 + 黄色边线
+        // 8. 草地路肩 + 黄色边线
         ctx.fillStyle = '#15803D';
         ctx.fillRect(0, roadTop, width, 4);
         ctx.fillStyle = '#FCD34D';
         ctx.fillRect(0, roadTop + 4, width, 2);
         ctx.fillRect(0, height - 6, width, 2);
 
-        // 8. 7 车道：用 7 条深浅交替的色带 + 强对比白色实线分隔，6 条车道线永远肉眼可数
+        // 9. 7 车道：用 7 条深浅交替的色带 + 强对比白色实线分隔，6 条车道线永远肉眼可数
         this._renderLaneBands(ctx, width, height, roadTop);
 
-        // 9. 路边景物（视差：景物滚 1.3x）
+        // 10. 路边景物（视差：景物滚 1.3x）
         this._renderScenery(ctx, width, height, this.sceneryLeft, 0, true, roadTop);
         this._renderScenery(ctx, width, height, this.sceneryRight, width, false, roadTop);
+    }
+
+    /**
+     * 在 4 个时间预设之间按 dayPhase 插值（白天/黄昏/夜晚/黎明 → 白天）
+     * 用 smoothstep 让过渡更自然
+     */
+    _lerpSkyPreset(presets, phase) {
+        const N = presets.length;
+        const scaled = phase * N;
+        const idx0 = Math.floor(scaled) % N;
+        const idx1 = (idx0 + 1) % N;
+        let t = scaled - Math.floor(scaled);
+        // smoothstep
+        t = t * t * (3 - 2 * t);
+        const a = presets[idx0], b = presets[idx1];
+        return {
+            top: this._lerpColor(a.top, b.top, t),
+            mid: this._lerpColor(a.mid, b.mid, t),
+            bot: this._lerpColor(a.bot, b.bot, t)
+        };
+    }
+
+    _lerpColor(c1, c2, t) {
+        // c1, c2 = '#RRGGBB'
+        const r1 = parseInt(c1.slice(1, 3), 16), g1 = parseInt(c1.slice(3, 5), 16), b1 = parseInt(c1.slice(5, 7), 16);
+        const r2 = parseInt(c2.slice(1, 3), 16), g2 = parseInt(c2.slice(3, 5), 16), b2 = parseInt(c2.slice(5, 7), 16);
+        const r = Math.round(r1 + (r2 - r1) * t);
+        const g = Math.round(g1 + (g2 - g1) * t);
+        const b = Math.round(b1 + (b2 - b1) * t);
+        return `rgb(${r},${g},${b})`;
+    }
+
+    /**
+     * 云朵：3-5 朵随机高度，独立水平漂移
+     * 玩家抬头加速时云朵也跟着走得更快（用 playerSpeed 缩放）
+     */
+    _renderClouds(ctx, width, roadTop, isNight) {
+        if (!this.clouds || this.clouds.length === 0) {
+            this.clouds = [];
+            for (let i = 0; i < 4; i++) {
+                this.clouds.push({
+                    x: Math.random() * width,
+                    y: roadTop * (0.15 + Math.random() * 0.55),
+                    r: 10 + Math.random() * 14,
+                    speed: 0.005 + Math.random() * 0.012,  // 屏宽/秒
+                    alpha: 0.35 + Math.random() * 0.35
+                });
+            }
+        }
+        const scrollMul = this.playerSpeed || 1.0;
+        for (const c of this.clouds) {
+            c.x += c.speed * scrollMul * 16;  // 16ms 假设（这里实际 frame-rate，但量级合适）
+            if (c.x - c.r * 2 > width) {
+                c.x = -c.r * 2;
+                c.y = roadTop * (0.15 + Math.random() * 0.55);
+            }
+            ctx.fillStyle = isNight ? `rgba(200,210,230,${c.alpha * 0.6})` : `rgba(255,255,255,${c.alpha})`;
+            // 云朵 = 3 个并排圆形
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+            ctx.arc(c.x + c.r * 0.8, c.y - c.r * 0.2, c.r * 0.85, 0, Math.PI * 2);
+            ctx.arc(c.x - c.r * 0.8, c.y - c.r * 0.1, c.r * 0.7, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    /**
+     * 三层视差远山：每层有独立的 phase 滚动（offset 山峰轮廓）
+     * 滚动速度与 playerSpeed 挂钩 → 抬头加速 → 山在飞
+     */
+    _renderMountainLayer(ctx, width, height, roadTop, layerIdx, color, ampScale, baseYRatio) {
+        if (!this.mountainPhases) {
+            this.mountainPhases = [0, 0, 0];
+        }
+        const scrollMul = this.playerSpeed || 1.0;
+        // 每层不同基础速度：远层最慢，近层最快
+        const layerSpeeds = [0.04, 0.08, 0.14];
+        this.mountainPhases[layerIdx] += layerSpeeds[layerIdx] * scrollMul * 0.016;
+        const phase = this.mountainPhases[layerIdx];
+
+        const baseY = roadTop * baseYRatio;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(0, roadTop);
+        // 用 sin 摆动 + 相位偏移制造山峰
+        const peaks = 8;
+        for (let i = 0; i <= peaks; i++) {
+            const xNorm = i / peaks;
+            const x = xNorm * width;
+            const noise = Math.sin((xNorm * 6 + phase)) * 0.5 + Math.cos((xNorm * 4 - phase * 0.7)) * 0.3;
+            const y = baseY - noise * height * 0.035 * ampScale;
+            ctx.lineTo(x, y);
+        }
+        ctx.lineTo(width, roadTop);
+        ctx.closePath();
+        ctx.fill();
     }
 
     /**
@@ -239,6 +362,7 @@ export class SceneRoad extends SceneBase {
     }
 
     _renderMountains(ctx, width, height, baseY, horizonY, color, ampScale) {
+        // (legacy) 现已用 _renderMountainLayer 视差版本取代
         ctx.fillStyle = color;
         ctx.beginPath();
         ctx.moveTo(0, horizonY);
