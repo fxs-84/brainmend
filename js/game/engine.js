@@ -92,6 +92,29 @@ export class GameEngine {
         this.input.init();
         soundManager.init();
         this.reset();
+        this._bindGameOverHandler();
+    }
+
+    _bindGameOverHandler() {
+        if (this._gameOverHandler) return;
+        const handler = () => {
+            if (this.state === GameState.GAMEOVER) {
+                this.goToMenu();
+            }
+        };
+        document.addEventListener('keydown', handler);
+        this.canvas.addEventListener('click', handler);
+        this.canvas.addEventListener('touchstart', handler, { passive: true });
+        this._gameOverHandler = handler;
+    }
+
+    _unbindGameOverHandler() {
+        if (this._gameOverHandler) {
+            document.removeEventListener('keydown', this._gameOverHandler);
+            this.canvas.removeEventListener('click', this._gameOverHandler);
+            this.canvas.removeEventListener('touchstart', this._gameOverHandler);
+            this._gameOverHandler = null;
+        }
     }
 
     /**
@@ -115,6 +138,16 @@ export class GameEngine {
         if (this.particles) {
             this.particles.clear();
         }
+    }
+
+    rezero() {
+        // 重置输入适配器：将当前陀螺仪值设为零点
+        if (this.input) {
+            this.input.resetGyroBaseline();
+        }
+        // 强制玩家回到中心
+        this.player.x = 0.5;
+        this.player.y = 0.5;
     }
 
     /**
@@ -365,9 +398,17 @@ export class GameEngine {
 
             // 障碍物碰撞检测
             if (obstacle.type !== 'coin' && CollisionDetector.checkPlayerObstacle(this.player, obstacle, this.canvas)) {
-                this.scoring.onCollision();
-                this.setState(GameState.GAMEOVER);
-                return;
+                // 撞了：移除障碍物（防止连续碰撞）
+                this.obstacles.splice(i, 1);
+                if (this._roadMode) {
+                    // 公路赛车：扣血 + 无敌帧（takeDamage 内部已处理 health=0 → GAMEOVER + onCollision）
+                    this.takeDamage();
+                    if (this.state === GameState.GAMEOVER) return;
+                } else {
+                    this.scoring.onCollision();
+                    this.setState(GameState.GAMEOVER);
+                    return;
+                }
             }
         }
     }
@@ -518,7 +559,7 @@ export class GameEngine {
         }
 
         // 渲染玩家
-        if (this._noddingMode && this.currentScene && this.currentScene.renderPlayer) {
+        if ((this._noddingMode || this._roadMode) && this.currentScene && this.currentScene.renderPlayer) {
             this.currentScene.renderPlayer(ctx, this.player.x, this.player.y);
         } else if (!this.isShootingMode) {
             this.renderPlayer(ctx);
@@ -593,7 +634,7 @@ export class GameEngine {
         ctx.font = '16px sans-serif';
         ctx.textAlign = 'left';
 
-        if (this.isShootingMode) {
+        if (this.isShootingMode || this._roadMode) {
             // 射击模式：动作计分（击杀+金币），清晰直接
             ctx.fillText(`分数: ${Math.round(this.score)}`, 10, 25);
             ctx.fillText(`击毁: ${this.scoring.obstaclesDodged || 0}  金币: ${this.scoring.coinsCollected || 0}`, 10, 50);
@@ -612,7 +653,7 @@ export class GameEngine {
         // 时间
         const minutes = Math.floor(this.gameTime / 60);
         const seconds = Math.floor(this.gameTime % 60);
-        const timeY = this.isShootingMode ? 100 : 75;
+        const timeY = (this.isShootingMode || this._roadMode) ? 100 : 75;
         ctx.fillText(`时间: ${minutes}:${seconds.toString().padStart(2, '0')}`, 10, timeY);
     }
 
@@ -693,6 +734,24 @@ export class GameEngine {
     }
 
     /**
+     * 公路赛车评级（基于成功躲过的车数）
+     */
+    getRoadGrade() {
+        const dodged = this.scoring.obstaclesDodged || 0;
+        let grade;
+        if (dodged >= 40) grade = 'S';
+        else if (dodged >= 25) grade = 'A';
+        else if (dodged >= 15) grade = 'B';
+        else if (dodged >= 8)  grade = 'C';
+        else grade = 'D';
+        return { grade, dodged, label: this.getGradeLabel(grade) };
+    }
+
+    getGradeLabel(g) {
+        return { S: '🏆 车神', A: '优秀', B: '良好', C: '及格', D: '继续加油' }[g] || '继续加油';
+    }
+
+    /**
      * 渲染游戏结束覆盖层
      */
     renderGameOverOverlay(ctx) {
@@ -707,13 +766,17 @@ export class GameEngine {
         ctx.font = 'bold 36px sans-serif';
         ctx.fillText('游戏结束', width / 2, height / 2 - 100);
 
-        let rawScore, grade;
+        let rawScore, grade, gradeDetail;
         if (this.isShootingMode) {
             rawScore = this.score;
             grade = this.getShootingGrade();
         } else if (this._noddingMode) {
             rawScore = this.scoring.getCurrentScore();
             grade = this.getNoddingGrade();
+        } else if (this._roadMode) {
+            rawScore = this.scoring.getCurrentScore();
+            gradeDetail = this.getRoadGrade();
+            grade = gradeDetail.grade;
         } else {
             rawScore = this.scoring.getFinalScore();
             grade = this.scoring.getGrade();
@@ -738,6 +801,8 @@ export class GameEngine {
         const timeSec = Math.floor(this.gameTime);
         if (this._noddingMode) {
             ctx.fillText(`金币: ${coins}  存活: ${timeSec}秒`, width / 2, height / 2 + 50);
+        } else if (this._roadMode) {
+            ctx.fillText(`躲避车辆: ${destroyed}  存活: ${timeSec}秒`, width / 2, height / 2 + 50);
         } else {
             ctx.fillText(`击毁: ${destroyed}  金币: ${coins}  存活: ${timeSec}秒`, width / 2, height / 2 + 50);
         }
@@ -768,17 +833,25 @@ export class GameEngine {
         this.currentScene = scene;
         this.currentScene.init(this);
 
-        // 检查是否是射击模式场景
-        if (scene && scene.constructor.name === 'SceneSpaceShooting') {
+        // 通过 sceneType 属性识别场景（不能用 constructor.name，生产构建会混淆类名）
+        if (scene && scene.sceneType === 'shooting') {
             this.isShootingMode = true;
+            this._roadMode = false;
             this.player.x = 0.5;
             this.player.y = 0.95;
+        } else if (scene && scene.sceneType === 'road') {
+            this.isShootingMode = false;
+            this._roadMode = true;
+            // 玩家固定屏幕底部
+            this.player.x = 0.5;
+            this.player.y = 0.85;
         } else {
             this.isShootingMode = false;
+            this._roadMode = false;
         }
 
-        // 点头模式：禁用全局陀螺仪EMA，避免自动回中
-        window._noGyroEMA = !!(scene && scene.constructor.name === 'SceneSpaceNodding');
+        // 点头/隧道/公路模式：禁用全局陀螺仪EMA，避免自动回中
+        window._noGyroEMA = !!(scene && (scene.sceneType === 'nodding' || scene.sceneType === 'tunnel' || scene.sceneType === 'road'));
     }
 
     /**
@@ -831,6 +904,9 @@ export class GameEngine {
      */
     goToMenu() {
         this.setState(GameState.MENU);
+        // 显示游戏选择面板
+        const panel = document.getElementById('game-select-panel');
+        if (panel) panel.style.display = 'block';
     }
 
     /**
@@ -838,6 +914,7 @@ export class GameEngine {
      */
     cleanup() {
         this.stopGameLoop();
+        this._unbindGameOverHandler();
         if (this.currentScene) {
             this.currentScene.cleanup();
         }
@@ -845,6 +922,7 @@ export class GameEngine {
         this.currentScene = null;
         this.isShootingMode = false;
         this._noddingMode = false;
+        this._roadMode = false;
         window._noGyroEMA = false;
     }
 }

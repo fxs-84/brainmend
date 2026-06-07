@@ -37,9 +37,16 @@ export class GameUI {
                 color: white;
                 z-index: 2000;
             ">
-                <h2 style="text-align: center; margin-bottom: 20px; color: var(--primary);">
-                    选择游戏
-                </h2>
+                <div style="display: flex; align-items: center; margin-bottom: 20px;">
+                    <button id="game-back-to-menu" style="
+                        background: none; border: 1px solid rgba(255,255,255,0.2);
+                        border-radius: 6px; color: #9CA3AF; font-size: 13px;
+                        cursor: pointer; padding: 6px 14px;
+                    ">← 返回</button>
+                    <h2 style="flex: 1; text-align: center; margin: 0; color: var(--primary);">
+                        选择游戏
+                    </h2>
+                </div>
 
                 <!-- 场景选择 -->
                 <div style="margin-bottom: 20px;">
@@ -87,6 +94,20 @@ export class GameUI {
                         ">
                             🚀 太空点头 - 上下躲避吃金币
                         </button>
+                        <button class="mode-btn" data-mode="tunnel" style="
+                            padding: 10px; border: 2px solid transparent;
+                            border-radius: 6px; background: #1E293B; color: white;
+                            cursor: pointer; text-align: left;
+                        ">
+                            🌌 太空隧道 - 穿越小行星带
+                        </button>
+                        <button class="mode-btn" data-mode="road" style="
+                            padding: 10px; border: 2px solid transparent;
+                            border-radius: 6px; background: #1E293B; color: white;
+                            cursor: pointer; text-align: left;
+                        ">
+                            🏎️ 公路赛车 - 左右换道躲车
+                        </button>
                     </div>
                 </div>
 
@@ -118,6 +139,21 @@ export class GameUI {
      */
     init(container) {
         this.container = container;
+
+        // 绑定返回侧边栏按钮
+        const backBtn = document.getElementById('game-back-to-menu');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => {
+                this.hideSelectPanel();
+                // 清理游戏引擎
+                if (window.gameEngine) window.gameEngine.cleanup();
+                if (window.valleyEngine) window.valleyEngine.cleanup();
+                if (window.spaceEngine) window.spaceEngine.cleanup();
+                const floatingZero = document.getElementById('game-floating-zero-btn');
+                if (floatingZero) floatingZero.remove();
+                window.setMode('mode-select');
+            });
+        }
 
         // 绑定场景选择事件
         this.bindSceneEvents();
@@ -191,6 +227,7 @@ export class GameUI {
                     window.state.displayDotX = 0;
                     window.state.displayDotY = 0;
                     // 归零所有引擎的EMA基线
+                    if (window.gameEngine) window.gameEngine.rezero();
                     if (window.valleyEngine) window.valleyEngine.rezero();
                     if (window.spaceEngine) window.spaceEngine.rezero();
                     // 视觉反馈
@@ -235,6 +272,9 @@ export class GameUI {
             panel.style.display = 'none';
         }
 
+        // 创建游戏内浮动归零按钮
+        this._createFloatingZeroBtn();
+
         // 设置场景（等待场景加载完成）
         const handledByScene = await this.setScene(this.selectedScene);
 
@@ -242,8 +282,8 @@ export class GameUI {
         if (!handledByScene) {
             // 运动模式映射
             let modeToSet = this.selectedMode;
-            if (this.selectedMode === 'shooting') modeToSet = MotionMapper.MODES.SINGLE_YAW;
-            if (this.selectedMode === 'nodding') modeToSet = MotionMapper.MODES.SINGLE_PITCH;
+            if (this.selectedMode === 'shooting' || this.selectedMode === 'road') modeToSet = MotionMapper.MODES.SINGLE_YAW;
+            if (this.selectedMode === 'nodding' || this.selectedMode === 'tunnel') modeToSet = MotionMapper.MODES.SINGLE_PITCH;
             this.engine.setMotionMode(modeToSet);
             this.engine.start();
         }
@@ -278,6 +318,17 @@ export class GameUI {
      * 设置游戏场景
      */
     async setScene(sceneName) {
+        // 太空隧道模式
+        if (this.selectedMode === 'tunnel') {
+            try {
+                const module = await import('./scene-asteroid-tunnel.js');
+                const scene = new module.SceneAsteroidTunnel();
+                this.engine.setScene(scene);
+                this.engine._noddingMode = true;
+            } catch (err) { console.error('Failed to load tunnel scene:', err); }
+            return;
+        }
+
         // 太空点头模式
         if (this.selectedMode === 'nodding') {
             try {
@@ -300,6 +351,18 @@ export class GameUI {
                 }
             } catch (err) {
                 console.error('Failed to load shooting scene:', err);
+            }
+            return;
+        }
+
+        // 公路赛车模式
+        if (this.selectedMode === 'road') {
+            try {
+                const module = await import('./scene-road.js');
+                const scene = new module.SceneRoad();
+                this.engine.setScene(scene);
+            } catch (err) {
+                console.error('Failed to load road scene:', err);
             }
             return;
         }
@@ -395,5 +458,93 @@ export class GameUI {
                 btn.style.borderColor = 'var(--primary)';
             }
         });
+    }
+
+    /**
+     * 创建游戏内浮动归零按钮（可拖动，纠正陀螺仪漂移）
+     */
+    _createFloatingZeroBtn() {
+        this._removeFloatingZeroBtn();
+
+        const btn = document.createElement('button');
+        btn.id = 'game-floating-zero-btn';
+        btn.textContent = '⟳';
+        btn.title = '归零校准（可拖动）';
+        Object.assign(btn.style, {
+            position: 'fixed', bottom: '36px', right: '36px', zIndex: '5001',
+            width: '52px', height: '52px', borderRadius: '50%',
+            background: 'rgba(55, 65, 81, 0.85)', border: '2px solid rgba(255,255,255,0.3)',
+            color: '#fff', fontSize: '22px', cursor: 'grab',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+            userSelect: 'none', touchAction: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'background 0.2s, border-color 0.2s'
+        });
+
+        let dragging = false, startX, startY, startLeft, startTop, moved = false;
+
+        const onStart = (e) => {
+            dragging = true; moved = false;
+            btn.style.cursor = 'grabbing';
+            btn.style.transition = 'none';
+            const pt = e.touches ? e.touches[0] : e;
+            startX = pt.clientX; startY = pt.clientY;
+            const r = btn.getBoundingClientRect();
+            startLeft = r.left; startTop = r.top;
+            e.preventDefault();
+        };
+
+        const onMove = (e) => {
+            if (!dragging) return;
+            const pt = e.touches ? e.touches[0] : e;
+            const dx = pt.clientX - startX, dy = pt.clientY - startY;
+            if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
+            btn.style.left = (startLeft + dx) + 'px';
+            btn.style.top = (startTop + dy) + 'px';
+            btn.style.right = 'auto'; btn.style.bottom = 'auto';
+        };
+
+        const onEnd = () => {
+            dragging = false;
+            btn.style.cursor = 'grab';
+            btn.style.transition = 'background 0.2s, border-color 0.2s';
+        };
+
+        btn.addEventListener('mousedown', onStart);
+        btn.addEventListener('touchstart', onStart, { passive: false });
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('touchmove', onMove, { passive: false });
+        window.addEventListener('mouseup', onEnd);
+        window.addEventListener('touchend', onEnd);
+
+        btn.addEventListener('click', () => {
+            if (moved) return;
+            if (window.state) {
+                window.state.yawOffset = window.state.yaw + window.state.yawOffset;
+                window.state.pitchOffset = window.state.pitch + window.state.pitchOffset;
+                window.state.rollOffset = window.state.roll + window.state.rollOffset;
+                window.state.pitch = 0; window.state.yaw = 0; window.state.roll = 0;
+                window.state.dotX = 0; window.state.dotY = 0;
+                window.state.displayDotX = 0; window.state.displayDotY = 0;
+            }
+            if (window.gameEngine) window.gameEngine.rezero();
+            if (window.valleyEngine) window.valleyEngine.rezero();
+            if (window.spaceEngine) window.spaceEngine.rezero();
+            btn.style.background = 'rgba(5, 150, 105, 0.9)';
+            btn.style.borderColor = '#10B981';
+            setTimeout(() => {
+                btn.style.background = 'rgba(55, 65, 81, 0.85)';
+                btn.style.borderColor = 'rgba(255,255,255,0.3)';
+            }, 800);
+        });
+
+        this._floatingZeroBtn = btn;
+        document.body.appendChild(btn);
+    }
+
+    _removeFloatingZeroBtn() {
+        const existing = document.getElementById('game-floating-zero-btn');
+        if (existing) existing.remove();
+        this._floatingZeroBtn = null;
     }
 }

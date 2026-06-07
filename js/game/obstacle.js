@@ -384,7 +384,7 @@ export class ObstacleSpiral extends Obstacle {
     }
 
     isOffScreen(canvasWidth, canvasHeight) {
-        return this.x < -0.2;
+        return this.y > 1.15 || this.y < -0.15 || this.x < -0.15 || this.x > 1.15;
     }
 }
 
@@ -397,20 +397,19 @@ export class ObstacleVehicle extends Obstacle {
         super({
             x: config.x || 0.5,
             y: config.y || -0.1,
-            radius: 0.04,
+            radius: 0.045,
             speedY: config.speedY || 0.12,
             type: 'vehicle',
-            color: config.lane === 0 ? '#3B82F6' : '#EF4444',
+            color: config.color || '#3B82F6',
             ...config
         });
 
-        this.width = 0.08;
-        this.height = 0.06;
-        this.lane = config.lane || 0;  // 0=左侧, 1=右侧
+        this.width = 0.07;
+        this.height = 0.12;
+        this.lane = config.lane ?? 0;
     }
 
     update(dt, speedMultiplier = 1) {
-        // 车辆主要向下移动
         this.y += this.speedY * dt * speedMultiplier;
     }
 
@@ -426,9 +425,22 @@ export class ObstacleVehicle extends Obstacle {
         ctx.fillStyle = this.color;
         ctx.fillRect(-w / 2, -h / 2, w, h);
 
+        // 车头（深色，向下）
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(-w / 2 + 4, h / 2 - h * 0.25, w - 8, h * 0.22);
+
         // 车窗
-        ctx.fillStyle = '#1E3A5F';
-        ctx.fillRect(-w / 3, -h / 3, w * 0.6, h * 0.4);
+        ctx.fillStyle = '#1E293B';
+        ctx.fillRect(-w / 3, -h * 0.35, w * 0.6, h * 0.45);
+
+        // 车顶反光
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillRect(-w / 3 + 2, -h * 0.3, w * 0.6 - 4, 2);
+
+        // 边框
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(-w / 2, -h / 2, w, h);
 
         ctx.restore();
     }
