@@ -411,17 +411,71 @@ export class ObstacleVehicle extends Obstacle {
         this.bodyColor = config.bodyColor || '#3B82F6';
         this.trimColor = config.trimColor || '#1E3A8A';
         this.carType = config.carType || 'sedan';
+
+        // 运动效果：尾气 + 微震动
+        this.exhaustParticles = [];
+        this.exhaustTimer = 0;
+        this.exhaustInterval = 0.12;
+        this.wobblePhase = Math.random() * Math.PI * 2;
+        this.wobbleSpeed = 12 + Math.random() * 4;
+        this.wobbleAmplitude = 0.0015;
     }
 
     update(dt, speedMultiplier = 1) {
         this.y += this.speedY * dt * speedMultiplier;
+        this.wobblePhase += this.wobbleSpeed * dt;
+        this._updateExhaust(dt);
+    }
+
+    _updateExhaust(dt) {
+        this.exhaustTimer += dt;
+        if (this.exhaustTimer >= this.exhaustInterval) {
+            this.exhaustTimer = 0;
+            // 排气管位置：稍低于车尾保险杠，营造"喷出"感
+            for (const offset of [-0.014, 0.014]) {
+                this.exhaustParticles.push({
+                    x: this.x + offset + (Math.random() - 0.5) * 0.004,
+                    y: this.y + this.height * 0.5 + 0.006,
+                    life: 0.7,
+                    age: 0,
+                    vy: this.speedY + 0.06 + Math.random() * 0.04,
+                    size: 1.4 + Math.random() * 0.6
+                });
+            }
+        }
+        for (const p of this.exhaustParticles) {
+            p.age += dt;
+            p.y += p.vy * dt;
+            p.size += dt * 5;
+        }
+        this.exhaustParticles = this.exhaustParticles.filter(p => p.age < p.life);
+        if (this.exhaustParticles.length > 25) {
+            this.exhaustParticles.splice(0, this.exhaustParticles.length - 25);
+        }
     }
 
     render(ctx) {
-        const pos = this.getPixelPosition(ctx.canvas.width, ctx.canvas.height);
-        const w = this.width * ctx.canvas.width;
-        const h = this.height * ctx.canvas.height;
-        drawCarTopDown(ctx, pos.x, pos.y, w, h, {
+        const cw = ctx.canvas.width;
+        const ch = ctx.canvas.height;
+
+        // 1. 尾气粒子（在车后画）
+        for (const p of this.exhaustParticles) {
+            const px = p.x * cw;
+            const py = p.y * ch;
+            const alpha = Math.max(0, 1 - p.age / p.life) * 0.45;
+            ctx.fillStyle = `rgba(140,148,158,${alpha})`;
+            ctx.beginPath();
+            ctx.arc(px, py, p.size * 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // 2. 车体（带微震动）
+        const pos = this.getPixelPosition(cw, ch);
+        const w = this.width * cw;
+        const h = this.height * ch;
+        const wobbleX = Math.sin(this.wobblePhase) * this.wobbleAmplitude * cw;
+
+        drawCarTopDown(ctx, pos.x + wobbleX, pos.y, w, h, {
             body: this.bodyColor,
             trim: this.trimColor,
             windowTint: 'rgba(186,230,253,0.78)',
