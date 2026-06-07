@@ -153,20 +153,19 @@ export class SceneRoad extends SceneBase {
     }
 
     /**
-     * 5 车道色带：底层 5 条不同深浅的灰色带，远端也保持区分，肉眼一眼能数
-     * 顶层 4 条白色实线分隔，远端略向中心收敛（弱收敛保留纵深）
+     * 5 车道色带：5 段**完全不同**深浅的色带 + 4 条**完全实线**白色分隔
+     * 远端也保持强对比，5 车道永远肉眼可数
      */
     _renderLaneBands(ctx, width, height, roadTop) {
         const roadH = height - roadTop;
-        // 5 条色带（中间略亮、外侧略暗，模拟路面磨损）
-        const bandShades = ['#1F1F23', '#2A2A30', '#2A2A30', '#2A2A30', '#1F1F23'];
-        // 第 2、4 车道（中间）略亮，让外 1/5 车道稍暗 → 视觉上像真实高速的 5 车道
+        // 5 段**完全独立**的深浅（不重复），强制 5 段视觉可分
+        const bandShades = ['#16161A', '#22222A', '#2D2D36', '#22222A', '#16161A'];
         const bandW = width / 5;
         for (let i = 0; i < 5; i++) {
             ctx.fillStyle = bandShades[i];
             ctx.fillRect(i * bandW, roadTop, bandW, roadH);
         }
-        // 重画路面渐变（让色带仍带远亮近暗的纵深感）
+        // 路面渐变叠层（保留远亮近暗的纵深感）
         const overlay = ctx.createLinearGradient(0, roadTop, 0, height);
         overlay.addColorStop(0, 'rgba(82,82,91,0.45)');
         overlay.addColorStop(0.4, 'rgba(39,39,42,0.25)');
@@ -174,25 +173,29 @@ export class SceneRoad extends SceneBase {
         ctx.fillStyle = overlay;
         ctx.fillRect(0, roadTop, width, roadH);
 
-        // 4 条白色实线分隔（弱收敛 → pMin=0.55，地平线仍保留 45% 区分度）
+        // 4 条分隔线：直接从 lanes 数组计算边界，绝不硬编码
+        // lanes=[0.18,0.34,0.5,0.66,0.82] → 边界=(0.18+0.34)/2 等
+        const sepXs = [];
+        for (let i = 0; i < this.lanes.length - 1; i++) {
+            sepXs.push((this.lanes[i] + this.lanes[i + 1]) / 2);
+        }
+        // 远端 pMin=0.7（保留 70% 区分度）→ 地平线仍清晰分开
         const vanishX = 0.5;
-        const pMin = 0.55;
-        const sepXs = [0.2, 0.4, 0.6, 0.8];  // 4 条分隔的基准 x（对应 5 车道边界）
+        const pMin = 0.7;
         for (const sepX of sepXs) {
             for (const line of this.roadLines) {
                 if (!line.visible) continue;
                 const yNorm = line.y;
                 if (yNorm < -0.05 || yNorm > 1.1) continue;
                 const y = roadTop + yNorm * roadH;
-                // 远端 p=pMin (55% 区分) → 近端 p=1 (100% 区分)
                 const p = pMin + (1 - pMin) * yNorm;
                 const xNorm = vanishX + (sepX - vanishX) * p;
                 const xPx = xNorm * width;
-                // 实线段：长度按 y 缩放，但最小 14px，远端也清晰
-                const dashLen = 14 + yNorm * 32;
-                const dashW = 2.5 + yNorm * 2.5;
-                ctx.fillStyle = 'rgba(255,255,255,0.92)';
-                ctx.fillRect(xPx - dashW / 2, y, dashW, dashLen);
+                // 完全实线（不是 dash 段），宽度 3px 起步，远近都清晰
+                const segLen = 18 + yNorm * 26;
+                const segW = 3 + yNorm * 1.5;
+                ctx.fillStyle = 'rgba(255,255,255,0.95)';
+                ctx.fillRect(xPx - segW / 2, y, segW, segLen);
             }
         }
     }
