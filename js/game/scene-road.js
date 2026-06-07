@@ -26,18 +26,18 @@ const CAR_TYPES = ['sedan', 'sedan', 'sedan', 'suv', 'sports', 'sedan', 'suv', '
 // 公路赛车专属车流密度配置（与 difficulty 解耦：难易度管分数/速度，车流密度管"热闹度"）
 const ROAD_TRAFFIC = {
     spawnInterval: 900,    // ms（difficulty 默认 1500）
-    maxObstacles: 5,        // 路上最多同时 5 辆（留玩家反应窗口，不被密度直接撞死）
+    maxObstacles: 6,        // v13：路上最多同时 6 辆（加量后留玩家反应窗口）
     convoyChance: 0.30,     // 30% 概率生成车队（相邻车道同时出）
     convoySizeRange: [2, 2], // 车队固定 2 辆
-    coinChainChance: 0.18,  // 18% 概率在 spawn 间隔里再发一串金币（纵向 3-5 枚）
-    coinChainLength: [3, 5],
+    coinChainChance: 0.35,  // v13：18%→35% 概率在 spawn 间隔里再发一串金币
+    coinChainLength: [4, 7], // v13：3-5→4-7 枚（v13 加量）
     boostChance: 0.06,      // 6% 概率发一个加速道具
-    // v12：道路生态家族 — 5 种新障碍物（合计 24%）
-    spikeChance: 0.06,      // 6% 地刺（扣血）
-    rockChance: 0.05,       // 5% 石头（扣血重）
-    oilChance: 0.05,        // 5% 油污（减速 0.5s）
-    potholeChance: 0.04,    // 4% 路面坑（颠簸 0.3s）
-    coneChance: 0.04        // 4% 锥桶（轻扣血）
+    // v13：道路生态家族 — 5 种新障碍物（合计 24%→38%，每种 +60%）
+    spikeChance: 0.10,      // 6%→10% 地刺（扣血）
+    rockChance: 0.08,       // 5%→8%  石头（扣血重）
+    oilChance: 0.08,        // 5%→8%  油污（减速 1.5s）
+    potholeChance: 0.06,    // 4%→6%  路面坑（颠簸 0.6s）
+    coneChance: 0.06        // 4%→6%  锥桶（轻扣血）
 };
 
 export class SceneRoad extends SceneBase {

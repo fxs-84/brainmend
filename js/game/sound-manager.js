@@ -225,13 +225,13 @@ export class SoundManager {
     }
 
     /**
-     * 调整引擎 RPM（频率）：speedMul=0.5 → 60Hz, speedMul=1.0 → 90Hz, speedMul=1.5 → 130Hz
+     * 调整引擎 RPM（频率）：speedMul=0.3 → 40Hz, speedMul=1.8 → 250Hz
      * 同步调整增益让"加速时引擎声更猛"
      */
     setEngineRPM(speedMul) {
         if (!this._engineOsc) return;
-        // 频率 40-180Hz 映射，speed ∈ [0.3, 1.8]
-        const f = 40 + Math.max(0, Math.min(1, (speedMul - 0.3) / 1.5)) * 140;
+        // v13：频率 40-250Hz 映射，speed ∈ [0.3, 1.8]（用户要求 180→250Hz）
+        const f = 40 + Math.max(0, Math.min(1, (speedMul - 0.3) / 1.5)) * 210;
         const target = Math.round(f);
         this._engineOsc.frequency.setTargetAtTime(target, this.audioContext.currentTime, 0.08);
         if (this._engineOsc2) this._engineOsc2.frequency.setTargetAtTime(target * 1.05, this.audioContext.currentTime, 0.08);
