@@ -421,8 +421,33 @@ export class GameEngine {
                 }
             }
 
+            // v12：油污 debuff（撞了不扣血，触发 scene 减速 + 玩家车变黑）
+            if (obstacle.type === 'oil' && !obstacle.isCollected) {
+                if (CollisionDetector.checkPlayerObstacle(this.player, obstacle, this.canvas)) {
+                    obstacle.isCollected = true;
+                    this.obstacles.splice(i, 1);
+                    if (this.currentScene && this.currentScene.activateOilDebuff) {
+                        this.currentScene.activateOilDebuff();
+                    }
+                    continue;
+                }
+            }
+
+            // v12：路面坑颠簸（撞了不扣血，触发 scene 颠簸 + 玩家车上下颠）
+            if (obstacle.type === 'pothole' && !obstacle.isCollected) {
+                if (CollisionDetector.checkPlayerObstacle(this.player, obstacle, this.canvas)) {
+                    obstacle.isCollected = true;
+                    this.obstacles.splice(i, 1);
+                    if (this.currentScene && this.currentScene.activatePotholeBump) {
+                        this.currentScene.activatePotholeBump();
+                    }
+                    continue;
+                }
+            }
+
             // 障碍物碰撞检测
             if (obstacle.type !== 'coin' && obstacle.type !== 'boost' &&
+                obstacle.type !== 'oil' && obstacle.type !== 'pothole' &&
                 CollisionDetector.checkPlayerObstacle(this.player, obstacle, this.canvas)) {
                 // 撞了：移除障碍物（防止连续碰撞）
                 this.obstacles.splice(i, 1);

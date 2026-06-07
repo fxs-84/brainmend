@@ -675,6 +675,283 @@ export class ObstacleCoin extends Obstacle {
     }
 }
 
+// v12：道路生态家族 — 地刺 / 石头 / 油污 / 坑 / 锥桶
+// 5 种新障碍物，每种视觉/行为差异化，提供场景多样性
+// ============================================================
+
+/**
+ * 地刺：路面上钉的尖刺，三角形簇，撞了扣 1 血 + 屏幕红闪
+ */
+export class ObstacleSpike extends Obstacle {
+    constructor(config = {}) {
+        super({
+            x: config.x || 0.5,
+            y: config.y || -0.1,
+            radius: 0.04,
+            speedY: config.speedY || 0.18,
+            type: 'spike',
+            color: '#71717A',
+            ...config
+        });
+        this.spikeCount = 5;
+    }
+
+    render(ctx) {
+        const pos = this.getPixelPosition(ctx.canvas.width, ctx.canvas.height);
+        const baseY = pos.y + pos.radius * 0.3;
+        const spread = pos.radius * 2.2;
+        for (let i = 0; i < this.spikeCount; i++) {
+            const offsetX = (i - (this.spikeCount - 1) / 2) * (spread / this.spikeCount);
+            const px = pos.x + offsetX;
+            ctx.save();
+            ctx.translate(px, baseY);
+            ctx.fillStyle = '#71717A';
+            ctx.beginPath();
+            ctx.moveTo(0, -pos.radius * 0.9);
+            ctx.lineTo(-pos.radius * 0.35, pos.radius * 0.4);
+            ctx.lineTo(pos.radius * 0.35, pos.radius * 0.4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#D4D4D8';
+            ctx.beginPath();
+            ctx.moveTo(0, -pos.radius * 0.9);
+            ctx.lineTo(-pos.radius * 0.15, 0);
+            ctx.lineTo(pos.radius * 0.05, -pos.radius * 0.1);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#27272A';
+            ctx.fillRect(-pos.radius * 0.4, pos.radius * 0.3, pos.radius * 0.8, pos.radius * 0.3);
+            ctx.restore();
+        }
+    }
+}
+
+/**
+ * 石头：硬质路障，撞了扣 1 血 + 整屏震 + 火花飞溅
+ */
+export class ObstacleRock extends Obstacle {
+    constructor(config = {}) {
+        super({
+            x: config.x || 0.5,
+            y: config.y || -0.1,
+            radius: 0.05,
+            speedY: config.speedY || 0.10,
+            type: 'rock',
+            color: '#78716C',
+            ...config
+        });
+        this.vertices = [];
+        for (let i = 0; i < 6; i++) {
+            const angle = (i / 6) * Math.PI * 2;
+            this.vertices.push({ angle, dist: 0.7 + Math.random() * 0.5 });
+        }
+        this.crackPaths = [
+            [[-0.3, -0.4], [0.1, -0.1], [0.2, 0.3]],
+            [[-0.5, 0.1], [-0.1, 0.0], [0.3, -0.2]]
+        ];
+    }
+
+    render(ctx) {
+        const pos = this.getPixelPosition(ctx.canvas.width, ctx.canvas.height);
+        ctx.save();
+        ctx.translate(pos.x, pos.y);
+        ctx.fillStyle = '#78716C';
+        ctx.beginPath();
+        for (let i = 0; i < this.vertices.length; i++) {
+            const v = this.vertices[i];
+            const x = Math.cos(v.angle) * pos.radius * v.dist;
+            const y = Math.sin(v.angle) * pos.radius * v.dist;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(28,25,23,0.45)';
+        ctx.beginPath();
+        for (let i = 0; i < this.vertices.length; i++) {
+            const v = this.vertices[i];
+            const x = Math.cos(v.angle) * pos.radius * v.dist;
+            const y = Math.sin(v.angle) * pos.radius * v.dist;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(214,211,209,0.5)';
+        ctx.beginPath();
+        ctx.moveTo(-pos.radius * 0.5, -pos.radius * 0.3);
+        ctx.lineTo(-pos.radius * 0.2, -pos.radius * 0.6);
+        ctx.lineTo(pos.radius * 0.1, -pos.radius * 0.4);
+        ctx.lineTo(-pos.radius * 0.1, -pos.radius * 0.15);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(28,25,23,0.6)';
+        ctx.lineWidth = 1.2;
+        for (const path of this.crackPaths) {
+            ctx.beginPath();
+            ctx.moveTo(path[0][0] * pos.radius, path[0][1] * pos.radius);
+            for (let i = 1; i < path.length; i++) {
+                ctx.lineTo(path[i][0] * pos.radius, path[i][1] * pos.radius);
+            }
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+}
+
+/**
+ * 油污：黑色油渍，撞了触发减速 0.5s + 玩家车短暂变黑 + 屏幕暗角
+ */
+export class ObstacleOil extends Obstacle {
+    constructor(config = {}) {
+        super({
+            x: config.x || 0.5,
+            y: config.y || -0.1,
+            radius: 0.055,
+            speedY: config.speedY || 0.16,
+            type: 'oil',
+            color: '#1C1917',
+            ...config
+        });
+        this.blotCount = 4;
+        this.blots = [];
+        for (let i = 0; i < this.blotCount; i++) {
+            this.blots.push({
+                dx: (Math.random() - 0.5) * 0.6,
+                dy: (Math.random() - 0.5) * 0.6,
+                size: 0.45 + Math.random() * 0.35
+            });
+        }
+    }
+
+    render(ctx) {
+        const pos = this.getPixelPosition(ctx.canvas.width, ctx.canvas.height);
+        for (const b of this.blots) {
+            const bx = pos.x + b.dx * pos.radius;
+            const by = pos.y + b.dy * pos.radius;
+            const br = pos.radius * b.size;
+            const grad = ctx.createRadialGradient(bx, by, 0, bx, by, br);
+            grad.addColorStop(0, 'rgba(28,25,23,0.92)');
+            grad.addColorStop(0.5, 'rgba(28,25,23,0.78)');
+            grad.addColorStop(1, 'rgba(28,25,23,0)');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(bx, by, br, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.fillStyle = 'rgba(168,162,158,0.25)';
+        ctx.beginPath();
+        ctx.ellipse(pos.x - pos.radius * 0.2, pos.y - pos.radius * 0.2, pos.radius * 0.3, pos.radius * 0.1, -0.3, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+/**
+ * 路面坑：沥青裂缝 + 阴影，撞了上下颠簸 0.3s + 短失控
+ */
+export class ObstaclePothole extends Obstacle {
+    constructor(config = {}) {
+        super({
+            x: config.x || 0.5,
+            y: config.y || -0.1,
+            radius: 0.06,
+            speedY: config.speedY || 0.15,
+            type: 'pothole',
+            color: '#0C0A09',
+            ...config
+        });
+        this.aspect = 1.6;
+    }
+
+    render(ctx) {
+        const pos = this.getPixelPosition(ctx.canvas.width, ctx.canvas.height);
+        const rx = pos.radius * this.aspect;
+        const ry = pos.radius;
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.beginPath();
+        ctx.ellipse(pos.x, pos.y + ry * 0.15, rx * 1.05, ry * 1.1, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#0C0A09';
+        ctx.beginPath();
+        ctx.ellipse(pos.x, pos.y, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(63,63,70,0.5)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 3; i++) {
+            ctx.beginPath();
+            const t = (i - 1) * 0.3;
+            ctx.moveTo(pos.x + rx * t, pos.y - ry * 0.3);
+            ctx.lineTo(pos.x + rx * t * 0.7, pos.y + ry * 0.4);
+            ctx.stroke();
+        }
+        ctx.strokeStyle = 'rgba(228,228,231,0.45)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.ellipse(pos.x, pos.y, rx, ry, 0, Math.PI * 1.1, Math.PI * 1.9);
+        ctx.stroke();
+    }
+}
+
+/**
+ * 锥桶（施工路障）：橙白条纹锥形，可撞飞（轻扣血）
+ */
+export class ObstacleCone extends Obstacle {
+    constructor(config = {}) {
+        super({
+            x: config.x || 0.5,
+            y: config.y || -0.1,
+            radius: 0.025,
+            speedY: config.speedY || 0.22,
+            type: 'cone',
+            color: '#F97316',
+            ...config
+        });
+        this.wobblePhase = Math.random() * Math.PI * 2;
+    }
+
+    update(dt, speedMultiplier = 1) {
+        super.update(dt, speedMultiplier);
+        this.wobblePhase += 4 * dt;
+    }
+
+    render(ctx) {
+        const pos = this.getPixelPosition(ctx.canvas.width, ctx.canvas.height);
+        const wobble = Math.sin(this.wobblePhase) * 0.08;
+        ctx.save();
+        ctx.translate(pos.x, pos.y);
+        ctx.rotate(wobble);
+        ctx.fillStyle = '#1C1917';
+        ctx.fillRect(-pos.radius * 1.0, pos.radius * 0.6, pos.radius * 2.0, pos.radius * 0.18);
+        ctx.fillStyle = '#F97316';
+        ctx.beginPath();
+        ctx.moveTo(-pos.radius * 0.95, pos.radius * 0.6);
+        ctx.lineTo(pos.radius * 0.95, pos.radius * 0.6);
+        ctx.lineTo(pos.radius * 0.45, -pos.radius * 0.8);
+        ctx.lineTo(-pos.radius * 0.45, -pos.radius * 0.8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.moveTo(-pos.radius * 0.8, pos.radius * 0.2);
+        ctx.lineTo(pos.radius * 0.8, pos.radius * 0.2);
+        ctx.lineTo(pos.radius * 0.7, pos.radius * 0.05);
+        ctx.lineTo(-pos.radius * 0.7, pos.radius * 0.05);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.moveTo(-pos.radius * 0.6, -pos.radius * 0.3);
+        ctx.lineTo(pos.radius * 0.6, -pos.radius * 0.3);
+        ctx.lineTo(pos.radius * 0.55, -pos.radius * 0.45);
+        ctx.lineTo(-pos.radius * 0.55, -pos.radius * 0.45);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#1C1917';
+        ctx.fillRect(-pos.radius * 0.06, -pos.radius * 0.8, pos.radius * 0.12, pos.radius * 0.15);
+        ctx.restore();
+    }
+}
+
 // ============================================================
 // OBSTACLE BOOST - 加速道具（闪电图标）
 // 玩家撞到后 lineSpeed 临时翻倍 + 加分
@@ -720,7 +997,6 @@ export class ObstacleBoost extends Obstacle {
         ctx.translate(px, py);
         ctx.rotate(this.rotationAngle);
 
-        // 外光晕
         const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2.2);
         glow.addColorStop(0, 'rgba(252,211,77,0.55)');
         glow.addColorStop(0.4, 'rgba(252,211,77,0.2)');
@@ -730,18 +1006,15 @@ export class ObstacleBoost extends Obstacle {
         ctx.arc(0, 0, r * 2.2, 0, Math.PI * 2);
         ctx.fill();
 
-        // 黄色圆盘
         ctx.fillStyle = '#FCD34D';
         ctx.beginPath();
         ctx.arc(0, 0, r, 0, Math.PI * 2);
         ctx.fill();
 
-        // 深色描边
         ctx.strokeStyle = '#92400E';
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // 闪电符号
         ctx.fillStyle = '#7C2D12';
         ctx.beginPath();
         ctx.moveTo(-r * 0.18, -r * 0.55);

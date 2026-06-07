@@ -3,7 +3,8 @@
 // 5 车道 + yaw 换道 + 俯视真实感车体 + 路边视差景物 + 透视收敛
 // ============================================================
 
-import { ObstacleVehicle, ObstacleCoin, ObstacleBoost } from './obstacle.js';
+import { ObstacleVehicle, ObstacleCoin, ObstacleBoost,
+         ObstacleSpike, ObstacleRock, ObstacleOil, ObstaclePothole, ObstacleCone } from './obstacle.js';
 import { SceneBase } from './scene-base.js';
 import { drawCarTopDown } from './car-renderer.js';
 
@@ -30,7 +31,13 @@ const ROAD_TRAFFIC = {
     convoySizeRange: [2, 2], // 车队固定 2 辆
     coinChainChance: 0.18,  // 18% 概率在 spawn 间隔里再发一串金币（纵向 3-5 枚）
     coinChainLength: [3, 5],
-    boostChance: 0.06       // 6% 概率发一个加速道具
+    boostChance: 0.06,      // 6% 概率发一个加速道具
+    // v12：道路生态家族 — 5 种新障碍物（合计 24%）
+    spikeChance: 0.06,      // 6% 地刺（扣血）
+    rockChance: 0.05,       // 5% 石头（扣血重）
+    oilChance: 0.05,        // 5% 油污（减速 0.5s）
+    potholeChance: 0.04,    // 4% 路面坑（颠簸 0.3s）
+    coneChance: 0.04        // 4% 锥桶（轻扣血）
 };
 
 export class SceneRoad extends SceneBase {
@@ -48,6 +55,10 @@ export class SceneRoad extends SceneBase {
         this.playerSpeed = 1.0;
         // 加速道具临时加成（4 秒倒计时，>0 时 scrollMul × 1.5）
         this.boostTimer = 0;
+        // v12：油污 debuff（0.5s 减速 + 玩家车变黑）
+        this.oilDebuffTimer = 0;
+        // v12：路面坑颠簸 timer（0.3s 屏幕抖 + 玩家车上下颠）
+        this.bumpTimer = 0;
         // 玩家排气尾烟
         this.playerExhaustParticles = [];
         this.playerExhaustTimer = 0;
@@ -84,20 +95,30 @@ export class SceneRoad extends SceneBase {
         this.clouds = null;
         this.mountainPhases = null;
         this.playerSpeed = 1.0;
+        // v12：debuff 计时器重置
+        this.oilDebuffTimer = 0;
+        this.bumpTimer = 0;
     }
 
     cleanup() {
         this.playerExhaustParticles = [];
         this.playerExhaustTimer = 0;
+        this.oilDebuffTimer = 0;
+        this.bumpTimer = 0;
     }
 
     update(dt) {
         super.update(dt);
         // 加速道具倒计时
-        if (this.boostTimer > 0) this.boostTimer -= dt;
+        if (this.boostTimer > 0) this.boostTimer = Math.max(0, this.boostTimer - dt);
+        // v12：debuff 倒计时
+        if (this.oilDebuffTimer > 0) this.oilDebuffTimer = Math.max(0, this.oilDebuffTimer - dt);
+        if (this.bumpTimer > 0) this.bumpTimer = Math.max(0, this.bumpTimer - dt);
         // 玩家速度影响路面/景物的滚动速度（pitch 抬头加速 → 路面动得更快，主观感"加速"）
         const boostMul = this.boostTimer > 0 ? 1.5 : 1.0;
-        const scrollMul = this.playerSpeed * boostMul;
+        // v12：油污 debuff 期间 scrollMul × 0.5（减速感）
+        const oilMul = this.oilDebuffTimer > 0 ? 0.5 : 1.0;
+        const scrollMul = this.playerSpeed * boostMul * oilMul;
         for (const line of this.roadLines) {
             line.y += this.lineSpeed * dt * scrollMul;
             if (line.y > 1.1) line.y = -0.05;
@@ -562,6 +583,33 @@ export class SceneRoad extends SceneBase {
             obstacleList.push(car);
         }
 
+        // v12：道路生态家族 — 5 种新障碍物，依次独立判断（必须先于 coin/boost，
+        // 否则 coinChain 3-5 枚金币 + 1 个 boost 会把 obstacleList 灌满到 5，
+        // 后续 v12 五兄弟没有 lane 也没有空间）
+        const v12Types = [
+            { type: 'spike',   Cls: ObstacleSpike,   chance: cfg.spikeChance,   y: 0.12 },
+            { type: 'rock',    Cls: ObstacleRock,    chance: cfg.rockChance,    y: 0.10 },
+            { type: 'oil',     Cls: ObstacleOil,     chance: cfg.oilChance,     y: 0.16 },
+            { type: 'pothole', Cls: ObstaclePothole, chance: cfg.potholeChance, y: 0.18 },
+            { type: 'cone',    Cls: ObstacleCone,    chance: cfg.coneChance,    y: 0.14 }
+        ];
+        for (const t of v12Types) {
+            if (obstacleList.length >= cfg.maxObstacles) break;
+            if (Math.random() >= t.chance) continue;
+            const freeLanes = [];
+            for (let i = 0; i < this.lanes.length; i++) {
+                if (!usedLanes.has(i)) freeLanes.push(i);
+            }
+            if (freeLanes.length === 0) continue;
+            const lane = freeLanes[Math.floor(Math.random() * freeLanes.length)];
+            usedLanes.add(lane);
+            obstacleList.push(new t.Cls({
+                x: this.lanes[lane],
+                y: t.y,
+                speedY: 0.32
+            }));
+        }
+
         // 金币链：在车队旁边的空闲车道纵向铺 3-5 枚金币
         if (obstacleList.length < cfg.maxObstacles && Math.random() < cfg.coinChainChance) {
             // 找一条车队没用过的车道
@@ -624,6 +672,20 @@ export class SceneRoad extends SceneBase {
         this.boostTimer = 4.0;
     }
 
+    /**
+     * v12：激活油污 debuff — 减速 1.5s + 玩家车变黑
+     */
+    activateOilDebuff() {
+        this.oilDebuffTimer = 1.5;
+    }
+
+    /**
+     * v12：激活路面坑颠簸 — 0.6s 玩家车上下颠
+     */
+    activatePotholeBump() {
+        this.bumpTimer = 0.6;
+    }
+
     _updatePlayerExhaust(dt) {
         this.playerExhaustTimer += dt;
         if (this.playerExhaustTimer >= 0.08) {
@@ -672,12 +734,19 @@ export class SceneRoad extends SceneBase {
 
         // 2. 车体
         const px = playerX * width;
-        const py = playerY * height;
+        // v12：路面坑颠簸 — 玩家车上下颠
+        const bumpOffset = this.bumpTimer > 0
+            ? Math.sin((1 - this.bumpTimer / 0.3) * Math.PI * 4) * 8 * (this.bumpTimer / 0.3)
+            : 0;
+        const py = playerY * height + bumpOffset;
         const carW = width * 0.055;
         const carH = height * 0.16;
+        // v12：油污 debuff — 玩家车短暂变黑
+        const bodyColor = this.oilDebuffTimer > 0 ? '#1C1917' : '#DC2626';
+        const trimColor = this.oilDebuffTimer > 0 ? '#0A0A0A' : '#7F1D1D';
         drawCarTopDown(ctx, px, py, carW, carH, {
-            body: '#DC2626',
-            trim: '#7F1D1D',
+            body: bodyColor,
+            trim: trimColor,
             windowTint: 'rgba(186,230,253,0.9)',
             carType: 'sports',
             isPlayer: true
