@@ -42,11 +42,11 @@ const log = (m) => console.log(`[v14-hunt] ${m}`);
         };
     });
     console.log(JSON.stringify(result, null, 2));
-    if (result.hitRate < 0.30) {
-        console.log(`❌ FAIL: 玩家车道命中率应 ≥30%（v14 设计目标 1.5s/威胁），实际 ${(result.hitRate*100).toFixed(1)}%`);
+    if (result.hitRate < 0.20) {
+        console.log(`❌ FAIL: 玩家车道命中率应 ≥20%（v15 设计目标 2s/威胁），实际 ${(result.hitRate*100).toFixed(1)}%`);
         process.exitCode = 1;
     } else {
-        console.log(`✅ PASS: 玩家车道命中率 ${(result.hitRate*100).toFixed(1)}%（≥30% 阈值 = 平均 1.5s 一个威胁）`);
+        console.log(`✅ PASS: 玩家车道命中率 ${(result.hitRate*100).toFixed(1)}%（≥20% 阈值 = 平均 2s 一个威胁）`);
     }
     await browser.close();
 })();

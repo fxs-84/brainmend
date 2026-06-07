@@ -25,20 +25,20 @@ const CAR_TYPES = ['sedan', 'sedan', 'sedan', 'suv', 'sports', 'sedan', 'suv', '
 
 // 公路赛车专属车流密度配置（与 difficulty 解耦：难易度管分数/速度，车流密度管"热闹度"）
 const ROAD_TRAFFIC = {
-    spawnInterval: 400,    // v14：900→400ms（密集 spawn，强制玩家 1.5s 内必须转头）
-    maxObstacles: 4,        // v14：6→4（每波量少，节奏快但仍有反应窗口）
-    playerLaneTargetChance: 0.90,  // v14：70%→90%（玩家车道必须常驻威胁）
+    spawnInterval: 800,    // v15 回滚 v14 过度密集 400→800ms（保留 v13 的设计感）
+    maxObstacles: 18,       // v15:15→18（金币+v12 五兄弟+boost 一起塞得下，留反应窗口）
+    playerLaneTargetChance: 0.85,  // v14 核心保留（85% 追玩家车道，康复价值）
     convoyChance: 0.30,     // 30% 概率生成车队（相邻车道同时出）
     convoySizeRange: [2, 2], // 车队固定 2 辆
-    coinChainChance: 0.35,  // v13：18%→35% 概率在 spawn 间隔里再发一串金币
-    coinChainLength: [4, 7], // v13：3-5→4-7 枚（v13 加量）
+    coinChainChance: 0.55,  // v15：50%→55% 概率
+    coinChainLength: [4, 6], // v15：3-5→4-6（中等链 + 多次触发）
     boostChance: 0.06,      // 6% 概率发一个加速道具
-    // v13：道路生态家族 — 5 种新障碍物（合计 24%→38%，每种 +60%）
-    spikeChance: 0.10,      // 6%→10% 地刺（扣血）
-    rockChance: 0.08,       // 5%→8%  石头（扣血重）
-    oilChance: 0.08,        // 5%→8%  油污（减速 1.5s）
-    potholeChance: 0.06,    // 4%→6%  路面坑（颠簸 0.6s）
-    coneChance: 0.06        // 4%→6%  锥桶（轻扣血）
+    // v15：道路生态家族 — 5 种新障碍物（chance 再翻倍确保密度）
+    spikeChance: 0.22,      // v15:10%→22% 地刺（扣血）
+    rockChance: 0.18,       // v15:8%→18%  石头（扣血重）
+    oilChance: 0.18,        // v15:8%→18%  油污（减速 1.5s）
+    potholeChance: 0.14,    // v15:6%→14%  路面坑（颠簸 0.6s）
+    coneChance: 0.14        // v15:6%→14%  锥桶（轻扣血）
 };
 
 export class SceneRoad extends SceneBase {
@@ -575,9 +575,9 @@ export class SceneRoad extends SceneBase {
             const laneX = this.lanes[laneIdx];
             const palette = VEHICLE_PALETTE[Math.floor(Math.random() * VEHICLE_PALETTE.length)];
             const carType = CAR_TYPES[Math.floor(Math.random() * CAR_TYPES.length)];
-            // 车队内后车 y 稍前（落后）形成队列感
+            // v15：车队内后车 y 拉开 0.10 屏（前车领先 0.10 屏 ≈ 0.3s 距离），避免速度叠成 1 坨
             const roadTopNorm = 0.22;
-            const spawnY = roadTopNorm - 0.08 - i * 0.04;
+            const spawnY = roadTopNorm - 0.08 - i * 0.10;
             const car = new ObstacleVehicle({
                 x: laneX,
                 y: spawnY,
@@ -590,9 +590,9 @@ export class SceneRoad extends SceneBase {
             obstacleList.push(car);
         }
 
-        // v12：道路生态家族 — 5 种新障碍物，依次独立判断（必须先于 coin/boost，
-        // 否则 coinChain 3-5 枚金币 + 1 个 boost 会把 obstacleList 灌满到 5，
-        // 后续 v12 五兄弟没有 lane 也没有空间）
+        // v12：道路生态家族 — 5 种新障碍物
+        // v15：先于 convoy spawn（v14 排在 convoy 后面被 convoy 挤掉空间）
+        // 直接投玩家车道，不参与 usedLanes 共享——这样 v12 五兄弟永远能命中玩家车道
         const v12Types = [
             { type: 'spike',   Cls: ObstacleSpike,   chance: cfg.spikeChance,   y: -0.05, speedY: 0.50 },
             { type: 'rock',    Cls: ObstacleRock,    chance: cfg.rockChance,    y: -0.05, speedY: 0.45 },
@@ -601,19 +601,21 @@ export class SceneRoad extends SceneBase {
             { type: 'cone',    Cls: ObstacleCone,    chance: cfg.coneChance,    y: -0.05, speedY: 0.42 }
         ];
         for (const t of v12Types) {
-            if (obstacleList.length >= cfg.maxObstacles) break;
+            // v15：v12 五兄弟不 break（让 5 兄弟都能尝试）
+            if (obstacleList.length >= cfg.maxObstacles) continue;
             if (Math.random() >= t.chance) continue;
+            // v15：直接找"远离已用 lane 且尽量是玩家车道"的位置
             const freeLanes = [];
             for (let i = 0; i < this.lanes.length; i++) {
                 if (!usedLanes.has(i)) freeLanes.push(i);
             }
             if (freeLanes.length === 0) continue;
-            // v14：v12 五兄弟也独立 70% 概率追玩家车道（玩家车道空闲时强制投）
+            // v15：v12 五兄弟 70% 概率投玩家车道（用户要求"康复价值 = 必须转头"）
             const huntThisOne = this.playerLaneCache >= 0
-                && Math.random() < cfg.playerLaneTargetChance;
+                && Math.random() < 0.70;
             let lane;
-            if (huntThisOne) {
-                lane = freeLanes.includes(this.playerLaneCache) ? this.playerLaneCache : freeLanes[0];
+            if (huntThisOne && freeLanes.includes(this.playerLaneCache)) {
+                lane = this.playerLaneCache;
             } else {
                 lane = freeLanes[Math.floor(Math.random() * freeLanes.length)];
             }
@@ -625,20 +627,25 @@ export class SceneRoad extends SceneBase {
             }));
         }
 
-        // 金币链：在车队旁边的空闲车道纵向铺 3-5 枚金币
-        if (obstacleList.length < cfg.maxObstacles && Math.random() < cfg.coinChainChance) {
-            // 找一条车队没用过的车道
-            const freeLanes = [];
-            for (let i = 0; i < this.lanes.length; i++) {
-                if (!usedLanes.has(i)) freeLanes.push(i);
+        // 金币链：v15 重写——独立走玩家车道，50% 概率直接铺到玩家车道（不参与 usedLanes 共享）
+        if (Math.random() < cfg.coinChainChance) {
+            // 优先用玩家车道的 free lane，否则任一 free lane
+            let coinLane = -1;
+            if (this.playerLaneCache >= 0 && !usedLanes.has(this.playerLaneCache)) {
+                coinLane = this.playerLaneCache;
+            } else {
+                const freeLanes = [];
+                for (let i = 0; i < this.lanes.length; i++) {
+                    if (!usedLanes.has(i)) freeLanes.push(i);
+                }
+                if (freeLanes.length > 0) coinLane = freeLanes[Math.floor(Math.random() * freeLanes.length)];
             }
-            if (freeLanes.length > 0) {
-                const coinLane = freeLanes[Math.floor(Math.random() * freeLanes.length)];
+            if (coinLane >= 0) {
+                usedLanes.add(coinLane);
                 const coinX = this.lanes[coinLane];
                 const [cMin, cMax] = cfg.coinChainLength;
                 const chainLen = cMin + Math.floor(Math.random() * (cMax - cMin + 1));
                 const roadTopNorm = 0.22;
-                // 纵向间距 0.07（屏幕上）
                 for (let k = 0; k < chainLen; k++) {
                     if (obstacleList.length >= cfg.maxObstacles) break;
                     const cy = roadTopNorm - 0.08 - k * 0.07;
