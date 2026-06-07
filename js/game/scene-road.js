@@ -14,10 +14,21 @@ const VEHICLE_PALETTE = [
     { body: '#7C3AED', trim: '#4C1D95' },  // 紫
     { body: '#10B981', trim: '#065F46' },  // 绿
     { body: '#E5E7EB', trim: '#6B7280' },  // 银
-    { body: '#111827', trim: '#000000' }   // 黑
+    { body: '#111827', trim: '#000000' },  // 黑
+    { body: '#EC4899', trim: '#9D174D' },  // 粉
+    { body: '#0EA5E9', trim: '#0C4A6E' },  // 天蓝
+    { body: '#84CC16', trim: '#365314' }   // 草绿
 ];
 
-const CAR_TYPES = ['sedan', 'sedan', 'sedan', 'suv', 'sports', 'sedan'];
+const CAR_TYPES = ['sedan', 'sedan', 'sedan', 'suv', 'sports', 'sedan', 'suv', 'sedan'];
+
+// 公路赛车专属车流密度配置（与 difficulty 解耦：难易度管分数/速度，车流密度管"热闹度"）
+const ROAD_TRAFFIC = {
+    spawnInterval: 900,    // ms（difficulty 默认 1500）
+    maxObstacles: 5,        // 路上最多同时 5 辆（留玩家反应窗口，不被密度直接撞死）
+    convoyChance: 0.30,     // 30% 概率生成车队（相邻车道同时出）
+    convoySizeRange: [2, 2] // 车队固定 2 辆
+};
 
 export class SceneRoad extends SceneBase {
     constructor() {
@@ -313,6 +324,53 @@ export class SceneRoad extends SceneBase {
             carType,
             speedY: 0.32
         });
+    }
+
+    /**
+     * 覆写基类 spawn 节流：使用公路赛车专属车流配置（与 difficulty 解耦）
+     * 35% 概率触发"车队 convoys"：相邻 2-3 车道同时出车，营造真高速的密集车流
+     */
+    trySpawnObstacle(obstacleList, difficultyConfig) {
+        const cfg = ROAD_TRAFFIC;
+        const timeSinceLastSpawn = this.gameTime - this.lastSpawnTime;
+        const intervalSec = cfg.spawnInterval / 1000;
+
+        if (obstacleList.length >= cfg.maxObstacles) return;
+        if (timeSinceLastSpawn < intervalSec) return;
+
+        // 决定本次是单辆还是车队
+        const isConvoy = Math.random() < cfg.convoyChance;
+        const spawnCount = isConvoy
+            ? cfg.convoySizeRange[0] + Math.floor(Math.random() * (cfg.convoySizeRange[1] - cfg.convoySizeRange[0] + 1))
+            : 1;
+
+        // 选 spawn 起始车道（车队从连续 2-3 车道开始）
+        const startLane = Math.floor(Math.random() * (this.lanes.length - spawnCount + 1));
+        const usedLanes = new Set();
+        for (let i = 0; i < spawnCount; i++) {
+            if (obstacleList.length >= cfg.maxObstacles) break;
+            const laneIdx = startLane + i;
+            if (usedLanes.has(laneIdx)) continue;
+            usedLanes.add(laneIdx);
+
+            const laneX = this.lanes[laneIdx];
+            const palette = VEHICLE_PALETTE[Math.floor(Math.random() * VEHICLE_PALETTE.length)];
+            const carType = CAR_TYPES[Math.floor(Math.random() * CAR_TYPES.length)];
+            // 车队内后车 y 稍前（落后）形成队列感
+            const roadTopNorm = 0.22;
+            const spawnY = roadTopNorm - 0.08 - i * 0.04;
+            const car = new ObstacleVehicle({
+                x: laneX,
+                y: spawnY,
+                lane: laneIdx,
+                bodyColor: palette.body,
+                trimColor: palette.trim,
+                carType,
+                speedY: 0.32
+            });
+            obstacleList.push(car);
+        }
+        this.lastSpawnTime = this.gameTime;
     }
 
     mapInputToPosition(inputPos, player) {
