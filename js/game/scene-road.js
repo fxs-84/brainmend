@@ -144,12 +144,57 @@ export class SceneRoad extends SceneBase {
         ctx.fillRect(0, roadTop + 4, width, 2);
         ctx.fillRect(0, height - 6, width, 2);
 
-        // 8. 5 车道：4 条白色虚线，带透视收敛
-        this._renderPerspectiveLaneLines(ctx, width, height, roadTop);
+        // 8. 5 车道：用 5 条深浅交替的色带 + 强对比白色实线分隔，5 车道永远肉眼可数
+        this._renderLaneBands(ctx, width, height, roadTop);
 
         // 9. 路边景物（视差：景物滚 1.3x）
         this._renderScenery(ctx, width, height, this.sceneryLeft, 0, true, roadTop);
         this._renderScenery(ctx, width, height, this.sceneryRight, width, false, roadTop);
+    }
+
+    /**
+     * 5 车道色带：底层 5 条不同深浅的灰色带，远端也保持区分，肉眼一眼能数
+     * 顶层 4 条白色实线分隔，远端略向中心收敛（弱收敛保留纵深）
+     */
+    _renderLaneBands(ctx, width, height, roadTop) {
+        const roadH = height - roadTop;
+        // 5 条色带（中间略亮、外侧略暗，模拟路面磨损）
+        const bandShades = ['#1F1F23', '#2A2A30', '#2A2A30', '#2A2A30', '#1F1F23'];
+        // 第 2、4 车道（中间）略亮，让外 1/5 车道稍暗 → 视觉上像真实高速的 5 车道
+        const bandW = width / 5;
+        for (let i = 0; i < 5; i++) {
+            ctx.fillStyle = bandShades[i];
+            ctx.fillRect(i * bandW, roadTop, bandW, roadH);
+        }
+        // 重画路面渐变（让色带仍带远亮近暗的纵深感）
+        const overlay = ctx.createLinearGradient(0, roadTop, 0, height);
+        overlay.addColorStop(0, 'rgba(82,82,91,0.45)');
+        overlay.addColorStop(0.4, 'rgba(39,39,42,0.25)');
+        overlay.addColorStop(1, 'rgba(9,9,11,0.1)');
+        ctx.fillStyle = overlay;
+        ctx.fillRect(0, roadTop, width, roadH);
+
+        // 4 条白色实线分隔（弱收敛 → pMin=0.55，地平线仍保留 45% 区分度）
+        const vanishX = 0.5;
+        const pMin = 0.55;
+        const sepXs = [0.2, 0.4, 0.6, 0.8];  // 4 条分隔的基准 x（对应 5 车道边界）
+        for (const sepX of sepXs) {
+            for (const line of this.roadLines) {
+                if (!line.visible) continue;
+                const yNorm = line.y;
+                if (yNorm < -0.05 || yNorm > 1.1) continue;
+                const y = roadTop + yNorm * roadH;
+                // 远端 p=pMin (55% 区分) → 近端 p=1 (100% 区分)
+                const p = pMin + (1 - pMin) * yNorm;
+                const xNorm = vanishX + (sepX - vanishX) * p;
+                const xPx = xNorm * width;
+                // 实线段：长度按 y 缩放，但最小 14px，远端也清晰
+                const dashLen = 14 + yNorm * 32;
+                const dashW = 2.5 + yNorm * 2.5;
+                ctx.fillStyle = 'rgba(255,255,255,0.92)';
+                ctx.fillRect(xPx - dashW / 2, y, dashW, dashLen);
+            }
+        }
     }
 
     _renderSkyline(ctx, width, baseY) {
