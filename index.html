@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BrainMend 脑优化</title>
+  <style>
+    .cog-mod-btn { background:transparent; border:1px solid rgba(255,255,255,0.15); color:var(--text); border-radius:6px; cursor:pointer; }
+
+    /* 认知模块选择弹窗 */
+    .cog-modal-overlay { position:fixed;inset:0;z-index:20000;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.7); }
+    .cog-modal-overlay.show { display:flex; }
+    .cog-modal { background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:16px;padding:30px;max-width:700px;width:90%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.5); }
+    .cog-modal h3 { color:#fff;text-align:center;margin:0 0 8px 0;font-size:22px; }
+    .cog-modal .subtitle { color:#bdc3c7;text-align:center;font-size:13px;margin-bottom:20px; }
+    .cog-modal-grid { display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px; }
+    .cog-modal-btn { padding:14px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:10px;cursor:pointer;font-size:14px;text-align:center;transition:all 0.2s; }
+    .cog-modal-btn:hover { background:rgba(201,168,76,0.2);border-color:rgba(201,168,76,0.5); }
+    .cog-modal-full { display:block;width:100%;margin-top:16px;padding:16px;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:18px;font-weight:700; }
+    .cog-modal-full:hover { opacity:0.9;transform:scale(1.02); }
+    .cog-modal-close { position:absolute;top:12px;right:16px;background:none;border:none;color:#aaa;font-size:24px;cursor:pointer; }
+    .cog-modal-close:hover { color:#fff; }
+    .cog-mod-btn.active { background:var(--primary); color:var(--bg-dark); border-color:var(--primary); }
+  </style>
+  <style>
+    @font-face {
+      font-family: 'iconfont';
+      src: url('./assets/iconfont.woff2?t=1') format('woff2'),
+           url('./assets/iconfont.woff?t=1') format('woff');
+    }
+    .iconfont { font-family: "iconfont" !important; font-style: normal; -webkit-font-smoothing: antialiased; }
+  </style>
+  <script type="module" crossorigin src="./assets/index-Cc2Ik-Ku.js"></script>
+  <script>
+  (function(){
+    // GAMEOVER 后任意键返回选择面板的统一入口
+    // 由 space-engine / valley-engine 在 GAMEOVER 时 keydown 调用
+    // (ui-game.js init 也会尝试挂这个函数, 这里是兜底注入, 保证 dist-stable bundle 也能用)
+    //
+    // ⚠️ 关键: 严禁调 engine.cleanup() —— 它会 _unbindGameOverHandler
+    //  GameEngine 的 _bindGameOverHandler 只在 init() 跑一次, startGame 不会重新 bind
+    //  所以 cleanup 后再次死亡 = handler 永久失联 = 任意键失效
+    //  必须手动停 loop + 清 scene + 清 flags, 保留 listener
+    var safeStopEngine = function(eng) {
+      if (!eng) return;
+      try {
+        if (typeof eng.stopGameLoop === 'function') eng.stopGameLoop();
+        else if (typeof eng.stopLoop === 'function') eng.stopLoop();
+      } catch (e) {}
+      try {
+        if (eng.currentScene && typeof eng.currentScene.cleanup === 'function') {
+          eng.currentScene.cleanup();
+        }
+      } catch (e) {}
+      try {
+        eng.currentScene = null;
+        eng.isShootingMode = false;
+        eng._noddingMode = false;
+        eng._roadMode = false;
+        eng.state = 'menu';
+      } catch (e) {}
+    };
+    window._returnToGameMenu = function() {
+      // 1. 安全停所有 engine (不动 handler)
+      safeStopEngine(window.gameEngine);
+      safeStopEngine(window.valleyEngine);
+      safeStopEngine(window.spaceEngine);
+      try { window._noGyroEMA = false; } catch(e){}
+      try { window._freezeGyroEMA && window._freezeGyroEMA(false); } catch(e){}
+      // 2. 移除浮动归零按钮
+      var fz = document.getElementById('game-floating-zero-btn');
+      if (fz) fz.remove();
+      // 3. 回到游戏模式 (view-game.flex 由 setMode 维护, panel 由 z-index 浮在上面)
+      if (typeof window.setMode === 'function') window.setMode('game');
+      var panel = document.getElementById('game-select-panel');
+      if (panel) panel.style.display = 'block';
+      // 4. 清 canvas (避免上一局画面残留)
+      try {
+        var c = document.getElementById('crosshair-canvas');
+        if (c) {
+          var ctx = c.getContext('2d');
+          if (ctx) ctx.clearRect(0, 0, c.width, c.height);
+        }
+      } catch(e){}
+    };
+  })();
+  </script>
+  <script>
+  (function(){
+    var injected = false;
+    var diffVisible = false;
+    var mode = 'hard';
+    // 3 档配置：简单(60-150%) / 普通(120-200%) / 困难(200-400%)
+    var PRESETS = {
+      easy:   { min: 0.6, initial: 1.0, max: 1.5 },
+      normal: { min: 1.2, initial: 1.5, max: 2.0 },
+      hard:   { min: 2.0, initial: 3.0, max: 4.0 }
+    };
+    window._roadSpeedConfig = PRESETS.hard;
+    var checkPanel = setInterval(function(){
+      if (injected) return;
+      var panel = document.getElementById('game-select-panel');
+      if (!panel || !panel.offsetParent) return; // 面板未显示
+      var zeroBtn = document.getElementById('zero-gyro-btn');
+      if (!zeroBtn) return;
+      var div = document.createElement('div');
+      div.id = 'road-difficulty-select';
+      div.style.cssText = 'margin-bottom:10px;';
+      div.innerHTML = '<label style="display:block;margin-bottom:6px;color:#9CA3AF;font-size:12px;">公路赛车难度</label>'+
+        '<div id="diff-btns" style="display:flex;gap:6px;">'+
+          '<button data-diff="easy" style="flex:1;padding:6px 4px;background:#1E293B;color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:6px;font-size:11px;cursor:pointer;">简单<br><span style="font-size:9px;opacity:0.7;">60-150%</span></button>'+
+          '<button data-diff="normal" style="flex:1;padding:6px 4px;background:#1E293B;color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:6px;font-size:11px;cursor:pointer;">普通<br><span style="font-size:9px;opacity:0.7;">120-200%</span></button>'+
+          '<button data-diff="hard" style="flex:1;padding:6px 4px;background:var(--primary);color:#0F172A;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">困难<br><span style="font-size:9px;opacity:0.7;">200-400%</span></button>'+
+        '</div>';
+      zeroBtn.parentNode.insertBefore(div, zeroBtn);
+      injected = true;
+      // 难度按钮
+      div.querySelectorAll('button').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          div.querySelectorAll('button').forEach(function(b){
+            b.style.background = '#1E293B'; b.style.color = '#fff'; b.style.border = '1px solid rgba(255,255,255,0.2)';
+          });
+          btn.style.background = 'var(--primary)'; btn.style.color = '#0F172A'; btn.style.border = 'none';
+          mode = btn.dataset.diff;
+          window._easyMode = (mode === 'easy');
+          window._roadSpeedConfig = PRESETS[mode] || PRESETS.hard;
+        });
+      });
+      // 监听 mode-btn 点击
+      panel.querySelectorAll('.mode-btn').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          diffVisible = (btn.dataset.mode === 'road');
+          div.style.display = diffVisible ? 'block' : 'none';
+        });
+      });
+    }, 200);
+  })();
+  </script>
+  <link rel="modulepreload" crossorigin href="./assets/chunk-CilyBKbf.js">
+  <link rel="modulepreload" crossorigin href="./assets/bullet-DSplt3AS.js">
+  <link rel="modulepreload" crossorigin href="./assets/obstacle-Cloh5Dtc.js">
+  <link rel="modulepreload" crossorigin href="./assets/motion-mapper-CcX3Gmj0.js">
+  <link rel="modulepreload" crossorigin href="./assets/particle-Dnitz7s5.js">
+  <link rel="modulepreload" crossorigin href="./assets/scene-base-CyDX7Q2w.js">
+  <link rel="modulepreload" crossorigin href="./assets/sound-manager-D69fGs02.js">
+  <link rel="stylesheet" crossorigin href="./assets/index-CA2quyDM.css">
+</head>
+<body>
+    <!-- 首页 -->
+    <div id="page2" style="position:fixed;inset:0;z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#e0f7ff 0%,#f5f5f5 50%,#fff5e6 100%);text-align:center;">
+        <button id="page2-fullscreen" title="全屏" style="position:absolute;top:20px;right:24px;background:rgba(0,0,0,0.06);border:1px solid rgba(0,0,0,0.15);color:#5a7a9a;font-size:22px;width:44px;height:44px;border-radius:10px;cursor:pointer;transition:background 0.2s;" onmouseover="this.style.background='rgba(0,0,0,0.12)'" onmouseout="this.style.background='rgba(0,0,0,0.06)'">⛶</button>
+        <img src="assets/brainmend-home.png" alt="BrainMend Logo" style="max-width:280px;height:auto;margin-bottom:24px;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.08));">
+        <h2 style="font-size:36px;margin:0 0 60px 0;color:#1a3a5c;font-weight:700;">BrainMend 脑优化</h2>
+        <div style="display:flex;gap:48px;flex-wrap:wrap;justify-content:center;">
+            <button id="page2-cog-report" style="padding:60px 80px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:24px;cursor:pointer;font-size:24px;font-weight:600;box-shadow:0 12px 40px rgba(102,126,234,0.3);min-width:280px;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'" onclick="window._showCogRecordList()">
+                <div style="font-size:72px;margin-bottom:16px;">🧠</div>
+                认知报告
+                <div style="font-size:13px;font-weight:400;opacity:0.85;margin-top:6px;">查看历次认知评估报告</div>
+            </button>
+            <button id="page2-cognitive" style="padding:60px 80px;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:24px;cursor:pointer;font-size:24px;font-weight:600;box-shadow:0 12px 40px rgba(0,134,255,0.3);min-width:280px;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size:72px;margin-bottom:16px;">🧠</div>
+
+                认知评估系统
+                <div style="font-size:13px;font-weight:400;opacity:0.85;margin-top:6px;">多维认知能力测评与训练</div>
+            </button>
+            <button id="page2-tracking" style="padding:60px 80px;background:linear-gradient(135deg,#FF6B6B,#FF8E53);color:#fff;border:none;border-radius:24px;cursor:pointer;font-size:24px;font-weight:600;box-shadow:0 12px 40px rgba(255,107,107,0.3);min-width:280px;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size:72px;margin-bottom:16px;">🎯</div>
+                头动追踪系统
+                <div style="font-size:13px;font-weight:400;opacity:0.85;margin-top:6px;">基于头部运动传感的颈椎康复训练</div>
+                <div style="font-size:11px;font-weight:400;opacity:0.65;margin-top:4px;">建议在坐姿 / 站立下使用 · 保持身体稳定</div>
+            </button>
+        </div>
+    </div>
+
+
+    <!-- 认知模块选择弹窗 -->
+    <div id="cog-modal-overlay" class="cog-modal-overlay">
+        <div class="cog-modal" style="position:relative;">
+            <button class="cog-modal-close" id="cog-modal-close">&times;</button>
+            <h3>🧠 认知评估系统</h3>
+            <div class="subtitle">选择单项测试或进行完整评估</div>
+            <button class="cog-modal-full" id="cog-modal-full-test">📋 完整测试 (12项)</button>
+            <button class="cog-modal-full" id="cog-modal-quick6" style="background:linear-gradient(135deg,#FF9800,#F44336);margin-top:6px;">⚡ 快速测试 (6项)</button>
+            <div class="cog-modal-grid" style="margin-top:12px;" id="cog-modal-grid">
+            </div>
+            <button id="cog-qr-btn" style="width:100%;margin-top:12px;padding:12px;background:rgba(255,255,255,0.08);border:1px dashed rgba(255,255,255,0.25);color:#fff;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.2s;">📱 生成二维码 (患者扫码用)</button>
+        </div>
+    </div>
+
+    <!-- QR 码弹窗 -->
+    <div id="cog-qr-overlay" style="display:none;position:fixed;inset:0;z-index:25000;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
+        <div style="background:#fff;border-radius:16px;padding:30px;text-align:center;max-width:360px;width:90%;">
+            <h3 style="color:#1a1a2e;margin:0 0 6px;">📱 扫码开始认知评估</h3>
+            <p style="color:#666;font-size:12px;margin:0 0 16px;">请患者使用手机扫描二维码</p>
+            <div id="cog-qr-canvas" style="display:inline-block;"></div>
+            <p id="cog-qr-url" style="color:#999;font-size:11px;margin:12px 0 0;word-break:break-all;"></p>
+            <button id="cog-qr-close" style="margin-top:16px;padding:8px 24px;background:#1a1a2e;color:#fff;border:none;border-radius:8px;cursor:pointer;">关闭</button>
+        </div>
+    </div>
+
+    <!-- 认知评估报告覆盖层 -->
+    <div id="cog-report-overlay" style="display:none;position:fixed;inset:0;z-index:30000;background:#f0f2f5;overflow-y:auto;font-family:'Microsoft YaHei','PingFang SC',sans-serif;">
+      <div id="cog-report-nav" style="position:sticky;top:0;z-index:10;background:linear-gradient(135deg,#1a1a2e,#16213e);padding:8px 12px;display:flex;gap:4px;overflow-x:auto;white-space:nowrap;flex-wrap:nowrap;align-items:center;">
+        <button class="cog-report-tab active" data-section="overview" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0;">总览</button>
+      </div>
+      <div id="cog-report-body" style="max-width:900px;margin:0 auto;padding:20px;"></div>
+      <div id="cog-report-footer" style="text-align:center;padding:20px;background:#fff;border-top:1px solid #e0e0e0;margin-top:20px;">
+        <!-- 记录切换 (多条记录时显示) -->
+        <div id="cog-record-nav" style="margin-bottom:14px;display:none;align-items:center;justify-content:center;gap:12px;">
+          <button id="cog-rec-prev" style="padding:6px 14px;background:#f0f0f0;border:1px solid #ccc;border-radius:6px;cursor:pointer;font-size:13px;">← 上一条</button>
+          <span id="cog-rec-info" style="font-size:13px;color:#888;min-width:80px;"></span>
+          <button id="cog-rec-next" style="padding:6px 14px;background:#f0f0f0;border:1px solid #ccc;border-radius:6px;cursor:pointer;font-size:13px;">下一条 →</button>
+        </div>
+        <button onclick="window._exportCogPDF()" style="padding:10px 30px;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">📄 导出 PDF</button>
+        <button onclick="window._closeCogReport()" style="padding:10px 30px;background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">返回首页</button>
+      </div>
+    </div>
+
+    <div id="app">
+        <header>
+            <div class="logo"><img src="./assets/logo-nO4lhsgS.jpg" alt="logo" style="height:32px;width:auto;vertical-align:middle;margin-right:10px;border-radius:4px;">BrainMend 脑优化</div>
+            <div class="header-info">
+                <!-- 客户：点击切换/登录 -->
+                <span id="current-patient" style="color:#fff;margin-right:8px;cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.6);font-weight:500;" title="点击切换客户"></span>
+                <!-- 报告：下拉菜单 -->
+                <div style="position:relative;display:inline-block;margin-right:4px;" id="report-menu-wrap">
+                    <button id="report-menu-btn" aria-haspopup="true" aria-expanded="false" style="background: linear-gradient(135deg,#00D9A5,#0086FF); border: none; color: #fff; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">报告 ▾</button>
+                    <div id="report-dropdown" role="menu" style="display:none;position:absolute;top:100%;right:0;background:var(--bg-panel);border:1px solid rgba(0,0,0,0.15);border-radius:6px;padding:4px 0;z-index:3000;min-width:140px;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+                        <div id="gen-report-item" role="menuitem" tabindex="0" class="dropdown-item">📊 生成报告</div>
+                        <div id="records-item" role="menuitem" tabindex="0" class="dropdown-item">📋 报告查询</div>
+                    </div>
+                </div>
+                <button id="open-gyro-modal" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">蓝牙连接</button>
+                <button id="back-to-home" title="返回首页" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">🏠 首页</button>
+                <button id="theme-toggle" title="切换主题" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">🌙 暗色</button>
+                <button id="fullscreen-btn" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;" title="全屏">⛶</button>
+            </div>
+        </header>
+        <main>
+            <div id="detection-area" style="position:relative;">
+                    <canvas id="cognitive-canvas" style="position:absolute;inset:0;z-index:10;display:none;"></canvas>>
+                    <canvas id="crosshair-canvas"></canvas>
+                    <div id="coord-bottom-bar" style="display:none;position:fixed;bottom:20px;right:20px;gap:8px;padding:10px 20px;background:rgba(255,255,255,0.95);border-radius:14px;box-shadow:0 2px 16px rgba(0,0,0,0.15);z-index:1000;">
+                        <button class="collect-btn" id="zero-btn-coord-bar" style="padding:10px 16px;background:var(--secondary);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;">⟳ 归零</button>
+                        <button class="action-btn" id="action-btn-coord-bar" style="padding:10px 24px;background:var(--primary);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;">开始检测</button>
+                        <button class="back-btn" id="back-btn-coord-bar" style="padding:10px 16px;background:rgba(0,0,0,0.08);color:var(--text);border:none;border-radius:8px;cursor:pointer;font-size:13px;">← 返回</button>
+                    </div>
+                </div>
+            <div id="side-panel">
+                <div class="panel-title">状态</div>
+                <div class="data-card">
+                    <div class="crosshair-display">
+                        <div class="crosshair-grid">
+                            <div class="crosshair-item">
+                                <div class="crosshair-item-label">Pitch</div>
+                                <div class="crosshair-item-value" id="pitch-value" style="color: var(--primary)">0.0°</div>
+                            </div>
+                            <div class="crosshair-item">
+                                <div class="crosshair-item-label">Yaw</div>
+                                <div class="crosshair-item-value" id="yaw-value" style="color: var(--secondary)">0.0°</div>
+                            </div>
+                            <div class="crosshair-item">
+                                <div class="crosshair-item-label">Roll</div>
+                                <div class="crosshair-item-value" id="roll-value" style="color: var(--warning)">0.0°</div>
+                            </div>
+                            <div class="crosshair-item">
+                                <div class="crosshair-item-label">误差</div>
+                                <div class="crosshair-item-value" id="error-value" style="color: var(--danger)">0.0°</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 模式选择视图 -->
+                <div id="view-mode-select">
+                    <div class="panel-title">检测模式</div>
+                    <div class="mode-grid">
+                        <button class="mode-btn" data-mode="integrated" style="display:none"><span class="icon">◎</span>综合检测</button>
+                        <button class="mode-btn active" data-mode="coordination"><span class="icon">∞</span>协调性</button>
+                        <button class="mode-btn" data-mode="rom"><span class="icon">□</span>ROM检测</button>
+                        <button class="mode-btn" data-mode="position"><span class="icon">◎</span>位置觉</button>
+                        <button class="mode-btn" data-mode="visualVestibular"><span class="icon">▦</span>视动训练</button>
+                        <button class="mode-btn" data-mode="visualChecker"><span class="icon">▣</span>大脑垂直感知运动</button>
+                        <button class="mode-btn" data-mode="coordChecker"><span class="icon">▦∞</span>棋盘协调</button>
+                        <button class="mode-btn" data-mode="game"><span class="icon">🎮</span>康复游戏</button>
+                        <button class="mode-btn" id="back-to-page2-btn" style="background:rgba(0,0,0,0.06);color:var(--text);border:1px dashed rgba(0,0,0,0.2);"><span class="icon">←</span>返回首页</button>
+                    </div>
+                </div>
+
+                <!-- 协调性检测视图 -->
+                <div id="view-coordination" style="display: none;">
+                    <button class="back-btn" id="back-btn-coordination">← 返回</button>
+                    <div class="panel-title">检测模式</div>
+                    <div class="data-card">
+                        <div style="display: flex; gap: 4px;">
+                            <button class="coord-mode-btn active" data-mode="single" id="coord-mode-single" style="flex: 1; padding: 8px; border: 1px solid rgba(0,0,0,0.2); background: var(--primary); color: var(--bg-dark); border-radius: 4px; cursor: pointer; font-size: 11px;">检测模式</button>
+                        </div>
+                        <div style="margin-top: 4px;">
+                            <button id="coord-training-toggle" style="width: 100%; padding: 8px; border: 1px solid rgba(0,0,0,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 11px;">训练模式 (1分30秒)</button>
+                        </div>
+                    </div>
+                    <div class="panel-title" id="coord-trajectory-title">轨迹选择</div>
+                    <div class="data-card" id="coord-trajectory-card">
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                            <button class="traj-btn active" data-traj="horizontal" style="padding: 6px 10px; border: 1px solid rgba(0,0,0,0.2); background: var(--primary); color: var(--bg-dark); border-radius: 4px; cursor: pointer; font-size: 10px;">水平</button>
+                            <button class="traj-btn" data-traj="vertical" style="padding: 6px 10px; border: 1px solid rgba(0,0,0,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直</button>
+                            <button class="traj-btn" data-traj="vertical_left" style="padding: 6px 10px; border: 1px solid rgba(0,0,0,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直左</button>
+                            <button class="traj-btn" data-traj="vertical_right" style="padding: 6px 10px; border: 1px solid rgba(0,0,0,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">垂直右</button>
+                            <button class="traj-btn" data-traj="figure8" style="padding: 6px 10px; border: 1px solid rgba(0,0,0,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">8字</button>
+                            <button class="traj-btn" data-traj="figure8_reverse" style="padding: 6px 10px; border: 1px solid rgba(0,0,0,0.2); background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; font-size: 10px;">8字反</button>
+                        </div>
+                    </div>
+                    <div class="panel-title" id="coord-current-trajectory" style="display: none;">当前轨迹: <span id="coord-current-traj-name">-</span></div>
+                    <div class="panel-title">轨迹线颜色</div>
+                    <div class="data-card">
+                        <div id="coord-color-pad" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
+                            <button class="coord-color-btn" data-color="green" style="padding:6px 4px;font-size:11px;color:#fff;background:rgba(34,197,94,0.85);border:2px solid rgba(34,197,94,1);">● 绿</button>
+                            <button class="coord-color-btn" data-color="orange" style="padding:6px 4px;font-size:11px;color:#fff;background:rgba(249,115,22,0.55);border:2px solid transparent;">● 橙</button>
+                            <button class="coord-color-btn" data-color="purple" style="padding:6px 4px;font-size:11px;color:#fff;background:rgba(168,85,247,0.55);border:2px solid transparent;">● 紫</button>
+                        </div>
+                    </div>
+                    <div class="panel-title">实时评分</div>
+                    <div class="data-card" id="coord-scores">
+                        <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                            <span class="data-label">跟踪</span>
+                            <span class="data-value" id="coord-tracking-score" style="color: var(--primary)">0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                            <span class="data-label">轨迹</span>
+                            <span class="data-value" id="coord-trajectory-score" style="color: var(--secondary)">0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                            <span class="data-label">平稳</span>
+                            <span class="data-value" id="coord-smoothness-score" style="color: var(--warning)">0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 3px 0;">
+                            <span class="data-label">误差</span>
+                            <span class="data-value" id="coord-error" style="color: var(--danger)">0.0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 3px 0;">
+                            <span class="data-label">偏离</span>
+                            <span class="data-value" id="coord-deviation">0.0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 3px 0;">
+                            <span class="data-label">漂移帧</span>
+                            <span class="data-value" id="coord-drift-count" style="color:var(--text-muted)">0</span>
+                        </div>
+                                            </div>
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                        <button class="collect-btn" id="zero-btn-coord" style="flex: 0.3; background: var(--secondary);">⟳ 归零</button>
+                        <button class="action-btn" id="action-btn-coord" style="flex: 1;">开始检测</button>
+                    </div>
+                </div>
+
+                <!-- ROM检测视图 -->
+                <div id="view-rom" style="display: none; flex-direction: column; flex: 1; gap: 5px;">
+                    <button class="back-btn" id="back-btn-rom">← 返回</button>
+                    <div class="panel-title">检测引导</div>
+                    <div class="data-card" id="rom-guide">
+                        <div style="font-size: 14px; font-weight: 600; color: var(--primary); margin-bottom: 8px; padding: 10px; background: rgba(0,217,165,0.1); border-radius: 8px; text-align: center;" id="rom-instruction">请先归零</div>
+                        <div style="font-size: 12px; color: var(--text-muted); text-align: center;" id="rom-progress">步骤 0/6</div>
+                    </div>
+                    <div class="panel-title">采集数据</div>
+                    <div class="data-card" id="rom-results" style="flex: 1; min-height: 80px;">
+                        <div id="rom-collect-count" style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">已采集 0/6</div>
+                        <div style="font-size: 10px; color: var(--text-muted);">暂无结果</div>
+                    </div>
+                    <button class="collect-btn" id="zero-btn" style="background: var(--secondary);">⟳ 归零</button>
+                    <button class="collect-btn" id="collect-btn" style="margin-top: 5px;">📍 采集当前点</button>
+                </div>
+
+                <!-- 位置觉检测视图 -->
+                <div id="view-position" style="display: none; flex-direction: column; flex: 1; gap: 5px;">
+                    <button class="back-btn" id="back-btn-position">← 返回</button>
+                    <div class="panel-title">检测引导</div>
+                    <div class="data-card" id="position-guide">
+                        <div style="font-size: 14px; font-weight: 600; color: var(--primary); margin-bottom: 8px; padding: 10px; background: rgba(0,217,165,0.1); border-radius: 8px; text-align: center;" id="position-instruction">请先归零</div>
+                        <div style="font-size: 12px; color: var(--text-muted); text-align: center;" id="position-progress">步骤 0/6</div>
+                        <div style="font-size: 18px; font-weight: 700; color: var(--warning); text-align: center; margin-top: 10px; display: none;" id="position-countdown">5</div>
+                        <div style="font-size: 12px; color: var(--danger); text-align: center; margin-top: 5px; display: none;" id="position-eye-hint">请闭眼</div>
+                    </div>
+                    <div class="panel-title">采集数据</div>
+                    <div class="data-card" id="position-results" style="flex: 1; min-height: 80px;">
+                        <div id="collect-count" style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">已采集 0/6</div>
+                        <div style="font-size: 10px; color: var(--text-muted);">暂无结果</div>
+                    </div>
+                    <button class="collect-btn" id="zero-btn-position" style="background: var(--secondary);">⟳ 归零</button>
+    <!-- 训练模式方向选择（默认隐藏） -->
+                    <div id="position-train-dirs" style="display:none;margin-top:6px;">
+                        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">选择训练方向</div>
+                        <div style="display:flex;flex-wrap:wrap;gap:4px;">
+                            <button class="traj-btn pos-dir-btn" data-dir="right_rotation" style="padding:4px 8px;font-size:10px;">右旋</button>
+                            <button class="traj-btn pos-dir-btn" data-dir="left_rotation" style="padding:4px 8px;font-size:10px;">左旋</button>
+                            <button class="traj-btn pos-dir-btn" data-dir="extension" style="padding:4px 8px;font-size:10px;">后伸</button>
+                            <button class="traj-btn pos-dir-btn" data-dir="flexion" style="padding:4px 8px;font-size:10px;">前屈</button>
+                            <button class="traj-btn pos-dir-btn" data-dir="right_lateral" style="padding:4px 8px;font-size:10px;">右屈</button>
+                            <button class="traj-btn pos-dir-btn" data-dir="left_lateral" style="padding:4px 8px;font-size:10px;">左屈</button>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:6px;margin-top:5px;">
+                        <button class="action-btn" id="start-position-btn" style="background: var(--warning); flex:2;">开始检测</button>
+                        <button class="action-btn" id="start-position-train-btn" style="background: var(--secondary); flex:1; font-size:10px;">训练模式</button>
+                    </div>
+                </div>
+
+                <!-- 游戏视图 - 使用主画布 -->
+                <div id="view-game" style="display: none; position: relative;">
+                    <button class="back-btn" id="back-btn-game" style="position:absolute;top:10px;left:10px;z-index:100;">← 返回</button>
+                </div>
+
+                <!-- 视动训练视图 -->
+                <div id="view-visual-vestibular" style="display: none; flex-direction: column; flex: 1; gap: 5px;">
+                    <button class="back-btn" id="back-btn-vv">← 返回</button>
+                    <div class="panel-title">视动训练</div>
+                    <div class="data-card" style="text-align:center;padding:8px;">
+                        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">选择条纹运动方向（条纹方向 ⟂ 运动方向）</div>
+                        <div id="vv-dpad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:220px;margin:0 auto;">
+                            <button class="vv-dir-btn" data-dir="rightDownToLeftUp" style="padding:14px 6px;font-size:18px;line-height:1;">↖</button>
+                            <button class="vv-dir-btn" data-dir="up" style="padding:14px 6px;font-size:18px;line-height:1;">↑</button>
+                            <button class="vv-dir-btn" data-dir="leftDownToRightUp" style="padding:14px 6px;font-size:18px;line-height:1;">↗</button>
+                            <button class="vv-dir-btn" data-dir="left" style="padding:14px 6px;font-size:18px;line-height:1;">←</button>
+                            <button class="vv-dir-btn" id="vv-stop-btn" style="padding:14px 6px;font-size:18px;line-height:1;background:rgba(239,68,68,0.15);color:var(--danger);">■</button>
+                            <button class="vv-dir-btn" data-dir="right" style="padding:14px 6px;font-size:18px;line-height:1;">→</button>
+                            <button class="vv-dir-btn" data-dir="rightUpToLeftDown" style="padding:14px 6px;font-size:18px;line-height:1;">↙</button>
+                            <button class="vv-dir-btn" data-dir="down" style="padding:14px 6px;font-size:18px;line-height:1;">↓</button>
+                            <button class="vv-dir-btn" data-dir="leftUpToRightDown" style="padding:14px 6px;font-size:18px;line-height:1;">↘</button>
+                        </div>
+                        <div id="vv-current-dir" style="font-size:11px;color:var(--primary);margin-top:8px;min-height:16px;">未选择方向</div>
+                        <div style="font-size:10px;color:var(--text-muted);margin-top:10px;margin-bottom:4px;">运动速度 (0 = 静态)</div>
+                        <div id="vv-speed-pad" style="display:flex;align-items:center;gap:8px;max-width:240px;margin:0 auto;padding:0 4px;">
+                            <span style="font-size:10px;color:var(--text-muted);min-width:24px;">慢</span>
+                            <input id="vv-speed-slider" type="range" min="0" max="500" step="10" value="100" style="flex:1;cursor:pointer;accent-color:var(--primary);">
+                            <span style="font-size:10px;color:var(--text-muted);min-width:24px;text-align:right;">快</span>
+                        </div>
+                        <div id="vv-current-speed" style="font-size:11px;color:var(--primary);margin-top:6px;min-height:16px;font-weight:600;">当前速度: 100 px/s</div>
+                        <label style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:10px;font-size:11px;color:var(--text-muted);cursor:pointer;">
+                            <input id="vv-anchor-toggle" type="checkbox" style="cursor:pointer;accent-color:var(--danger);">
+                            <span>显示中心锚点（红点固定不动）</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="view-visual-checker" style="display: none; flex-direction: column; flex: 1; gap: 5px;">
+                    <button class="back-btn" id="back-btn-vc">← 返回</button>
+                    <div class="panel-title">大脑垂直感知运动</div>
+                    <div class="data-card" style="text-align:center;padding:8px;">
+                        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">选择闪动方向（黑白格交替翻转）</div>
+                        <div id="vc-dpad" style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;max-width:160px;margin:0 auto;">
+                            <button class="vc-dir-btn" data-dir="horizontalSlide" style="padding:14px 6px;font-size:14px;line-height:1.2;">↔<br><span style="font-size:10px;">左右滑动</span></button>
+                            <button class="vc-dir-btn" data-dir="verticalSlide" style="padding:14px 6px;font-size:14px;line-height:1.2;">↕<br><span style="font-size:10px;">上下滑动</span></button>
+                            <button class="vc-dir-btn" data-dir="mixedSlide" style="padding:14px 6px;font-size:14px;line-height:1.2;">⇋<br><span style="font-size:10px;">混合滑动<br>(水平⇄垂直)</span></button>
+                        </div>
+                        <button class="vc-dir-btn" id="vc-stop-btn" style="padding:10px 6px;font-size:14px;margin-top:6px;width:100%;background:rgba(239,68,68,0.15);color:var(--danger);">■ 停止</button>
+                        <div id="vc-current-dir" style="font-size:11px;color:var(--primary);margin-top:8px;min-height:16px;">未选择方向</div>
+                        <div style="font-size:10px;color:var(--text-muted);margin-top:10px;margin-bottom:4px;">闪动速度 (0 = 静态)</div>
+                        <div id="vc-speed-pad" style="display:flex;align-items:center;gap:8px;max-width:240px;margin:0 auto;padding:0 4px;">
+                            <span style="font-size:10px;color:var(--text-muted);min-width:24px;">慢</span>
+                            <input id="vc-speed-slider" type="range" min="0" max="10" step="0.5" value="2" style="flex:1;cursor:pointer;accent-color:var(--primary);">
+                            <span style="font-size:10px;color:var(--text-muted);min-width:24px;text-align:right;">快</span>
+                        </div>
+                        <div id="vc-current-speed" style="font-size:11px;color:var(--primary);margin-top:6px;min-height:16px;font-weight:600;">当前速度: 2.0 Hz</div>
+                    </div>
+                </div>
+
+                <!-- 棋盘协调训练视图 -->
+                
+                <!-- 认知评估视图 -->
+                <div id="view-cognitive" style="display: none; flex-direction: column; flex: 1; gap: 5px;">
+                    <button class="back-btn" id="back-btn-cognitive">← 返回</button>
+                    <div class="panel-title">🧠 认知评估</div>
+                    <!-- 模块切换 -->
+                    <div id="cog-toolbar" style="display:flex;flex-direction:column;gap:3px;">
+                        <div style="display:flex;gap:4px;">
+                            <button class="cog-mod-btn active" data-mod="planning" style="flex:1;padding:5px;font-size:11px;">规划</button>
+                            <button class="cog-mod-btn" data-mod="inhibition" style="flex:1;padding:5px;font-size:11px;">自制力</button>
+                            <button class="cog-mod-btn" data-mod="memory" style="flex:1;padding:5px;font-size:11px;">记忆力</button>
+                            <button class="cog-mod-btn" data-mod="visual" style="flex:1;padding:5px;font-size:11px;">视觉记忆</button>
+                        </div>
+                        <div style="display:flex;gap:4px;">
+                            <button class="cog-mod-btn" data-mod="shortmem" style="flex:1;padding:5px;font-size:11px;">短暂记忆</button>
+                            <button class="cog-mod-btn" data-mod="flex" style="flex:1;padding:5px;font-size:11px;">变通能力</button>
+                            <button class="cog-mod-btn" data-mod="memorg" style="flex:1;padding:5px;font-size:11px;">记忆组织</button>
+                            <button class="cog-mod-btn" data-mod="scenerecall" style="flex:1;padding:5px;font-size:11px;">场景回忆</button>
+                        </div>
+                        <div style="display:flex;gap:4px;margin-top:3px;">
+                            <button class="cog-mod-btn" data-mod="attention" style="flex:1;padding:5px;font-size:11px;">注意力</button>
+                            <button class="cog-mod-btn" data-mod="language" style="flex:1;padding:5px;font-size:11px;">语言理解</button>
+                            <button class="cog-mod-btn" data-mod="reasoning" style="flex:1;padding:5px;font-size:11px;">推理</button>
+                            <button class="cog-mod-btn" data-mod="observation" style="flex:1;padding:5px;font-size:11px;">观察能力</button>
+                        </div>
+                    </div>
+                    <!-- 规划能力面板 -->
+                    <div id="cog-panel-planning">
+                        <button class="action-btn" id="cog-start-btn">开始试玩</button>
+                    </div>
+                    <!-- 自制力面板 -->
+                    <div id="cog-panel-inhibition" style="display:none;">
+                        <div class="data-card" style="text-align:center;">
+                            <div id="stroop-status" style="font-size:12px;color:var(--primary);margin-bottom:4px;">准备开始</div>
+                            <div id="stroop-timer" style="font-size:28px;font-weight:700;color:var(--primary);">1:00</div>
+                            <div id="stroop-score" style="font-size:11px;color:var(--text-muted);">正确: 0/0</div>
+                        </div>
+                    </div>
+                </div><div id="view-coord-checker" style="display: none; flex-direction: column; flex: 1; gap: 5px;">
+                    <button class="back-btn" id="back-btn-cc">← 返回</button>
+
+                    <div id="cc-score-panel" style="display:none;margin-bottom:6px;padding:10px;background:rgba(0,217,165,0.12);border:2px solid rgba(0,217,165,0.5);border-radius:8px;">
+                        <div style="font-size:14px;font-weight:700;color:var(--primary);margin-bottom:6px;text-align:center;">训练得分</div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:12px;">
+                            <div>综合: <span id="cc-final-overall" style="font-weight:700;color:var(--primary);">-</span></div>
+                            <div>跟踪: <span id="cc-final-tracking" style="font-weight:700;color:var(--primary);">-</span></div>
+                            <div>轨迹: <span id="cc-final-trajectory" style="font-weight:700;color:var(--secondary);">-</span></div>
+                            <div>平稳: <span id="cc-final-smoothness" style="font-weight:700;color:var(--warning);">-</span></div>
+                        </div>
+                        <button id="cc-score-close" class="btn-secondary" style="margin-top:8px;width:100%;padding:8px 6px;font-size:12px;font-weight:600;background:rgba(255,255,255,0.06);border:1px solid rgba(0,217,165,0.55);color:var(--primary);border-radius:6px;cursor:pointer;transition:background 0.15s,border-color 0.15s;" onmouseover="this.style.background='rgba(0,217,165,0.18)';this.style.borderColor='rgba(0,217,165,0.9)'" onmouseout="this.style.background='rgba(255,255,255,0.06)';this.style.borderColor='rgba(0,217,165,0.55)'">✕ 关闭</button>
+                    </div>
+
+                    <div class="panel-title">棋盘协调训练</div>
+                    <div class="data-card" style="text-align:center;padding:8px;">
+                        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">棋盘背景上叠加协调任务：跟随红点移动</div>
+
+                        <div style="font-size:10px;color:var(--text-muted);margin-top:4px;margin-bottom:4px;">轨迹选择</div>
+                        <div id="cc-traj-pad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:240px;margin:0 auto;">
+                            <button class="cc-traj-btn" data-traj="horizontal" style="padding:8px 4px;font-size:12px;">水平</button>
+                            <button class="cc-traj-btn" data-traj="vertical" style="padding:8px 4px;font-size:12px;">垂直</button>
+                            <button class="cc-traj-btn" data-traj="figure8" style="padding:8px 4px;font-size:12px;">8字</button>
+                        </div>
+                        <div id="cc-current-traj" style="font-size:11px;color:var(--primary);margin-top:6px;min-height:16px;">当前轨迹: 水平</div>
+
+                        <div style="font-size:10px;color:var(--text-muted);margin-top:10px;margin-bottom:4px;">轨迹线颜色</div>
+                        <div id="cc-color-pad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:240px;margin:0 auto;">
+                            <button class="cc-color-btn" data-color="green" style="padding:8px 4px;font-size:12px;color:#fff;background:rgba(34,197,94,0.85);border:2px solid rgba(34,197,94,1);">● 绿</button>
+                            <button class="cc-color-btn" data-color="orange" style="padding:8px 4px;font-size:12px;color:#fff;background:rgba(249,115,22,0.55);border:2px solid transparent;">● 橙</button>
+                            <button class="cc-color-btn" data-color="purple" style="padding:8px 4px;font-size:12px;color:#fff;background:rgba(168,85,247,0.55);border:2px solid transparent;">● 紫</button>
+                        </div>
+
+                        <div style="font-size:10px;color:var(--text-muted);margin-top:10px;margin-bottom:4px;">棋盘方向</div>
+                        <div id="cc-dir-pad" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;max-width:240px;margin:0 auto;">
+                            <button class="cc-dir-btn" data-dir="off" style="padding:8px 4px;font-size:12px;">○ 关闭</button>
+                            <button class="cc-dir-btn" data-dir="horizontalSlide" style="padding:8px 4px;font-size:12px;">↔ 左右</button>
+                            <button class="cc-dir-btn" data-dir="verticalSlide" style="padding:8px 4px;font-size:12px;">↕ 上下</button>
+                            <button class="cc-dir-btn" data-dir="mixedSlide" style="padding:8px 4px;font-size:12px;">⇋ 混合</button>
+                        </div>
+                        <div id="cc-current-dir" style="font-size:11px;color:var(--primary);margin-top:6px;min-height:16px;">当前: 左右滑动</div>
+
+                        <div style="font-size:10px;color:var(--text-muted);margin-top:10px;margin-bottom:4px;">棋盘速度 (0 = 静态)</div>
+                        <div id="cc-speed-pad" style="display:flex;align-items:center;gap:8px;max-width:240px;margin:0 auto;padding:0 4px;">
+                            <span style="font-size:10px;color:var(--text-muted);min-width:24px;">慢</span>
+                            <input id="cc-speed-slider" type="range" min="0" max="10" step="0.5" value="2" style="flex:1;cursor:pointer;accent-color:var(--primary);">
+                            <span style="font-size:10px;color:var(--text-muted);min-width:24px;text-align:right;">快</span>
+                        </div>
+                        <div id="cc-current-speed" style="font-size:11px;color:var(--primary);margin-top:6px;min-height:16px;font-weight:600;">当前速度: 2.0 Hz</div>
+
+                        <div id="cc-status" style="font-size:12px;color:var(--text-muted);margin-top:14px;min-height:18px;">已停止</div>
+                        <div id="cc-countdown" style="font-size:18px;color:var(--primary);margin-top:4px;min-height:22px;font-weight:700;">90 秒</div>
+
+                        <div style="display:flex;gap:6px;margin-top:8px;">
+                            <button id="zero-btn-cc" style="flex:1;padding:12px 6px;font-size:13px;background:var(--secondary);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;">⟳ 归零</button>
+                            <button id="cc-start-btn" style="flex:2;padding:12px 6px;font-size:14px;background:var(--primary);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;">▶ 开始训练</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 光点位置和标靶缩放已移除，标靶用鼠标滚轮控制 -->
+            </div>
+        </main>
+        </div>
+
+    <!-- 结果弹窗 -->
+    <div class="modal" id="result-modal">
+        <div class="modal-content" style="max-width: 480px; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-title">检测完成</div>
+            <div class="modal-subtitle">您的颈椎健康评估报告</div>
+
+            <!-- 综合评分 -->
+            <div id="report-overall" style="text-align: center; margin: 15px 0; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 12px;">
+                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px;">综合评分</div>
+                <div id="overall-score" style="font-size: 48px; font-weight: 700; line-height: 1;">--</div>
+                <div id="overall-level" style="font-size: 14px; margin-top: 5px;">-</div>
+            </div>
+
+            <!-- 详细评分 -->
+            <div class="result-grid" style="margin-bottom: 15px;">
+                <div class="result-item">
+                    <div class="result-item-label">位置觉</div>
+                    <div class="result-item-value" id="result-position" style="color: var(--primary);">--</div>
+                    <div class="result-item-bar"><div class="result-item-bar-fill" id="bar-position" style="width: 0%; background: var(--primary);"></div></div>
+                </div>
+                <div class="result-item">
+                    <div class="result-item-label">稳定性</div>
+                    <div class="result-item-value" id="result-stability" style="color: var(--secondary);">--</div>
+                    <div class="result-item-bar"><div class="result-item-bar-fill" id="bar-stability" style="width: 0%; background: var(--secondary);"></div></div>
+                </div>
+                <div class="result-item">
+                    <div class="result-item-label">活动范围</div>
+                    <div class="result-item-value" id="result-rom" style="color: var(--warning);">--</div>
+                    <div class="result-item-bar"><div class="result-item-bar-fill" id="bar-rom" style="width: 0%; background: var(--warning);"></div></div>
+                </div>
+                <div class="result-item">
+                    <div class="result-item-label">协调性</div>
+                    <div class="result-item-value" id="result-coordination" style="color: var(--success);">--</div>
+                    <div class="result-item-bar"><div class="result-item-bar-fill" id="bar-coordination" style="width: 0%; background: var(--success);"></div></div>
+                </div>
+            </div>
+
+            <!-- 图表区域 -->
+            <div id="report-charts" style="display: none; margin-bottom: 15px; padding: 12px; background: rgba(0,0,0,0.15); border-radius: 8px;">
+                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">可视化报告</div>
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;">
+                    <canvas id="radar-chart" style="display: none;"></canvas>
+                    <canvas id="rom-chart" style="display: none;"></canvas>
+                </div>
+            </div>
+
+            <!-- 详细数据区域 -->
+            <div id="report-details" style="display: none; margin-bottom: 15px; padding: 12px; background: rgba(0,0,0,0.15); border-radius: 8px;">
+                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">详细数据</div>
+                <div id="report-details-content"></div>
+            </div>
+
+            <!-- 前庭功能评估 -->
+            <div id="vestibular-assessment" style="display: none; margin-bottom: 15px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 8px; border: 1px solid rgba(0,0,0,0.1);">
+                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">前庭功能间接评估</div>
+                <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;" id="vestibular-result">-</div>
+                <div style="font-size: 10px; color: var(--text-muted);" id="vestibular-recommendation">-</div>
+            </div>
+
+            <!-- 康复建议 -->
+            <div id="rehab-suggestions" style="display: none; margin-bottom: 15px; padding: 12px; background: rgba(34, 197, 94, 0.1); border-radius: 8px; border: 1px solid rgba(34, 197, 94, 0.3);">
+                <div style="font-size: 11px; color: var(--success); margin-bottom: 8px;">康复建议</div>
+                <div id="rehab-suggestions-content" style="font-size: 11px; line-height: 1.6; color: var(--text);"></div>
+            </div>
+
+            <div style="display:flex;gap:8px;margin-top:16px;">
+                <button class="modal-btn" id="comprehensive-btn" style="flex:1;background:linear-gradient(135deg,#00D9A5,#0086FF)">综合报告</button>
+                <button class="modal-btn" id="save-patient-btn" style="flex:1;background:rgba(0,0,0,0.1);border:1px solid rgba(0,0,0,0.2)">保存数据</button>
+                <button class="modal-btn" id="close-modal" style="flex:1">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 陀螺仪蓝牙连接弹窗 -->
+    <div class="modal" id="gyro-modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-title">蓝牙陀螺仪连接</div>
+            <div style="margin: 15px 0;">
+                <!-- 连接状态 -->
+                <div id="gyro-status" style="text-align: center; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 8px; margin-bottom: 15px;">
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">连接状态</div>
+                    <div id="gyro-status-text" style="font-size: 14px; font-weight: 600;">未连接</div>
+                    <div id="gyro-device-name" style="font-size: 11px; color: var(--text-muted); margin-top: 4px;"></div>
+                    <div id="gyro-battery" style="font-size: 11px; margin-top: 4px;"></div>
+                </div>
+
+                <!-- 设备列表 -->
+                <div style="margin-bottom: 15px;">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">可用设备</div>
+                    <div id="gyro-device-list" style="max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.15); border-radius: 6px; padding: 8px;">
+                        <div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px;">点击"扫描设备"开始搜索</div>
+                    </div>
+                </div>
+
+                <!-- UUID配置 -->
+                <div style="margin-bottom: 15px;">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">服务UUID (留空使用默认)</div>
+                    <input type="text" id="gyro-service-uuid" placeholder="180D" style="width: 100%; padding: 8px; background: var(--bg-panel); border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; color: var(--text); font-size: 11px; box-sizing: border-box;">
+                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">常用: 180D(心率) 180F(电池) 181A(环境) 自定义陀螺仪请填入对应UUID</div>
+                </div>
+
+                <!-- 操作按钮 -->
+                <div style="display: flex; gap: 10px;">
+                    <button id="gyro-scan-btn" style="flex: 1; padding: 10px; background: var(--primary); color: var(--bg-dark); border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">扫描设备</button>
+                    <button id="gyro-disconnect-btn" style="flex: 1; padding: 10px; background: var(--danger); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; display: none;">断开连接</button>
+                </div>
+
+                <!-- 调试信息 -->
+                <div id="gyro-debug" style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 6px; font-family: Consolas, monospace; font-size: 10px; max-height: 100px; overflow-y: auto; display: none;">
+                    <div style="color: var(--text-muted); margin-bottom: 4px;">调试信息:</div>
+                    <div id="gyro-debug-content"></div>
+                </div>
+            </div>
+            <button class="modal-btn" id="close-gyro-modal">关闭</button>
+        </div>
+    </div>
+
+    <!-- 游戏颈椎能力评估报告弹窗 -->
+    <div class="modal" id="game-report-modal" style="display: none;">
+        <div class="modal-content" style="max-width: 420px; max-height: 90vh; overflow-y: auto;">
+            <div style="text-align: center; margin-bottom: 15px;">
+                <div style="font-size: 18px; font-weight: bold; color: var(--primary);">太空躲避训练报告</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">颈椎能力评估</div>
+            </div>
+
+            <!-- 综合评级 -->
+            <div id="game-overall" style="text-align: center; margin: 15px 0; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 12px;">
+                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px;">综合评级</div>
+                <div id="game-grade" style="font-size: 42px; font-weight: 700; line-height: 1;">--</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">综合得分: <span id="game-overall-score">0</span>分</div>
+            </div>
+
+            <!-- 五维能力 -->
+            <div style="margin-bottom: 15px;">
+                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">颈椎能力评估</div>
+
+                <div style="margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 11px;">活动范围(ROM)</span>
+                        <span id="game-rom-score" style="font-size: 11px; font-weight: 600;">--</span>
+                    </div>
+                    <div style="height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden;">
+                        <div id="game-rom-bar" style="height: 100%; width: 0%; background: #22c55e; transition: width 0.5s;"></div>
+                    </div>
+                    <div style="font-size: 9px; color: var(--text-muted); margin-top: 2px;">俯仰 <span id="game-pitch-range">0</span>° | 偏航 <span id="game-yaw-range">0</span>°</div>
+                </div>
+
+                <div style="margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 11px;">位置觉</span>
+                        <span id="game-proprioception-score" style="font-size: 11px; font-weight: 600;">--</span>
+                    </div>
+                    <div style="height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden;">
+                        <div id="game-proprioception-bar" style="height: 100%; width: 0%; background: #84cc16; transition: width 0.5s;"></div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 11px;">稳定性</span>
+                        <span id="game-stability-score" style="font-size: 11px; font-weight: 600;">--</span>
+                    </div>
+                    <div style="height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden;">
+                        <div id="game-stability-bar" style="height: 100%; width: 0%; background: #eab308; transition: width 0.5s;"></div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 11px;">协调性</span>
+                        <span id="game-coordination-score" style="font-size: 11px; font-weight: 600;">--</span>
+                    </div>
+                    <div style="height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden;">
+                        <div id="game-coordination-bar" style="height: 100%; width: 0%; background: #8b5cf6; transition: width 0.5s;"></div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 11px;">反应速度</span>
+                        <span id="game-reaction-score" style="font-size: 11px; font-weight: 600;">--</span>
+                    </div>
+                    <div style="height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden;">
+                        <div id="game-reaction-bar" style="height: 100%; width: 0%; background: #06b6d4; transition: width 0.5s;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 游戏数据 -->
+            <div style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.15); border-radius: 8px;">
+                <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 6px;">训练数据</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 10px;">
+                    <div>游戏时长: <span id="game-time">0</span>秒</div>
+                    <div>最终得分: <span id="game-final-score">0</span></div>
+                    <div>成功躲避: <span id="game-dodged">0</span>次</div>
+                    <div>擦肩而过: <span id="game-nearmiss">0</span>次</div>
+                </div>
+            </div>
+
+            <!-- 评估总结 -->
+            <div id="game-summary" style="margin-bottom: 15px; padding: 10px; background: rgba(34, 197, 94, 0.1); border-radius: 8px; border: 1px solid rgba(34, 197, 94, 0.2);">
+                <div style="font-size: 10px; color: var(--success); margin-bottom: 4px;">评估总结</div>
+                <div id="game-summary-text" style="font-size: 11px; line-height: 1.5;"></div>
+            </div>
+
+            <!-- 训练建议 -->
+            <div id="game-recommendations" style="margin-bottom: 15px; padding: 10px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                <div style="font-size: 10px; color: #60a5fa; margin-bottom: 4px;">训练建议</div>
+                <div id="game-recommendations-list" style="font-size: 10px; line-height: 1.6;"></div>
+            </div>
+
+            <div style="display: flex; gap: 8px;">
+                <button class="modal-btn" id="close-game-report" style="flex: 1;">返回菜单</button>
+                <button class="modal-btn" id="restart-game" style="flex: 1; background: var(--primary);">再来一次</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 用户登录弹窗 -->
+    <div class="modal" id="login-modal" style="z-index:99999;">
+        <div class="modal-content" style="max-width: 360px;">
+            <div class="modal-title">客户信息</div>
+            <div style="margin:12px 0;">
+                <div style="display:flex;gap:8px;margin-bottom:8px;">
+                    <div style="flex:2">
+                        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">姓名 *</div>
+                        <input id="patient-name-input" placeholder="姓名" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(0,0,0,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
+                    </div>
+                    <div style="flex:1">
+                        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">性别</div>
+                        <select id="patient-gender-input" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(0,0,0,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
+                            <option value="">-</option><option value="男">男</option><option value="女">女</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <div style="flex:1">
+                        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">年龄</div>
+                        <input id="patient-age-input" placeholder="年龄" type="number" min="1" max="120" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(0,0,0,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
+                    </div>
+                    <div style="flex:2">
+                        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">编号/病历号</div>
+                        <input id="patient-id-input" placeholder="编号" style="width:100%;padding:8px;background:var(--bg-panel);border:1px solid rgba(0,0,0,0.2);border-radius:4px;color:var(--text);font-size:13px;box-sizing:border-box;">
+                    </div>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button class="modal-btn" id="login-ok-btn" style="flex:1;">确认登录</button>
+                <button class="modal-btn" id="login-cancel-btn" style="flex:1;background:rgba(0,0,0,0.1);border:1px solid rgba(0,0,0,0.2)">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 报告查询弹窗 -->
+    <div class="modal" id="records-modal">
+        <div class="modal-content" style="max-width: 500px; max-height: 85vh; overflow-y: auto;">
+            <div class="modal-title">评估报告记录</div>
+            <div id="records-list" style="margin: 12px 0;">
+                <div style="font-size:11px;color:var(--text-muted);text-align:center;padding:20px;">暂无保存的记录</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button class="modal-btn" id="clear-records-btn" style="background:var(--danger);flex:1;">清空记录</button>
+                <button class="modal-btn" id="close-records-btn" style="flex:1;">关闭</button>
+            </div>
+        </div>
+    </div>
+
+        <!-- 全页面报告视图 -->
+        <div id="view-report" style="display:none; width:100%; min-height:100vh;">
+            <div id="report-content" style="width:100%;"></div>
+        </div>
+    </div>
+
+
+<script src="./assets/cognitive/scoring-utils.js"></script>
+<script src="./assets/cognitive/cognitive-game.js"></script>
+<script src="./assets/cognitive/cognitive-stroop.js"></script>
+<script src="./assets/cognitive/cognitive-memory.js"></script>
+<script src="./assets/cognitive/cognitive-visual.js"></script>
+<script src="./assets/cognitive/cognitive-short-memory.js"></script>
+<script src="./assets/cognitive/cognitive-flexibility.js"></script>
+<script src="./assets/cognitive/cognitive-memorg.js"></script>
+<script src="./assets/cognitive/cognitive-scene-recall.js"></script>
+<script src="./assets/cognitive/cognitive-attention.js"></script>
+<script src="./assets/cognitive/cognitive-language.js"></script>
+<script src="./assets/cognitive/cognitive-reasoning.js"></script>
+<script src="./assets/cognitive/cognitive-observation.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="./assets/cognitive/cognitive-report.js?v=20260615aa"></script>
+<script>
+    // 全局点击分发 (认知模块)
+    document.addEventListener('click', function(e) {
+        if (window._handleCogClick && window._handleCogClick(e.clientX, e.clientY)) {
+            e.stopPropagation(); e.preventDefault();
+        }
+    }, true);
+
+        // 首页导航系统
+    (function(){
+        var page2 = document.getElementById('page2');
+        var app = document.getElementById('app');
+        if (!page2) return;
+
+        // Helper: 返回首页 (显示 page2 遮盖 app)
+        
+        function hideSidebarViews() {
+            var vc = document.getElementById("view-cognitive");
+            if (vc) vc.style.display = "flex";
+            var vm = document.getElementById("view-mode-select");
+            if (vm) vm.style.display = "none";
+            var sp = document.getElementById("side-panel");
+            if (sp) { sp.style.setProperty("display","none","important"); sp.style.setProperty("width","0","important"); sp.style.setProperty("min-width","0","important"); }
+            var views = ["view-integrated","view-coordination","view-rom","view-position","view-visual-checker","view-coord-checker","view-game"];
+            views.forEach(function(id) { var el = document.getElementById(id); if (el) el.style.display = "none"; });
+        }
+        function goHome() {
+            page2.style.display = 'flex';
+            var tb = document.getElementById('cog-toolbar');
+            if (tb) tb.style.display = '';
+            if (window._hideCognitive) window._hideCognitive();
+        }
+        window.goHome = goHome;
+
+        // 1. 覆盖 header 返回首页按钮 (bundle 绑定后克隆去除)
+        function overrideHomeBtn() {
+            var homeBtn = document.getElementById('back-to-home');
+            if (homeBtn) {
+                var newHomeBtn = homeBtn.cloneNode(true);
+                homeBtn.parentNode.replaceChild(newHomeBtn, homeBtn);
+                newHomeBtn.addEventListener('click', goHome);
+            }
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', overrideHomeBtn);
+        } else {
+            overrideHomeBtn();
+        }
+
+        // 2. 认知评估系统
+        var cogBtn = document.getElementById('page2-cognitive');
+        if (cogBtn) cogBtn.addEventListener("click", function() {
+            document.getElementById("cog-modal-overlay").classList.add("show");
+        });
+
+        // 3. 头动追踪系统
+        var trkBtn = document.getElementById('page2-tracking');
+        if (trkBtn) trkBtn.addEventListener('click', function() {
+            page2.style.display = 'none';
+            if (window._hideCognitive) window._hideCognitive();
+            var vc = document.getElementById('view-cognitive');
+            var vm = document.getElementById('view-mode-select');
+            var sp = document.getElementById('side-panel');
+            if (vc) vc.style.display = 'none';
+            if (vm) vm.style.display = '';
+            if (sp) { sp.style.setProperty("display","flex","important"); sp.style.setProperty("width","210px","important"); sp.style.setProperty("min-width","210px","important"); }
+        });
+
+        // 4. 侧边栏返回首页按钮
+        var backBtn = document.getElementById('back-to-page2-btn');
+        if (backBtn) backBtn.addEventListener('click', goHome);
+
+        // 5. 首页全屏按钮
+        var fsBtn = document.getElementById('page2-fullscreen');
+        if (fsBtn) fsBtn.addEventListener('click', function() {
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                document.documentElement.requestFullscreen();
+            }
+        });
+        // 6. 模块顺序导航 + 弹窗
+        var MODULE_ORDER = ["attention","shortmem","memory","flex","language","reasoning","planning","scenerecall","memorg","inhibition","visual","observation"];
+        var QUICK6_ORDER = ["reasoning","scenerecall","shortmem","attention","memory","visual"];
+        window._cogScoreLog = {};
+        window._saveCogScore = function(moduleId) {
+            var map = {
+                attention:  ['__attention',  ['score','trials','completionRate']],
+                shortmem:   ['__shortmem',   ['correct','wrong','trials','digitCount']],
+                memory:     ['__memory',     ['correct','wrong','trials','digitCount']],
+                flex:       ['__flex',       ['correct','trials','completionRate']],
+                language:   ['__language',   ['score','correct','trials','completionRate']],
+                reasoning:  ['__reasoning',  ['score','correct','trials','completionRate']],
+                planning:   ['__cog',        ['level','moves','optimal','stepEfficiency']],
+                scenerecall:['__scenerecall',['correct','trials','totalIcons']],
+                memorg:     ['__memorg',     ['correct','trials','totalCards']],
+                inhibition: ['__stroop',     ['correct','trials','rtTotal']],
+                visual:     ['__visual',     ['correct','trials','digitCount']],
+                observation:['__observation',['score','correct','trials','completionRate']]
+            };
+            var entry = map[moduleId];
+            if (!entry) return;
+            var obj = window[entry[0]];
+            if (!obj) return;
+            var data = {};
+            entry[1].forEach(function(k) { data[k] = (obj[k] != null ? obj[k] : 0); });
+            window._cogScoreLog[moduleId] = data;
+        };
+        window._nextModule = function(current) {
+            window._saveCogScore(current);
+            hideSidebarViews();
+            var tb = document.getElementById("cog-toolbar");
+            if (tb) tb.style.display = "none";
+            var order = window._quick6Mode ? QUICK6_ORDER : MODULE_ORDER;
+            var idx = order.indexOf(current);
+            if (idx >= 0 && idx < order.length - 1) {
+                activateModule(order[idx + 1]);
+                return;
+            }
+            // 注: _quick6Mode 由 _showCognitiveReport 内部读后清零, 这里不要提前重置 (否则报告拿不到 quick6 标志)
+            if (window._showCognitiveReport) { window._showCognitiveReport(); }
+            else { goHome(); }
+        };
+
+        
+        function activateModule(id) {
+            window.__cogModule = id;
+            // Show cognitive canvas
+            var c = document.getElementById("cognitive-canvas");
+            if (c) c.style.display = "block";
+            var vc = document.getElementById("view-cognitive");
+            if (vc) vc.style.display = "flex";
+            var xc = document.getElementById("crosshair-canvas");
+            if (xc) xc.style.display = "none";
+            // Hide mode-select views
+            hideSidebarViews();
+            var tb = document.getElementById("cog-toolbar");
+            if (tb) tb.style.display = "none";
+            // 侧边栏完全隐藏 (important 确保覆盖任何CSS/JS冲突)
+            var sp = document.getElementById("side-panel");
+            if (sp) { sp.style.setProperty("display","none","important"); sp.style.setProperty("width","0","important"); sp.style.setProperty("min-width","0","important"); sp.style.setProperty("overflow","hidden","important"); }
+            var area = document.getElementById("detection-area");
+            if (area) { area.style.setProperty("flex","1","important"); area.style.setProperty("min-width","","important"); }
+            // 强制 canvas 尺寸跟随布局变化
+            if (c && area) { c.width = area.offsetWidth; c.height = area.offsetHeight; }
+            // Panel: planning needs start-btn, others reuse inhibition panel (stroop-status/stroop-score)
+            var pp = document.getElementById("cog-panel-planning");
+            var ip = document.getElementById("cog-panel-inhibition");
+            if (id === "planning") { if (pp) pp.style.display = ""; if (ip) ip.style.display = "none"; }
+            else { if (pp) pp.style.display = "none"; if (ip) ip.style.display = "block"; }
+            // Call module showReady
+            var mods = {
+                attention: window.__attention,
+                shortmem: window.__shortmem,
+                memory: window.__memory,
+                flex: window.__flex,
+                language: window.__language,
+                reasoning: window.__reasoning,
+                planning: window.__cog,
+                scenerecall: window.__scenerecall,
+                memorg: window.__memorg,
+                inhibition: window.__stroop,
+                visual: window.__visual,
+                observation: window.__observation
+            };
+            var m = mods[id];
+            if (m && m.showReady) { m.showReady(); return true; }
+            return false;
+        }
+
+        // 7. 认知模块弹窗填充
+        function ensureLogin(cb) {
+            var D = window.D || {};
+            if (D.clientInfo && D.clientInfo.name && String(D.clientInfo.name).trim()) { cb(); return; }
+            var m = document.getElementById('login-modal');
+            if (!m) { cb(); return; }
+            var ci = D.clientInfo || {};
+            document.getElementById('patient-name-input').value = ci.name || '';
+            document.getElementById('patient-gender-input').value = ci.gender || '';
+            document.getElementById('patient-age-input').value = ci.age || '';
+            document.getElementById('patient-id-input').value = ci.id || '';
+            m.classList.add('show');
+            document.getElementById('patient-name-input').focus();
+            // 监听 #current-patient 被 bundle 更新 = 登录完成
+            var lbl = document.getElementById('current-patient');
+            var obs = new MutationObserver(function(){
+                var t = lbl.textContent || '';
+                if (t.indexOf('点击登录') < 0 && t.length > 3) {
+                    obs.disconnect();
+                    m.classList.remove('show');
+                    setTimeout(cb, 100);
+                }
+            });
+            obs.observe(lbl, {characterData: true, childList: true, subtree: true});
+            // 取消
+            var cancel = document.getElementById('login-cancel-btn');
+            function cc(){
+                obs.disconnect();
+                cancel.removeEventListener('click', cc);
+            }
+            cancel.addEventListener('click', cc, {once: true});
+        }
+        (function(){
+            var overlay = document.getElementById("cog-modal-overlay");
+            var grid = document.getElementById("cog-modal-grid");
+            if (!overlay || !grid) return;
+            var modules = [
+                {id:"attention",name:"注意力测试"},
+                {id:"shortmem",name:"短暂视觉记忆"},
+                {id:"memory",name:"文字记忆能力"},
+                {id:"flex",name:"变通能力测试"},
+                {id:"language",name:"语言理解能力"},
+                {id:"reasoning",name:"推理能力"},
+                {id:"planning",name:"规划能力"},
+                {id:"scenerecall",name:"场景回忆能力"},
+                {id:"memorg",name:"记忆组织提取能力"},
+                {id:"inhibition",name:"自制力测试"},
+                {id:"visual",name:"视觉记忆与提取能力"},
+                {id:"observation",name:"观察能力"}
+            ];
+            modules.forEach(function(m) {
+                var btn = document.createElement("button");
+                btn.className = "cog-modal-btn";
+                btn.textContent = m.name;
+                btn.addEventListener("click", function() {
+                    overlay.classList.remove("show");
+                    hideSidebarViews();
+                    page2.style.display = "none";
+                    var tb = document.getElementById("cog-toolbar");
+                    if (tb) tb.style.display = "none";
+                    activateModule(m.id);
+                });
+                grid.appendChild(btn);
+            });
+            document.getElementById("cog-modal-close").addEventListener("click", function() { overlay.classList.remove("show"); });
+            overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.classList.remove("show"); });
+            document.getElementById("cog-modal-full-test").addEventListener("click", function() {
+                overlay.classList.remove("show");
+                window._quick6Mode = false;
+                ensureLogin(function() {
+                    hideSidebarViews();
+                    page2.style.display = "none";
+                    var tb = document.getElementById("cog-toolbar");
+                    if (tb) tb.style.display = "none";
+                    activateModule("attention");
+                });
+            });
+            document.getElementById("cog-modal-quick6").addEventListener("click", function() {
+                overlay.classList.remove("show");
+                window._quick6Mode = true;
+                ensureLogin(function() {
+                    hideSidebarViews();
+                    page2.style.display = "none";
+                    var tb = document.getElementById("cog-toolbar");
+                    if (tb) tb.style.display = "none";
+                    activateModule("reasoning");
+                });
+            });
+
+            // QR Code button handler
+            var qrBtn = document.getElementById('cog-qr-btn');
+            if (qrBtn) qrBtn.addEventListener('click', function() {
+                var overlay = document.getElementById('cog-qr-overlay');
+                overlay.style.display = 'flex';
+                var baseUrl = window.location.origin + window.location.pathname;
+                var tid = '';
+                try { tid = localStorage.getItem('cog_therapist_id') || 'default'; } catch(e) {}
+                var url = baseUrl + '?mode=cognitive&tid=' + encodeURIComponent(tid);
+                document.getElementById('cog-qr-url').textContent = url;
+                var canvasDiv = document.getElementById('cog-qr-canvas');
+                if (typeof QRCode !== 'undefined') {
+                    canvasDiv.innerHTML = '';
+                    new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
+                } else {
+                    canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载中，请稍候...<br><a href="' + url + '" style="color:#0086FF;">直接打开链接</a></div>';
+                    var script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
+                    script.onload = function() {
+                        canvasDiv.innerHTML = '';
+                        new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
+                    };
+                    script.onerror = function() {
+                        canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载失败<br>请复制以下链接发送给患者：<br><a href="' + url + '" style="color:#0086FF;">' + url + '</a></div>';
+                    };
+                    document.head.appendChild(script);
+                }
+            });
+            var qrClose = document.getElementById('cog-qr-close');
+            if (qrClose) qrClose.addEventListener('click', function() {
+                document.getElementById('cog-qr-overlay').style.display = 'none';
+            });
+
+            // Deep-link: ?mode=cognitive 自动进入认知评估
+            (function() {
+                var params = new URLSearchParams(window.location.search);
+                if (params.get('mode') !== 'cognitive') return;
+                if (params.get('tid')) {
+                    try { localStorage.setItem('cog_therapist_id', params.get('tid')); } catch(e) {}
+                }
+                page2.style.display = 'none';
+                document.getElementById('cog-modal-overlay').classList.add('show');
+            })();
+        })();
+    })();
+
+
+
+
+</script>
+</body>
+</html>
