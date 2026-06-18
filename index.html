@@ -1057,6 +1057,64 @@
             }
             cancel.addEventListener('click', cc, {once: true});
         }
+
+        // 生成带患者信息的 QR URL
+        function _buildQRUrl(testType) {
+            var baseUrl = window.location.origin + window.location.pathname;
+            var D = window.D || {};
+            var ci = D.clientInfo || {};
+            var params = ['mode=cognitive', 'start=' + testType];
+            if (ci.name) params.push('name=' + encodeURIComponent(ci.name));
+            if (ci.age) params.push('age=' + encodeURIComponent(ci.age));
+            if (ci.gender) params.push('gender=' + encodeURIComponent(ci.gender));
+            var tid = '';
+            try { tid = localStorage.getItem('cog_therapist_id') || 'default'; } catch(e) {}
+            params.push('tid=' + encodeURIComponent(tid));
+            return baseUrl + '?' + params.join('&');
+        }
+
+        // 显示 QR 码弹窗
+        function _showQRForTest(testType) {
+            var url = _buildQRUrl(testType);
+            var overlay = document.getElementById('cog-qr-overlay');
+            overlay.style.display = 'flex';
+            document.getElementById('cog-qr-url').textContent = url;
+            var canvasDiv = document.getElementById('cog-qr-canvas');
+            if (typeof QRCode !== 'undefined') {
+                canvasDiv.innerHTML = '';
+                new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
+            } else {
+                canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载中，请稍候...<br><a href="' + url + '" style="color:#0086FF;">直接打开链接</a></div>';
+                var script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
+                script.onload = function() {
+                    canvasDiv.innerHTML = '';
+                    new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
+                };
+                script.onerror = function() {
+                    canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载失败<br>请复制以下链接发送给患者：<br><a href="' + url + '" style="color:#0086FF;">' + url + '</a></div>';
+                };
+                document.head.appendChild(script);
+            }
+        }
+
+        // Deep-link: 患者扫码后自动开始做题
+        function _startPatientTest(testType, patientInfo) {
+            // Set patient info
+            window.D = window.D || {};
+            window.D.clientInfo = patientInfo;
+            try { localStorage.setItem('cervical_current_client', JSON.stringify(patientInfo)); } catch(e) {}
+            // Update header display
+            var lbl = document.getElementById('current-patient');
+            if (lbl) { lbl.textContent = '👤 ' + (patientInfo.name || '患者') + ' ' + (patientInfo.age||'') + '岁'; }
+            // Start the test
+            window._quick6Mode = (testType === 'quick6');
+            hideSidebarViews();
+            var tb = document.getElementById('cog-toolbar');
+            if (tb) tb.style.display = 'none';
+            var firstModule = testType === 'quick6' ? 'reasoning' : 'attention';
+            activateModule(firstModule);
+        }
         (function(){
             var overlay = document.getElementById("cog-modal-overlay");
             var grid = document.getElementById("cog-modal-grid");
@@ -1093,54 +1151,23 @@
             overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.classList.remove("show"); });
             document.getElementById("cog-modal-full-test").addEventListener("click", function() {
                 overlay.classList.remove("show");
-                window._quick6Mode = false;
                 ensureLogin(function() {
-                    hideSidebarViews();
-                    page2.style.display = "none";
-                    var tb = document.getElementById("cog-toolbar");
-                    if (tb) tb.style.display = "none";
-                    activateModule("attention");
+                    _showQRForTest('full');
                 });
             });
             document.getElementById("cog-modal-quick6").addEventListener("click", function() {
                 overlay.classList.remove("show");
-                window._quick6Mode = true;
                 ensureLogin(function() {
-                    hideSidebarViews();
-                    page2.style.display = "none";
-                    var tb = document.getElementById("cog-toolbar");
-                    if (tb) tb.style.display = "none";
-                    activateModule("reasoning");
+                    _showQRForTest('quick6');
                 });
             });
 
-            // QR Code button handler
+            // QR Code button (manual share, no test type preselected)
             var qrBtn = document.getElementById('cog-qr-btn');
             if (qrBtn) qrBtn.addEventListener('click', function() {
-                var overlay = document.getElementById('cog-qr-overlay');
-                overlay.style.display = 'flex';
-                var baseUrl = window.location.origin + window.location.pathname;
-                var tid = '';
-                try { tid = localStorage.getItem('cog_therapist_id') || 'default'; } catch(e) {}
-                var url = baseUrl + '?mode=cognitive&tid=' + encodeURIComponent(tid);
-                document.getElementById('cog-qr-url').textContent = url;
-                var canvasDiv = document.getElementById('cog-qr-canvas');
-                if (typeof QRCode !== 'undefined') {
-                    canvasDiv.innerHTML = '';
-                    new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
-                } else {
-                    canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载中，请稍候...<br><a href="' + url + '" style="color:#0086FF;">直接打开链接</a></div>';
-                    var script = document.createElement('script');
-                    script.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
-                    script.onload = function() {
-                        canvasDiv.innerHTML = '';
-                        new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
-                    };
-                    script.onerror = function() {
-                        canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载失败<br>请复制以下链接发送给患者：<br><a href="' + url + '" style="color:#0086FF;">' + url + '</a></div>';
-                    };
-                    document.head.appendChild(script);
-                }
+                ensureLogin(function() {
+                    _showQRForTest('full');
+                });
             });
             var qrClose = document.getElementById('cog-qr-close');
             if (qrClose) qrClose.addEventListener('click', function() {
@@ -1148,6 +1175,7 @@
             });
 
             // Deep-link: ?mode=cognitive 自动进入认知评估
+            // 患者扫码: ?mode=cognitive&start=full&name=张三&age=35&gender=男
             (function() {
                 var params = new URLSearchParams(window.location.search);
                 if (params.get('mode') !== 'cognitive') return;
@@ -1155,6 +1183,30 @@
                     try { localStorage.setItem('cog_therapist_id', params.get('tid')); } catch(e) {}
                 }
                 page2.style.display = 'none';
+                // 患者直达: 有 start= 参数直接开始做题
+                var startType = params.get('start');
+                if (startType === 'full' || startType === 'quick6') {
+                    var patientInfo = {
+                        name: params.get('name') || '',
+                        age: params.get('age') || '',
+                        gender: params.get('gender') || '',
+                        id: params.get('id') || ''
+                    };
+                    // Wait for modules to fully load
+                    var retries = 0;
+                    var readyTimer = setInterval(function() {
+                        retries++;
+                        if ((startType === 'quick6' && window.__reasoning && window.__reasoning.showReady) ||
+                            (startType === 'full' && window.__attention && window.__attention.showReady)) {
+                            clearInterval(readyTimer);
+                            _startPatientTest(startType, patientInfo);
+                        } else if (retries > 50) {
+                            clearInterval(readyTimer);
+                        }
+                    }, 100);
+                    return;
+                }
+                // 治疗师进入: 显示模块选择弹窗
                 document.getElementById('cog-modal-overlay').classList.add('show');
             })();
         })();
