@@ -1061,8 +1061,35 @@
         // 生成带患者信息的 QR URL
         function _buildQRUrl(testType) {
             var baseUrl = window.location.origin + window.location.pathname;
-            var D = window.D || {};
-            var ci = D.clientInfo || {};
+            // 多来源读取患者信息 (bundle 可能异步写入, 需要从多处兜底)
+            var ci = { name: '', age: '', gender: '' };
+            try {
+                if (window.D && window.D.clientInfo) {
+                    ci.name = window.D.clientInfo.name || '';
+                    ci.age = window.D.clientInfo.age || '';
+                    ci.gender = window.D.clientInfo.gender || '';
+                }
+            } catch(e) {}
+            if (!ci.name) {
+                try {
+                    var raw = localStorage.getItem('cervical_current_client');
+                    if (raw) { var p = JSON.parse(raw); ci.name = p.name || ''; ci.age = p.age || ''; ci.gender = p.gender || ''; }
+                } catch(e2) {}
+            }
+            if (!ci.name) {
+                try {
+                    var ni = document.getElementById('patient-name-input');
+                    var ai = document.getElementById('patient-age-input');
+                    var gi = document.getElementById('patient-gender-input');
+                    if (ni && ni.value) ci.name = ni.value;
+                    if (ai && ai.value) ci.age = ai.value;
+                    if (gi && gi.value) ci.gender = gi.value;
+                } catch(e3) {}
+            }
+            if (!ci.name) {
+                var el = document.getElementById('current-patient');
+                if (el) { var t = el.textContent.trim().replace(/^👤\s*/,'').replace(/\s*#[^\s]+\s*$/,'').trim(); if (t && t!=='点击登录') ci.name = t; }
+            }
             var params = ['mode=cognitive', 'start=' + testType];
             if (ci.name) params.push('name=' + encodeURIComponent(ci.name));
             if (ci.age) params.push('age=' + encodeURIComponent(ci.age));
@@ -1075,6 +1102,7 @@
 
         // 显示 QR 码弹窗
         function _showQRForTest(testType) {
+            // 延迟 300ms 确保 bundle 完成 clientInfo 写入
             var url = _buildQRUrl(testType);
             var overlay = document.getElementById('cog-qr-overlay');
             overlay.style.display = 'flex';
