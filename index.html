@@ -1100,9 +1100,10 @@
 
         // Deep-link: 患者扫码后自动开始做题
         function _startPatientTest(testType, patientInfo) {
-            // Set patient info
+            // Set patient info (D.clientInfo may be overwritten by deferred bundle, so also save to _cogPatientInfo)
             window.D = window.D || {};
             window.D.clientInfo = patientInfo;
+            window._cogPatientInfo = patientInfo;
             try { localStorage.setItem('cervical_current_client', JSON.stringify(patientInfo)); } catch(e) {}
             // Update header display
             var lbl = document.getElementById('current-patient');

@@ -382,8 +382,17 @@
   // ========== REPORT GENERATION ==========
   function getPatientInfo() {
     var info = { name: '未知', age: '', gender: '', id: '' };
-    // 优先从 window.D.clientInfo 读取 (真实客户档案, 但 bundle 可能未暴露 D)
+    // 最高优先级: window._cogPatientInfo (QR码直达患者, 防止被 bundle 覆盖)
     try {
+      if (window._cogPatientInfo && window._cogPatientInfo.name) {
+        info.name = window._cogPatientInfo.name;
+        if (window._cogPatientInfo.age) info.age = String(window._cogPatientInfo.age);
+        if (window._cogPatientInfo.gender) info.gender = window._cogPatientInfo.gender;
+        if (window._cogPatientInfo.id) info.id = window._cogPatientInfo.id;
+      }
+    } catch(e0) {}
+    // 从 window.D.clientInfo 读取 (真实客户档案, 但 bundle 可能未暴露 D)
+    if (info.name === '未知') { try {
       if (window.D && window.D.clientInfo) {
         var ci = window.D.clientInfo;
         if (ci.name) info.name = ci.name;
@@ -391,7 +400,7 @@
         if (ci.gender) info.gender = ci.gender;
         if (ci.id) info.id = ci.id;
       }
-    } catch (e) {}
+    } catch (e) {}}
     // Fallback 1: 直接从 localStorage (bundle 启动时就是从这里读的, 是真源)
     if (info.name === '未知') {
       try {
