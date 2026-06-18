@@ -53,11 +53,10 @@
     observation:  [0.10,0.10,0.15,0.15,0.10,0.10,0.10,0.10,0.05,0.05]
   };
 
-  // ========== CLOUD CONFIG (Supabase) ==========
-  // 替换为你的 Supabase 项目 URL 和 anon key
-  var SUPABASE_URL = 'https://xxxxxxxxxxxx.supabase.co';
-  var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4eHh4eHh4eHh4eHh4eHh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTYwMDAwMDAsImV4cCI6MjAzMTU3NjAwMH0.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
-  var SUPABASE_TABLE = 'cog_reports';
+  // ========== CLOUD CONFIG (jsonblob — 零配置云端存储) ==========
+  var CLOUD_API = 'https://jsonblob.com/api/jsonBlob';
+  var CLOUD_ENABLED = true;
+  // 每个治疗师一个 blob ID, 存在 localStorage('cog_cloud_blob_id')
   var CLOUD_ENABLED = (SUPABASE_URL.indexOf('xxxxxxxxxxxx') === -1);
 
   // ========== 年龄分层常模 (儿童发育校正系数) ==========
@@ -2138,82 +2137,95 @@
     return record;
   }
 
-  // ========== CLOUD UPLOAD ==========
-  function uploadToCloud(record) {
-    if (!CLOUD_ENABLED) return;
-    var tid = '';
-    try { tid = localStorage.getItem('cog_therapist_id') || 'default'; } catch(e) { tid = 'default'; }
-    var payload = {
-      therapist_id: tid,
-      patient_name:  (record.patientInfo && record.patientInfo.name)  || '',
-      patient_age:   (record.patientInfo && record.patientInfo.age)   || '',
-      patient_gender:(record.patientInfo && record.patientInfo.gender)|| '',
-      patient_id:    (record.patientInfo && record.patientInfo.id)    || '',
-      test_type:     record.isQuick6 ? 'quick6' : 'full',
-      normalized_scores: record.normalizedScores,
-      raw_scores:    record.rawScores,
-      brain_regions: record.brainRegions,
-      risk_index:    record.riskIndex,
-      overall_score: record.overallScore,
-      report_date:   record.date,
-      report_time:   record.time
-    };
-    fetch(SUPABASE_URL + '/rest/v1/' + SUPABASE_TABLE, {
-      method: 'POST',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': 'Bearer ' + SUPABASE_KEY,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify(payload)
-    }).then(function(res) {
-      if (res.ok) {
-        return res.json().then(function(data) {
-          if (data && data[0] && data[0].id) {
-            record._cloudId = data[0].id;
-            try {
-              var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
-              for (var i = 0; i < records.length; i++) {
-                if (records[i].id === record.id) { records[i]._cloudId = data[0].id; break; }
-              }
-              localStorage.setItem('cog_records', JSON.stringify(records));
-            } catch(e2) {}
-          }
-        });
-      }
-    }).catch(function(err) {});
+  // ========== CLOUD UPLOAD (jsonblob) ==========
+  function _getCloudBlobId() {
+    try { return localStorage.getItem('cog_cloud_blob_id') || ''; } catch(e) { return ''; }
+  }
+  function _setCloudBlobId(id) {
+    try { localStorage.setItem('cog_cloud_blob_id', id); } catch(e) {}
   }
 
-  // ========== CLOUD FETCH ==========
+  function uploadToCloud(record) {
+    if (!CLOUD_ENABLED) return;
+    var blobId = _getCloudBlobId();
+    var cloudRecord = {
+      id: record.id,
+      date: record.date, time: record.time,
+      patientInfo: record.patientInfo,
+      normalizedScores: record.normalizedScores,
+      rawScores: record.rawScores,
+      brainRegions: record.brainRegions,
+      riskIndex: record.riskIndex,
+      overallScore: record.overallScore,
+      isQuick6: record.isQuick6,
+      createdAt: new Date().toISOString()
+    };
+
+    var doUpload = function(reports) {
+      reports.unshift(cloudRecord);
+      if (reports.length > 50) reports = reports.slice(0, 50);
+      var method = blobId ? 'PUT' : 'POST';
+      var url = blobId ? (CLOUD_API + '/' + blobId) : CLOUD_API;
+      fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reports)
+      }).then(function(res) {
+        if (res.ok) {
+          if (!blobId) {
+            var loc = res.headers.get('Location') || '';
+            var newId = loc.split('/').pop() || '';
+            if (!newId) {
+              var xid = res.headers.get('X-jsonblob-id');
+              if (xid) newId = xid;
+            }
+            if (newId) { _setCloudBlobId(newId); record._cloudId = newId; }
+          }
+          try {
+            var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
+            for (var i = 0; i < records.length; i++) {
+              if (records[i].id === record.id) { records[i]._cloudId = 'ok'; break; }
+            }
+            localStorage.setItem('cog_records', JSON.stringify(records));
+          } catch(e2) {}
+        }
+      }).catch(function(err) {});
+    };
+
+    if (blobId) {
+      fetch(CLOUD_API + '/' + blobId).then(function(r) { return r.ok ? r.json() : []; })
+        .then(function(data) { doUpload(Array.isArray(data) ? data : []); })
+        .catch(function() { doUpload([]); });
+    } else {
+      doUpload([]);
+    }
+  }
+
+  // ========== CLOUD FETCH (jsonblob) ==========
   function fetchCloudReports(callback) {
     if (!CLOUD_ENABLED) { callback([]); return; }
-    var tid = '';
-    try { tid = localStorage.getItem('cog_therapist_id') || 'default'; } catch(e) { tid = 'default'; }
-    var url = SUPABASE_URL + '/rest/v1/' + SUPABASE_TABLE
-      + '?therapist_id=eq.' + encodeURIComponent(tid)
-      + '&order=created_at.desc&limit=20';
-    fetch(url, {
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-    }).then(function(res) {
-      if (res.ok) return res.json();
-      throw new Error('Fetch failed');
-    }).then(function(data) {
-      var records = (data || []).map(function(r) {
-        return {
-          id: 'cloud_' + (r.id || ''),
-          date: r.report_date, time: r.report_time,
-          patientInfo: { name: r.patient_name, age: r.patient_age, gender: r.patient_gender, id: r.patient_id },
-          normalizedScores: r.normalized_scores || {},
-          rawScores: r.raw_scores || {},
-          brainRegions: r.brain_regions || {},
-          riskIndex: r.risk_index, overallScore: r.overall_score,
-          isQuick6: r.test_type === 'quick6',
-          _isCloud: true, _cloudId: r.id
-        };
-      });
-      callback(records);
-    }).catch(function(err) { callback([]); });
+    var blobId = _getCloudBlobId();
+    if (!blobId) { callback([]); return; }
+    fetch(CLOUD_API + '/' + blobId)
+      .then(function(res) { return res.ok ? res.json() : null; })
+      .then(function(data) {
+        if (!data || !Array.isArray(data)) { callback([]); return; }
+        var records = data.map(function(r) {
+          return {
+            id: 'cloud_' + (r.id || ''),
+            date: r.date, time: r.time,
+            patientInfo: r.patientInfo || {},
+            normalizedScores: r.normalizedScores || {},
+            rawScores: r.rawScores || {},
+            brainRegions: r.brainRegions || {},
+            riskIndex: r.riskIndex, overallScore: r.overallScore,
+            isQuick6: !!r.isQuick6,
+            _isCloud: true, _cloudId: r.id
+          };
+        });
+        callback(records);
+      })
+      .catch(function(err) { callback([]); });
   }
 
   function loadHistory() {
