@@ -49,8 +49,8 @@ function renderSmFB(ctx,W,H){
     ctx.fillStyle='#1a1a2e';ctx.fillRect(0,0,W,H);
     var msg=sm.tutFeedbackMsg||(sm.tutFeedbackOk?'对，再试一个':'哦，不对');
     var color=sm.tutFeedbackOk?'#4CAF50':'#F44336';
-    var bw=500,bh=140,bx=W/2-bw/2,by=H/2-70;
-    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+    var bw=440,bh=88,bx=W/2-bw/2,by=H/2-70;
+    drawRR(ctx,bx,by,bw,bh,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle=color;ctx.font='bold 28px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText(msg,W/2,by+bh/2-15);
     ctx.textBaseline='alphabetic';ctx.textAlign='start';
@@ -73,8 +73,8 @@ function renderShortMem(){
 function renderSMReady(ctx,W,H,isStart){
     ctx.fillStyle='#fff';ctx.font='bold 36px sans-serif';ctx.textAlign='center';ctx.fillText('短暂视觉记忆',W/2,H/2-130);ctx.textAlign='start';
     var t1='考验你记住画面的能力',t2='分数越高，代表着你的记忆力越强';
-    ctx.font='bold 18px sans-serif';var bw=520,bh=140,bx=W/2-bw/2,by=H/2-70;
-    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+    ctx.font='bold 18px sans-serif';var bw=440,bh=88,bx=W/2-bw/2,by=H/2-70;
+    drawRR(ctx,bx,by,bw,bh,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t1,W/2,by+40);ctx.fillText(t2,W/2,by+68);ctx.textBaseline='alphabetic';ctx.textAlign='start';
     var bw2=160,bh2=48,bx2=W/2-bw2/2,by2=by+bh+10;
     drawRR(ctx,bx2,by2,bw2,bh2,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
@@ -82,21 +82,21 @@ function renderSMReady(ctx,W,H,isStart){
     sm._rb={x:bx2,y:by2,w:bw2,h:bh2};
 }
 function renderSMTutorial(ctx,W,H){
-    var t='依次点击出现过的小动物';ctx.font='bold 18px sans-serif';var bw=560,bh=120,bx=W/2-bw/2,by=H/2-65;
-    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+    var t='依次点击出现过的小动物';ctx.font='bold 18px sans-serif';var bw=440,bh=76,bx=W/2-bw/2,by=H/2-65;
+    drawRR(ctx,bx,by,bw,bh,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,W/2,by+50);ctx.textBaseline='alphabetic';ctx.textAlign='start';
     var bw2=140,bh2=44,bx2=W/2-bw2/2,by2=by+bh+10;drawRR(ctx,bx2,by2,bw2,bh2,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle=GOLD;ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('继续',W/2,by2+bh2/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';sm._tb={x:bx2,y:by2,w:bw2,h:bh2};
 }
 function renderSMReadyGame(ctx,W,H){
-    var t='对就是这样，现在正式开始游戏吧';ctx.font='bold 22px sans-serif';var tw=ctx.measureText(t).width;var bw=tw+120,bh=120,bx=W/2-bw/2,by=H/2-65;
-    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,W/2,by+50);ctx.textBaseline='alphabetic';ctx.textAlign='start';
+    var t='对就是这样，现在正式开始游戏吧';ctx.font='bold 22px sans-serif';var tw=ctx.measureText(t).width;var bw=tw+120,bh=76,bx=W/2-bw/2,by=H/2-65;
+    drawRR(ctx,bx,by,bw,bh,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,W/2,by+50);ctx.textBaseline='alphabetic';ctx.textAlign='start';
     var bw2=160,bh2=44,bx2=W/2-bw2/2,by2=by+bh+10;drawRR(ctx,bx2,by2,bw2,bh2,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle=GOLD;ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('开始游戏',W/2,by2+bh2/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';sm._rgb={x:bx2,y:by2,w:bw2,h:bh2};
 }
 function renderSMTut1Done(ctx,W,H){
-    var t='对就是这样，下面开始下一关';ctx.font='bold 22px sans-serif';var bw=500,bh=120,bx=W/2-bw/2,by=H/2-65;
-    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,W/2,by+50);ctx.textBaseline='alphabetic';ctx.textAlign='start';
+    var t='对就是这样，下面开始下一关';ctx.font='bold 22px sans-serif';var bw=500,bh=76,bx=W/2-bw/2,by=H/2-65;
+    drawRR(ctx,bx,by,bw,bh,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,W/2,by+50);ctx.textBaseline='alphabetic';ctx.textAlign='start';
     var bw2=140,bh2=44,bx2=W/2-bw2/2,by2=by+bh+10;drawRR(ctx,bx2,by2,bw2,bh2,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle=GOLD;ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('继续',W/2,by2+bh2/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';sm._tut1ContBtn={x:bx2,y:by2,w:bw2,h:bh2};
 }

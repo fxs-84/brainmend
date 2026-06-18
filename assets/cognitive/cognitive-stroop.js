@@ -123,8 +123,8 @@ function renderStroopFeedback(ctx, W, H) {
     ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0, 0, W, H);
     var msg = stroop.tutFeedbackMsg || (stroop.tutFeedbackOk ? '对，再试一个' : '哦，不对');
     var color = stroop.tutFeedbackOk ? '#fff' : '#F44336';
-    var bw = 500, bh = 140, bx = W/2 - bw/2, by = H/2 - 70;
-    drawRR(ctx, bx, by, bw, bh, 16); ctx.strokeStyle = GOLD; ctx.lineWidth = 3; ctx.stroke();
+    var bw = 440, bh = 88, bx = W/2 - bw/2, by = H/2 - 44;
+    drawRR(ctx, bx, by, bw, bh, 16); ctx.strokeStyle = GOLD; ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = color; ctx.font = 'bold 28px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(msg, W/2, by + bh/2 - 15);
     ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'start';
@@ -172,14 +172,14 @@ function renderReadyScreen(ctx, W, H) {
     var desc2 = '分数越高代表你的专注力越好。';
     ctx.font = 'bold 18px sans-serif';
     var dw = ctx.measureText(descText).width;
-    var bw = Math.max(dw, 420) + 60, bh = 140;
-    var bx = W/2 - bw/2, by = H/2 - 70;
-    drawRoundRect(ctx, bx, by, bw, bh, 16);
-    ctx.strokeStyle = GOLD; ctx.lineWidth = 3; ctx.stroke();
+    var bw = Math.max(dw, 400) + 40, bh = 88;
+    var bx = W/2 - bw/2, by = H/2 - 44;
+    drawRoundRect(ctx, bx, by, bw, bh, 12);
+    ctx.strokeStyle = GOLD; ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(descText, W/2, by + 40);
-    ctx.fillText(desc2, W/2, by + 68);
+    ctx.fillText(descText, W/2, by + 28);
+    ctx.fillText(desc2, W/2, by + 48);
     ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'start';
 
     // 开始教程按钮
@@ -201,13 +201,13 @@ function renderTutorialScreen(ctx, W, H) {
     var hintText = '根据上面文字的颜色点击下面对应的按钮';
     ctx.font = 'bold 18px sans-serif';
     var hw = ctx.measureText(hintText).width;
-    var bw = Math.max(hw, 360) + 100, bh = 120;
-    var bx = W/2 - bw/2, by = H/2 - 65;
-    drawRoundRect(ctx, bx, by, bw, bh, 16);
-    ctx.strokeStyle = GOLD; ctx.lineWidth = 3; ctx.stroke();
+    var bw = Math.max(hw, 340) + 60, bh = 76;
+    var bx = W/2 - bw/2, by = H/2 - 38;
+    drawRoundRect(ctx, bx, by, bw, bh, 12);
+    ctx.strokeStyle = GOLD; ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(hintText, W/2, by + 50);
+    ctx.fillText(hintText, W/2, by + 32);
     ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'start';
 
     // 继续按钮
@@ -229,7 +229,7 @@ function renderReadyStartScreen(ctx, W, H) {
     ctx.fillText('自制力测试', W/2, H/2 - 150);
     var bwBox = 520, bhBox = 100, bxBox = W/2 - bwBox/2, byBox = H/2 - 80;
     drawRR(ctx, bxBox, byBox, bwBox, bhBox, 16);
-    ctx.strokeStyle = GOLD; ctx.lineWidth = 3; ctx.stroke();
+    ctx.strokeStyle = GOLD; ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = '#fff'; ctx.font = '18px sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('考验你的冲动控制与抑制能力', W/2, byBox + 35);
@@ -251,10 +251,10 @@ function renderReadyGameScreen(ctx, W, H) {
     var text = '对就是这样，现在开始游戏吧';
     ctx.font = 'bold 22px sans-serif';
     var tw2 = ctx.measureText(text).width;
-    var bw = tw2 + 120, bh = 120;
+    var bw = tw2 + 80, bh = 76;
     var bx = W/2 - bw/2, by = H/2 - 65;
-    drawRoundRect(ctx, bx, by, bw, bh, 16);
-    ctx.strokeStyle = GOLD; ctx.lineWidth = 3; ctx.stroke();
+    drawRoundRect(ctx, bx, by, bw, bh, 12);
+    ctx.strokeStyle = GOLD; ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(text, W/2, by + 50);
@@ -290,7 +290,7 @@ function renderGame(ctx, W, H) {
     } else {
         ctx.fillStyle = GOLD; ctx.globalAlpha = 0.25; ctx.fill(); ctx.globalAlpha = 1;
     }
-    ctx.lineWidth = 3; ctx.stroke();
+    ctx.lineWidth = 2; ctx.stroke();
 
     if (!showingResult) {
         ctx.fillStyle = stroop.wordColor;
@@ -323,7 +323,7 @@ function renderGame(ctx, W, H) {
 
         drawRoundRect(ctx, bx, btnY, btnW, btnH, 12);
         ctx.fillStyle = GOLD; ctx.globalAlpha = 0.3; ctx.fill(); ctx.globalAlpha = 1;
-        ctx.strokeStyle = GOLD; ctx.lineWidth = 3; ctx.stroke();
+        ctx.strokeStyle = GOLD; ctx.lineWidth = 2; ctx.stroke();
         ctx.fillStyle = txtColor;
         ctx.font = 'bold 28px sans-serif'; ctx.textAlign = 'center';
         ctx.fillText(label, bx + btnW/2, btnY + btnH/2 + 10);

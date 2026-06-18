@@ -78,8 +78,8 @@ function renderMemFB(ctx,W,H){
     ctx.fillStyle='#1a1a2e';ctx.fillRect(0,0,W,H);
     var msg=mem.tutFeedbackMsg||(mem.tutFeedbackOk?'对，再试一个':'哦，不对');
     var color='#fff';
-    var bw=500,bh=140,bx=W/2-bw/2,by=H/2-70;
-    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+    var bw=440,bh=88,bx=W/2-bw/2,by=H/2-70;
+    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle=color;ctx.font='bold 28px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText(msg,W/2,by+bh/2-15);
     ctx.textBaseline='alphabetic';ctx.textAlign='start';
@@ -109,8 +109,8 @@ function renderMemory(){
 function renderMemReady(ctx,W,H){
     ctx.fillStyle='#fff';ctx.font='bold 36px sans-serif';ctx.textAlign='center';ctx.fillText('文字记忆能力',W/2,H/2-130);ctx.textAlign='start';
     var t1='考验你大脑记住数字与文字的能力',t2='分数越高代表着你记忆力越强';
-    ctx.font='bold 18px sans-serif';var bw=520,bh=140,bx=W/2-bw/2,by=H/2-70;
-    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+    ctx.font='bold 18px sans-serif';var bw=440,bh=88,bx=W/2-bw/2,by=H/2-70;
+    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t1,W/2,by+40);ctx.fillText(t2,W/2,by+68);ctx.textBaseline='alphabetic';ctx.textAlign='start';
     var bw2=160,bh2=48,bx2=W/2-bw2/2,by2=by+bh+10;
     drawRR(ctx,bx2,by2,bw2,bh2,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
@@ -119,10 +119,10 @@ function renderMemReady(ctx,W,H){
 }
 function renderMemReadyStart(ctx,W,H){
     ctx.fillStyle='#fff';ctx.font='bold 36px sans-serif';ctx.textAlign='center';ctx.fillText('文字记忆能力',W/2,H/2-150);
-    var bwBox=520,bhBox=100,bxBox=W/2-bwBox/2,byBox=H/2-80;
-    drawRR(ctx,bxBox,byBox,bwBox,bhBox,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+    var bwBox=440,bhBox=74,bxBox=W/2-bwBox/2,byBox=H/2-58;
+    drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle='#fff';ctx.font='18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText('考验你大脑记住数字与文字的能力',W/2,byBox+35);ctx.fillText('分数越高代表着你记忆力越强',W/2,byBox+65);
+    ctx.fillText('考验你大脑记住数字与文字的能力',W/2,byBox+27);ctx.fillText('分数越高代表着你记忆力越强',W/2,byBox+50);
     ctx.textBaseline='alphabetic';ctx.textAlign='start';
     var bw=160,bh=48,bx=W/2-bw/2,by=byBox+bhBox+10;
     drawRR(ctx,bx,by,bw,bh,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
@@ -132,8 +132,8 @@ function renderMemReadyStart(ctx,W,H){
 
 function renderMemTutorial(ctx,W,H){
     var t='记住出现的数字序列，就如同记电话号码那样';
-    ctx.font='bold 18px sans-serif';var bw=560,bh=120,bx=W/2-bw/2,by=H/2-65;
-    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+    ctx.font='bold 18px sans-serif';var bw=440,bh=76,bx=W/2-bw/2,by=H/2-65;
+    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,W/2,by+50);ctx.textBaseline='alphabetic';ctx.textAlign='start';
     var bw2=140,bh2=44,bx2=W/2-bw2/2,by2=by+bh+10;
     drawRR(ctx,bx2,by2,bw2,bh2,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
@@ -142,8 +142,8 @@ function renderMemTutorial(ctx,W,H){
 }
 function renderMemReadyGame(ctx,W,H){
     var t='对就是这样，现在开始游戏吧';ctx.font='bold 22px sans-serif';var tw=ctx.measureText(t).width;
-    var bw=tw+120,bh=120,bx=W/2-bw/2,by=H/2-65;
-    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+    var bw=tw+120,bh=76,bx=W/2-bw/2,by=H/2-65;
+    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,W/2,by+50);ctx.textBaseline='alphabetic';ctx.textAlign='start';
     var bw2=160,bh2=44,bx2=W/2-bw2/2,by2=by+bh+10;
     drawRR(ctx,bx2,by2,bw2,bh2,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
@@ -170,7 +170,7 @@ function renderMemGame(ctx,W,H){
         ctx.font='bold 36px sans-serif';ctx.fillStyle='#4CAF50';ctx.textAlign='center';ctx.fillText(mem.digits.join(' '),W/2,boxY-15);ctx.textAlign='start';
     }
     // 显示框
-    drawRR(ctx,boxX,boxY,boxW,boxH,12);ctx.fillStyle=ORANGE;ctx.fill();ctx.strokeStyle=ORANGE;ctx.lineWidth=3;ctx.stroke();
+    drawRR(ctx,boxX,boxY,boxW,boxH,12);ctx.fillStyle=ORANGE;ctx.fill();ctx.strokeStyle=ORANGE;ctx.lineWidth=2;ctx.stroke();
     // 框内数字
     if(mem.displayPhase==='showing'){
         var idx=Math.floor((n2-mem.showTimer)/1000);

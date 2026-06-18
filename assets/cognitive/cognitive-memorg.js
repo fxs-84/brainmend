@@ -139,9 +139,9 @@ function renderMemOrg(){
 
 	function renderReady(ctx,W,H,isStart){
 		ctx.fillStyle='#fff';ctx.font='bold 36px sans-serif';ctx.textAlign='center';ctx.fillText('记忆组织提取能力',W/2,H/2-150);
-		var t1='考验你记住与处理复杂信息的能力',t2='分数越高代表着你处理能力越强';ctx.font='bold 18px sans-serif';var bwBox=520,bhBox=100,bxBox=W/2-bwBox/2,byBox=H/2-80;
-		drawRR(ctx,bxBox,byBox,bwBox,bhBox,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
-		ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t1,W/2,byBox+35);ctx.fillText(t2,W/2,byBox+65);ctx.textBaseline='alphabetic';ctx.textAlign='start';
+		var t1='考验你记住与处理复杂信息的能力',t2='分数越高代表着你处理能力越强';ctx.font='bold 18px sans-serif';var bwBox=440,bhBox=74,bxBox=W/2-bwBox/2,byBox=H/2-58;
+		drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
+		ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t1,W/2,byBox+27);ctx.fillText(t2,W/2,byBox+50);ctx.textBaseline='alphabetic';ctx.textAlign='start';
 		var bw=160,bh=48,bx=W/2-bw/2,by=byBox+bhBox+10;
 		drawRR(ctx,bx,by,bw,bh,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
 		ctx.fillStyle=GOLD;ctx.font='bold 20px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(isStart?'开始':'开始教程',W/2,by+bh/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';
@@ -150,8 +150,8 @@ function renderMemOrg(){
 
 	function renderTutText(ctx,W,H){
 		var lines=["每轮找出新增小猴子","记住已翻的牌和旧小猴子位置","翻错或点错即扣除生命值","全部卡牌变成小猴子后进入下一回合"];
-		var bwBox=520,bhBox=200,bxBox=W/2-bwBox/2,byBox=H/2-100;
-		drawRR(ctx,bxBox,byBox,bwBox,bhBox,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+		var bwBox=520,bhBox=130,bxBox=W/2-bwBox/2,byBox=H/2-100;
+		drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
 		ctx.fillStyle='#fff';ctx.font='bold 20px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
 		for(var i=0;i<lines.length;i++)ctx.fillText(lines[i],W/2,byBox+40+i*38);
 		ctx.textBaseline='alphabetic';ctx.textAlign='start';
@@ -161,9 +161,9 @@ function renderMemOrg(){
 		mo._tb={x:bx,y:by,w:bw,h:bh};
 	}
 	function renderReadyGame(ctx,W,H){
-	var bwBox=560,bhBox=90,bxBox=W/2-bwBox/2,byBox=H/2-60;
-	drawRR(ctx,bxBox,byBox,bwBox,bhBox,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
-	ctx.fillStyle='#fff';ctx.font='bold 22px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('对就是这样，现在正式开始游戏吧',W/2,byBox+45);
+	var bwBox=440,bhBox=68,bxBox=W/2-bwBox/2,byBox=H/2-45;
+	drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
+	ctx.fillStyle='#fff';ctx.font='bold 22px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('对就是这样，现在正式开始游戏吧',W/2,byBox+34);
 	ctx.textBaseline='alphabetic';ctx.textAlign='start';
 	var bw=160,bh=44,bx=W/2-bw/2,by=byBox+bhBox+10;
 	drawRR(ctx,bx,by,bw,bh,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
@@ -184,7 +184,7 @@ function renderGame(ctx,W,H){
 	var m=gridMetrics(W,H),ox=m.ox,oy=m.oy,gw=m.gw,gh=m.gh;
 
 	// Feedback overlay — hide grid, show only message
-	if(mo.feedbackText){var bw=460,bh=130,bx=W/2-bw/2,by=H/2-80;drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='#1a1a2e';ctx.fill();ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();ctx.fillStyle=mo.feedbackColor;ctx.font='bold 24px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(mo.feedbackText,W/2,by+bh/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';if(mo._feedbackCb){var btnW=140,btnH=44,btnX=W/2-btnW/2,btnY=by+bh+10;drawRR(ctx,btnX,btnY,btnW,btnH,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=GOLD;ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('继续',btnX+btnW/2,btnY+btnH/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';mo._fbBtn={x:btnX,y:btnY,w:btnW,h:btnH};}return;}
+	if(mo.feedbackText){var bw=460,bh=130,bx=W/2-bw/2,by=H/2-80;drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#1a1a2e';ctx.fill();ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=mo.feedbackColor;ctx.font='bold 24px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(mo.feedbackText,W/2,by+bh/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';if(mo._feedbackCb){var btnW=140,btnH=44,btnX=W/2-btnW/2,btnY=by+bh+10;drawRR(ctx,btnX,btnY,btnW,btnH,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=GOLD;ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('继续',btnX+btnW/2,btnY+btnH/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';mo._fbBtn={x:btnX,y:btnY,w:btnW,h:btnH};}return;}
 
 	// Lives display with label
 	if(mo.phase==='playing'){ctx.font='bold 14px sans-serif';ctx.fillStyle='#aaa';ctx.textAlign='center';ctx.fillText('剩余尝试次数',W/2,oy-65);var h='';for(var li=0;li<MAX_LIVES;li++)h+=li<mo.lives?'❤️':'🖤';ctx.font='bold 22px sans-serif';ctx.fillStyle='#fff';ctx.fillText(h,W/2,oy-42);ctx.textAlign='start';}

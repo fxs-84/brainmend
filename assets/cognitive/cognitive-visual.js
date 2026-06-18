@@ -82,7 +82,7 @@ function renderVisFB(ctx,W,H){
     var msg=vm.tutFeedbackMsg||(vm.tutFeedbackOk?'对，非常好':'哦，不对');
     var color=vm.tutFeedbackOk?'#fff':'#F44336';
     var bw=660,bh=180,bx=W/2-bw/2,by=H/2-90;
-    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle=color;ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText(msg,W/2,by+bh/2);
     ctx.textBaseline='alphabetic';ctx.textAlign='start';
@@ -110,8 +110,8 @@ function renderVisual(){
 function renderVisReady(ctx,W,H){
     ctx.fillStyle='#fff';ctx.font='bold 36px sans-serif';ctx.textAlign='center';ctx.fillText('视觉记忆与提取能力',W/2,H/2-130);ctx.textAlign='start';
     var t1='考验你记住复杂位置的能力',t2='分数越高代表着你空间感越好';
-    ctx.font='bold 18px sans-serif';var bw=520,bh=140,bx=W/2-bw/2,by=H/2-70;
-    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+    ctx.font='bold 18px sans-serif';var bw=440,bh=88,bx=W/2-bw/2,by=H/2-70;
+    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t1,W/2,by+40);ctx.fillText(t2,W/2,by+68);ctx.textBaseline='alphabetic';ctx.textAlign='start';
     var bw2=160,bh2=48,bx2=W/2-bw2/2,by2=by+bh+10;
     drawRR(ctx,bx2,by2,bw2,bh2,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
@@ -120,10 +120,10 @@ function renderVisReady(ctx,W,H){
 }
 function renderVisReadyStart(ctx,W,H){
     ctx.fillStyle='#fff';ctx.font='bold 36px sans-serif';ctx.textAlign='center';ctx.fillText('视觉记忆与提取能力',W/2,H/2-150);
-    var bwBox=520,bhBox=100,bxBox=W/2-bwBox/2,byBox=H/2-80;
-    drawRR(ctx,bxBox,byBox,bwBox,bhBox,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+    var bwBox=440,bhBox=74,bxBox=W/2-bwBox/2,byBox=H/2-58;
+    drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle='#fff';ctx.font='18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText('考验你记住复杂位置的能力',W/2,byBox+35);ctx.fillText('分数越高代表着你空间感越好',W/2,byBox+65);
+    ctx.fillText('考验你记住复杂位置的能力',W/2,byBox+27);ctx.fillText('分数越高代表着你空间感越好',W/2,byBox+50);
     ctx.textBaseline='alphabetic';ctx.textAlign='start';
     var bw=160,bh=48,bx=W/2-bw/2,by=byBox+bhBox+10;
     drawRR(ctx,bx,by,bw,bh,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
@@ -133,8 +133,8 @@ function renderVisReadyStart(ctx,W,H){
 
 function renderVisTutorial(ctx,W,H){
     var t='记住那些数字的位置，按照1234这样的顺序，依次点击那些方块';
-    ctx.font='bold 18px sans-serif';var bw=560,bh=120,bx=W/2-bw/2,by=H/2-65;
-    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+    ctx.font='bold 18px sans-serif';var bw=440,bh=76,bx=W/2-bw/2,by=H/2-65;
+    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,W/2,by+50);ctx.textBaseline='alphabetic';ctx.textAlign='start';
     var bw2=140,bh2=44,bx2=W/2-bw2/2,by2=by+bh+10;
     drawRR(ctx,bx2,by2,bw2,bh2,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
@@ -143,8 +143,8 @@ function renderVisTutorial(ctx,W,H){
 }
 function renderVisReadyGame(ctx,W,H){
     var t='对就是这样，现在正式开始游戏吧';ctx.font='bold 22px sans-serif';var tw=ctx.measureText(t).width;
-    var bw=tw+120,bh=120,bx=W/2-bw/2,by=H/2-65;
-    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+    var bw=tw+120,bh=76,bx=W/2-bw/2,by=H/2-65;
+    drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,W/2,by+50);ctx.textBaseline='alphabetic';ctx.textAlign='start';
     var bw2=160,bh2=44,bx2=W/2-bw2/2,by2=by+bh+10;
     drawRR(ctx,bx2,by2,bw2,bh2,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
@@ -182,7 +182,7 @@ function renderVisGame(ctx,W,H){
         if(vm.displayPhase==='showing'){ctx.font='bold 22px sans-serif';ctx.fillStyle='#fff';ctx.textAlign='center';ctx.fillText('记住数字的顺序',W/2,off.y-15+((vm.phase==='playing')?0:0));ctx.textAlign='start';}
     }
     // 大方框 (6×6 无内格线)
-    var gs=GRID*(CELL+GAP)-GAP;drawRR(ctx,off.x,off.y,gs,gs,10);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+    var gs=GRID*(CELL+GAP)-GAP;drawRR(ctx,off.x,off.y,gs,gs,10);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     // 画数字方块
     var showNums=(vm.displayPhase==='showing'||vm.displayPhase==='finger1'||vm.displayPhase==='finger2'||(vm.phase==='tutorial_1'&&vm.displayPhase==='tut1_done_msg'));
     for(var i=0;i<vm.positions.length;i++){

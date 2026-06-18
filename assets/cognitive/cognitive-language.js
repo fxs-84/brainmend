@@ -167,8 +167,8 @@ function startPlaying(){
 		ctx.fillStyle='#1a1a2e';ctx.fillRect(0,0,W,H);
 		var msg=lg.tutFeedbackMsg||(lg.tutFeedbackOk?'对，再试一个':'哦，不对');
 		var color='#fff';
-		var bw=500,bh=140,bx=W/2-bw/2,by=H/2-70;
-		drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+		var bw=440,bh=88,bx=W/2-bw/2,by=H/2-70;
+		drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
 		ctx.fillStyle=color;ctx.font='bold 28px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
 		ctx.fillText(msg,W/2,by+bh/2-15);
 		ctx.textBaseline='alphabetic';ctx.textAlign='start';
@@ -204,10 +204,10 @@ function renderTitle(ctx,W,txt,sub){
 	function renderReady(ctx,W,H){
 		ctx.fillStyle='#fff';ctx.font='bold 36px sans-serif';ctx.textAlign='center';
 		ctx.fillText('语言理解能力',W/2,H/2-150);
-		var bwBox=520,bhBox=100,bxBox=W/2-bwBox/2,byBox=H/2-80;
-		drawRR(ctx,bxBox,byBox,bwBox,bhBox,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+		var bwBox=440,bhBox=74,bxBox=W/2-bwBox/2,byBox=H/2-58;
+		drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
 		ctx.fillStyle='#fff';ctx.font='18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-		ctx.fillText('指理解和解释口头或书面语言的能力',W/2,byBox+35);ctx.fillText('选择对于图像的描述是否正确',W/2,byBox+65);
+		ctx.fillText('指理解和解释口头或书面语言的能力',W/2,byBox+27);ctx.fillText('选择对于图像的描述是否正确',W/2,byBox+50);
 		ctx.textBaseline='alphabetic';ctx.textAlign='start';
 		var bw=200,bh=56,bx=W/2-bw/2,by=byBox+bhBox+10;
 		drawGoldButton(ctx,bx,by,bw,bh,'开始教程',20);
@@ -215,10 +215,10 @@ function renderTitle(ctx,W,txt,sub){
 	}
 	function renderReadyStart(ctx,W,H){
 		ctx.fillStyle='#fff';ctx.font='bold 36px sans-serif';ctx.textAlign='center';ctx.fillText('语言理解能力',W/2,H/2-150);
-		var bwBox=520,bhBox=100,bxBox=W/2-bwBox/2,byBox=H/2-80;
-		drawRR(ctx,bxBox,byBox,bwBox,bhBox,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+		var bwBox=440,bhBox=74,bxBox=W/2-bwBox/2,byBox=H/2-58;
+		drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
 		ctx.fillStyle='#fff';ctx.font='18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-		ctx.fillText('指理解和解释口头或书面语言的能力',W/2,byBox+35);ctx.fillText('选择对于图像的描述是否正确',W/2,byBox+65);
+		ctx.fillText('指理解和解释口头或书面语言的能力',W/2,byBox+27);ctx.fillText('选择对于图像的描述是否正确',W/2,byBox+50);
 		ctx.textBaseline='alphabetic';ctx.textAlign='start';
 		var bw=200,bh=56,bx=W/2-bw/2,by=byBox+bhBox+10;
 		drawGoldButton(ctx,bx,by,bw,bh,'开始',20);
@@ -226,20 +226,20 @@ function renderTitle(ctx,W,txt,sub){
 	}
 
 	function renderTutText(ctx,W,H){
-		var bwBox=560,bhBox=90,bxBox=W/2-bwBox/2,byBox=H/2-60;
-		drawRR(ctx,bxBox,byBox,bwBox,bhBox,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+		var bwBox=440,bhBox=68,bxBox=W/2-bwBox/2,byBox=H/2-45;
+		drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
 		ctx.fillStyle='#fff';ctx.font='bold 20px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-		ctx.fillText('选择对于图像的描述是否正确',W/2,byBox+45);
+		ctx.fillText('选择对于图像的描述是否正确',W/2,byBox+34);
 		ctx.textBaseline='alphabetic';ctx.textAlign='start';
 		var bw=140,bh=44,bx=W/2-bw/2,by=byBox+bhBox+10;
 		drawGoldButton(ctx,bx,by,bw,bh,'继续',18);
 		lg._tb={x:bx,y:by,w:bw,h:bh};
 	}
 		function renderReadyGame(ctx,W,H){
-		var bwBox=560,bhBox=90,bxBox=W/2-bwBox/2,byBox=H/2-60;
-		drawRR(ctx,bxBox,byBox,bwBox,bhBox,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+		var bwBox=440,bhBox=68,bxBox=W/2-bwBox/2,byBox=H/2-45;
+		drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
 		ctx.fillStyle='#fff';ctx.font='bold 22px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-		ctx.fillText('对就是这样，现在正式开始游戏吧',W/2,byBox+45);
+		ctx.fillText('对就是这样，现在正式开始游戏吧',W/2,byBox+34);
 		ctx.textBaseline='alphabetic';ctx.textAlign='start';
 		var bw=180,bh=50,bx=W/2-bw/2,by=byBox+bhBox+10;
 		drawGoldButton(ctx,bx,by,bw,bh,'开始游戏',20);

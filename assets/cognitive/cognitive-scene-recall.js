@@ -141,9 +141,9 @@ function renderSceneRecall(){
 
 	function renderReady(ctx,W,H,isStart){
 		ctx.fillStyle='#fff';ctx.font='bold 36px sans-serif';ctx.textAlign='center';ctx.fillText('场景回忆能力',W/2,H/2-150);
-		var t1='考验你回忆特殊事件的能力',t2='分数越高代表着你记忆力越强';ctx.font='bold 18px sans-serif';var bwBox=520,bhBox=100,bxBox=W/2-bwBox/2,byBox=H/2-80;
-		drawRR(ctx,bxBox,byBox,bwBox,bhBox,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
-		ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t1,W/2,byBox+35);ctx.fillText(t2,W/2,byBox+65);ctx.textBaseline='alphabetic';ctx.textAlign='start';
+		var t1='考验你回忆特殊事件的能力',t2='分数越高代表着你记忆力越强';ctx.font='bold 18px sans-serif';var bwBox=440,bhBox=74,bxBox=W/2-bwBox/2,byBox=H/2-58;
+		drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
+		ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t1,W/2,byBox+27);ctx.fillText(t2,W/2,byBox+50);ctx.textBaseline='alphabetic';ctx.textAlign='start';
 		var bw=160,bh=48,bx=W/2-bw/2,by=byBox+bhBox+10;
 		drawRR(ctx,bx,by,bw,bh,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
 		ctx.fillStyle=GOLD;ctx.font='bold 20px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(isStart?'开始':'开始教程',W/2,by+bh/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';
@@ -152,8 +152,8 @@ function renderSceneRecall(){
 
 	function renderTutText(ctx,W,H){
 		var lines=["记住元素的位置","之后点击放大镜中出现的元素的位置"];
-		var bwBox=520,bhBox=100,bxBox=W/2-bwBox/2,byBox=H/2-50;
-		drawRR(ctx,bxBox,byBox,bwBox,bhBox,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+		var bwBox=440,bhBox=74,bxBox=W/2-bwBox/2,byBox=H/2-50;
+		drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
 		ctx.fillStyle='#fff';ctx.font='bold 20px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
 		for(var i=0;i<lines.length;i++)ctx.fillText(lines[i],W/2,byBox+30+i*38);
 		ctx.textBaseline='alphabetic';ctx.textAlign='start';
@@ -164,8 +164,8 @@ function renderSceneRecall(){
 	}
 	function renderTut2Hint(ctx,W,H){
 	var t='接下来将完全不透明，并且增加时间限制，准备好了吗';
-	var bwBox=520,bhBox=100,bxBox=W/2-bwBox/2,byBox=H/2-50;
-	drawRR(ctx,bxBox,byBox,bwBox,bhBox,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+	var bwBox=440,bhBox=74,bxBox=W/2-bwBox/2,byBox=H/2-50;
+	drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
 	ctx.fillStyle='#fff';ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,W/2,byBox+50);
 	ctx.textBaseline='alphabetic';ctx.textAlign='start';
 	var bw=140,bh=44,bx=W/2-bw/2,by=byBox+bhBox+10;
@@ -175,9 +175,9 @@ function renderSceneRecall(){
 }
 
 	function renderReadyGame(ctx,W,H){
-		var bwBox=560,bhBox=90,bxBox=W/2-bwBox/2,byBox=H/2-60;
-		drawRR(ctx,bxBox,byBox,bwBox,bhBox,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
-		ctx.fillStyle='#fff';ctx.font='bold 22px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('对就是这样，现在正式开始游戏吧',W/2,byBox+45);
+		var bwBox=440,bhBox=68,bxBox=W/2-bwBox/2,byBox=H/2-45;
+		drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
+		ctx.fillStyle='#fff';ctx.font='bold 22px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('对就是这样，现在正式开始游戏吧',W/2,byBox+34);
 		ctx.textBaseline='alphabetic';ctx.textAlign='start';
 		var bw=160,bh=44,bx=W/2-bw/2,by=byBox+bhBox+10;
 		drawRR(ctx,bx,by,bw,bh,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
@@ -194,7 +194,7 @@ function renderSceneRecall(){
 }
 
 function drawMagnifier(ctx,cx,cy,r){
-	ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();
+	ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
 	ctx.beginPath();ctx.moveTo(cx+r*0.7,cy+r*0.7);ctx.lineTo(cx+r*1.3,cy+r*1.3);ctx.lineWidth=4;ctx.stroke();
 }
 
@@ -203,7 +203,7 @@ function renderGame(ctx,W,H){
 	var isTut1=sr.phase==='tutorial_1';
 	var isQuery=sr.subPhase==='query';
 
-	if(sr.feedbackText&&!isTut1){var bw=460,bh=130,bx=W/2-bw/2,by=H/2-80;drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='#1a1a2e';ctx.fill();ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.stroke();ctx.fillStyle=sr.feedbackColor;ctx.font='bold 24px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(sr.feedbackText,W/2,by+bh/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';if(sr._feedbackCb){var btnW=140,btnH=44,btnX=W/2-btnW/2,btnY=by+bh+10;drawRR(ctx,btnX,btnY,btnW,btnH,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=GOLD;ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('继续',btnX+btnW/2,btnY+btnH/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';sr._fbBtn={x:btnX,y:btnY,w:btnW,h:btnH};}return;}
+	if(sr.feedbackText&&!isTut1){var bw=460,bh=130,bx=W/2-bw/2,by=H/2-80;drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#1a1a2e';ctx.fill();ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=sr.feedbackColor;ctx.font='bold 24px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(sr.feedbackText,W/2,by+bh/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';if(sr._feedbackCb){var btnW=140,btnH=44,btnX=W/2-btnW/2,btnY=by+bh+10;drawRR(ctx,btnX,btnY,btnW,btnH,12);ctx.fillStyle=GOLD;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=GOLD;ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('继续',btnX+btnW/2,btnY+btnH/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';sr._fbBtn={x:btnX,y:btnY,w:btnW,h:btnH};}return;}
 
 	var remaining=0;
 	if(sr.subPhase==='memorize'){remaining=Math.max(0,sr.memorizeTime-(performance.now()-sr.memorizeStart)/1000);if(remaining<=0)startQuery();}
