@@ -177,7 +177,7 @@ function renderMemGame(ctx,W,H){
         var idx=Math.floor((n2-mem.showTimer)/1000);
         if(idx>=mem.digits.length){mem.displayPhase=(mem.phase==='tutorial_play'&&mem.tutRound<3)?'revealed':'input';mem.showTimer=n2;}
         if(mem.displayPhase==='showing'){
-            var ci=Math.min(idx,mem.digits.length-1);ctx.font='bold 52px sans-serif';ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(mem.digits[ci],W/2,boxY+boxH/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';
+            var ci=Math.min(idx,mem.digits.length-1);ctx.font='bold 72px sans-serif';ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(mem.digits[ci],W/2,boxY+boxH/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';
         }
     }
     // 展示完自动进输入
