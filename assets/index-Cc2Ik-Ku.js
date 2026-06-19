@@ -252,7 +252,7 @@ end`};t.events.push([`putFont`,function(t){(function(t){var n=t.font,i=t.out,a=t
         </div>
         <div class="curvature-diagram-container">
           <div class="xray-overlay-container">
-            <img src="/assets/cervical-xray-sample.jpg" alt="颈椎X光片" />
+            <img src="./assets/cervical-xray-sample.jpg" alt="颈椎X光片" />
             <div class="xray-overlay-left">
               ${xf(`左前庭`,Math.round(r.leftVestibular))}
               ${xf(`左上颈`,Math.round(r.leftCervical))}
