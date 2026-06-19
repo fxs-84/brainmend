@@ -219,7 +219,12 @@
                     <option value="30">1 个月</option>
                     <option value="custom">自定义...</option>
                 </select>
-                <input id="trk-qr-ttl-custom" type="number" min="1" max="365" placeholder="天" style="display:none;width:70px;padding:4px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;margin-left:4px;">
+                <input id="trk-qr-ttl-custom" type="number" min="1" max="365" placeholder="数量" style="display:none;width:60px;padding:4px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;margin-left:4px;">
+                <select id="trk-qr-ttl-unit" style="display:none;padding:4px 6px;border:1px solid #ccc;border-radius:6px;font-size:13px;margin-left:2px;">
+                    <option value="1">天</option>
+                    <option value="7">周</option>
+                    <option value="30">月</option>
+                </select>
             </div>
             <div id="trk-qr-canvas" style="display:inline-block;"></div>
             <p id="trk-qr-url" style="color:#999;font-size:11px;margin:12px 0 0;word-break:break-all;"></p>
@@ -1330,7 +1335,14 @@
             function _showTrkQR() {
                 var mode = _getActiveTrackingMode();
                 var sel = document.getElementById('trk-qr-ttl');
-                var ttlDays = sel.value === 'custom' ? (parseInt(document.getElementById('trk-qr-ttl-custom').value) || 7) : parseInt(sel.value);
+                var ttlDays;
+                if (sel.value === 'custom') {
+                    var n = parseInt(document.getElementById('trk-qr-ttl-custom').value) || 7;
+                    var u = parseInt(document.getElementById('trk-qr-ttl-unit').value) || 1;
+                    ttlDays = n * u;
+                } else {
+                    ttlDays = parseInt(sel.value);
+                }
                 var ttlMs = ttlDays * 24 * 60 * 60 * 1000;
                 var baseUrl = window.location.origin + window.location.pathname;
                 var params = ['mode=tracking', 'test=' + mode, 't=' + Date.now(), 'ttl=' + ttlMs, 'v=' + Date.now()];
@@ -1357,7 +1369,9 @@
             // TTL 下拉: 自定义 → 显示输入框
             var trkTtlSel = document.getElementById('trk-qr-ttl');
             if (trkTtlSel) trkTtlSel.addEventListener('change', function() {
-                document.getElementById('trk-qr-ttl-custom').style.display = this.value === 'custom' ? 'inline' : 'none';
+                var showCustom = this.value === 'custom';
+                document.getElementById('trk-qr-ttl-custom').style.display = showCustom ? 'inline' : 'none';
+                document.getElementById('trk-qr-ttl-unit').style.display = showCustom ? 'inline' : 'none';
             });
             // 二维码按钮
             var trkQrBtn = document.getElementById('trk-qr-btn');
@@ -1367,6 +1381,8 @@
             if (trkTtlSel) trkTtlSel.addEventListener('change', trkQrRefresh);
             var trkTtlCustom = document.getElementById('trk-qr-ttl-custom');
             if (trkTtlCustom) trkTtlCustom.addEventListener('input', trkQrRefresh);
+            var trkTtlUnit = document.getElementById('trk-qr-ttl-unit');
+            if (trkTtlUnit) trkTtlUnit.addEventListener('change', trkQrRefresh);
             // 模式切换时自动更新 QR (如果弹窗开着)
             var modeObserver = new MutationObserver(function() { trkQrRefresh(); });
             var modeGrid = document.querySelector('#view-mode-select .mode-grid');
