@@ -1103,6 +1103,8 @@
             var tid = '';
             try { tid = localStorage.getItem('cog_therapist_id') || 'default'; } catch(e) {}
             params.push('tid=' + encodeURIComponent(tid));
+            // 加时间戳用于过期校验 (30分钟有效)
+            params.push('t=' + Date.now());
             // 加 cache-bust 防止患者手机浏览器用缓存的旧 JS
             params.push('v=' + Date.now());
             return baseUrl + '?' + params.join('&');
@@ -1298,6 +1300,17 @@
                 if (params.get('mode') !== 'cognitive') return;
                 if (params.get('tid')) {
                     try { localStorage.setItem('cog_therapist_id', params.get('tid')); } catch(e) {}
+                }
+                // QR 码过期校验 (30分钟有效)
+                var qrTime = params.get('t');
+                var QR_TTL = 30 * 60 * 1000; // 30 分钟
+                if (qrTime && (Date.now() - parseInt(qrTime) > QR_TTL)) {
+                    page2.style.display = 'none';
+                    var expiredDiv = document.createElement('div');
+                    expiredDiv.style.cssText = 'position:fixed;inset:0;z-index:30000;background:#1a1a2e;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#fff;text-align:center;padding:20px;';
+                    expiredDiv.innerHTML = '<div style="font-size:64px;margin-bottom:20px;">⏰</div><h2 style="font-size:22px;margin:0 0 12px;">二维码已过期</h2><p style="color:#bdc3c7;font-size:14px;margin:0 0 8px;">此二维码仅 30 分钟内有效</p><p style="color:#888;font-size:13px;">请联系治疗师重新生成二维码</p>';
+                    document.body.appendChild(expiredDiv);
+                    return;
                 }
                 page2.style.display = 'none';
                 // 患者直达: 有 start= 参数直接开始做题
