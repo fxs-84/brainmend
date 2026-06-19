@@ -133,7 +133,8 @@ function renderVisReadyStart(ctx,W,H){
 
 function renderVisTutorial(ctx,W,H){
     var t='记住那些数字的位置，按照1234这样的顺序，依次点击那些方块';
-    ctx.font='bold 18px sans-serif';var bw=440,bh=76,bx=W/2-bw/2,by=H/2-65;
+    ctx.font='bold 18px sans-serif';var tw=ctx.measureText(t).width;
+    var bw=tw+60,bh=76,bx=W/2-bw/2,by=H/2-65;
     drawRR(ctx,bx,by,bw,bh,16);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,W/2,by+50);ctx.textBaseline='alphabetic';ctx.textAlign='start';
     var bw2=140,bh2=44,bx2=W/2-bw2/2,by2=by+bh+10;
