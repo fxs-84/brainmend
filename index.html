@@ -1303,12 +1303,12 @@
                 }
                 // QR 码过期校验 (30分钟有效)
                 var qrTime = params.get('t');
-                var QR_TTL = 30 * 60 * 1000; // 30 分钟
+                var QR_TTL = 24 * 60 * 60 * 1000; // 24 小时
                 if (qrTime && (Date.now() - parseInt(qrTime) > QR_TTL)) {
                     page2.style.display = 'none';
                     var expiredDiv = document.createElement('div');
                     expiredDiv.style.cssText = 'position:fixed;inset:0;z-index:30000;background:#1a1a2e;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#fff;text-align:center;padding:20px;';
-                    expiredDiv.innerHTML = '<div style="font-size:64px;margin-bottom:20px;">⏰</div><h2 style="font-size:22px;margin:0 0 12px;">二维码已过期</h2><p style="color:#bdc3c7;font-size:14px;margin:0 0 8px;">此二维码仅 30 分钟内有效</p><p style="color:#888;font-size:13px;">请联系治疗师重新生成二维码</p>';
+                    expiredDiv.innerHTML = '<div style="font-size:64px;margin-bottom:20px;">⏰</div><h2 style="font-size:22px;margin:0 0 12px;">二维码已过期</h2><p style="color:#bdc3c7;font-size:14px;margin:0 0 8px;">此二维码仅 24 小时内有效</p><p style="color:#888;font-size:13px;">请联系治疗师重新生成二维码</p>';
                     document.body.appendChild(expiredDiv);
                     return;
                 }
