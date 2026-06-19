@@ -197,7 +197,10 @@
             <p style="color:#666;font-size:12px;margin:0 0 16px;">请患者使用手机扫描二维码</p>
             <div id="cog-qr-canvas" style="display:inline-block;"></div>
             <p id="cog-qr-url" style="color:#999;font-size:11px;margin:12px 0 0;word-break:break-all;"></p>
-            <button id="cog-qr-close" style="margin-top:16px;padding:8px 24px;background:#1a1a2e;color:#fff;border:none;border-radius:8px;cursor:pointer;">关闭</button>
+            <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;">
+                <button id="cog-qr-share" style="padding:8px 24px;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;">📤 分享二维码</button>
+                <button id="cog-qr-close" style="padding:8px 24px;background:#1a1a2e;color:#fff;border:none;border-radius:8px;cursor:pointer;">关闭</button>
+            </div>
         </div>
     </div>
 
@@ -1260,6 +1263,29 @@
             if (qrBtn) qrBtn.addEventListener('click', function() {
                 _showQRForTest('full');
             });
+            // 分享二维码
+            var qrShare = document.getElementById('cog-qr-share');
+            if (qrShare) qrShare.addEventListener('click', function() {
+                var shareUrl = document.getElementById('cog-qr-url').textContent;
+                if (navigator.share) {
+                    navigator.share({ title: '认知评估', text: '请扫描二维码开始认知评估', url: shareUrl }).catch(function(){});
+                } else if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(shareUrl).then(function() {
+                        var btn = document.getElementById('cog-qr-share');
+                        if (btn) { var orig = btn.textContent; btn.textContent = '✅ 已复制链接'; btn.style.background = '#4CAF50'; setTimeout(function() { btn.textContent = orig; btn.style.background = 'linear-gradient(135deg,#00D9A5,#0086FF)'; }, 2000); }
+                    }).catch(function() {
+                        alert('复制失败，请手动复制链接：\n' + shareUrl);
+                    });
+                } else {
+                    // Fallback: 选中文本提示手动复制
+                    var input = document.createElement('textarea');
+                    input.value = shareUrl; input.style.position = 'fixed'; input.style.opacity = '0';
+                    document.body.appendChild(input); input.select();
+                    try { document.execCommand('copy'); alert('链接已复制到剪贴板'); } catch(e) { alert('请手动复制链接：\n' + shareUrl); }
+                    document.body.removeChild(input);
+                }
+            });
+
             var qrClose = document.getElementById('cog-qr-close');
             if (qrClose) qrClose.addEventListener('click', function() {
                 document.getElementById('cog-qr-overlay').style.display = 'none';
