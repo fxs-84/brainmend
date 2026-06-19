@@ -33,6 +33,12 @@
     }
     .iconfont { font-family: "iconfont" !important; font-style: normal; -webkit-font-smoothing: antialiased; }
   </style>
+  <script>
+    // 首次访问默认启用语音提示
+    if (localStorage.getItem('tts_enabled') === null) {
+      localStorage.setItem('tts_enabled', 'true');
+    }
+  </script>
   <script type="module" crossorigin src="./assets/index-Cc2Ik-Ku.js"></script>
   <script>
   (function(){
