@@ -152,7 +152,7 @@ function renderMemReadyGame(ctx,W,H){
 }
 
 function renderMemGame(ctx,W,H){
-    var n2=performance.now(),boxW=100,boxH=100,boxX=W/2-boxW/2,boxY=H/2-160;
+    var n2=performance.now(),boxW=160,boxH=130,boxX=W/2-boxW/2,boxY=H/2-160;
     // 缓冲
     if(mem.displayPhase==='ready_countdown'){if(n2-mem.showTimer>2000){mem.displayPhase='showing';mem.showTimer=n2;}}
     // 标题 (展示阶段)
