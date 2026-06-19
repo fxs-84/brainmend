@@ -2261,7 +2261,34 @@
     renderReport(rawLog, history, isQuick6, reportTime);
     window._quick6Mode = false;
     window._lastCogRecord = record;
-    setTimeout(function() { _updateCogRecordNav(0); }, 200);
+    setTimeout(function() {
+      _updateCogRecordNav(0);
+      // 🔒 患者沙盒: 隐藏记录切换导航 + 替换关闭按钮文案
+      if (window._patientSandbox) {
+        try {
+          var nav = document.getElementById('cog-report-nav');
+          if (nav) {
+            // 只留总览标签, 隐藏所有模块 tab (防止患者翻看其他模块详情)
+            var tabs = nav.querySelectorAll('.cog-report-tab');
+            tabs.forEach(function(t){
+              var s = t.getAttribute('data-section');
+              if (s && s !== 'overview') t.style.display = 'none';
+            });
+          }
+          // 隐藏记录切换按钮 (prev/next)
+          var navBtns = document.querySelectorAll('#cog-record-prev-btn, #cog-record-next-btn, .cog-record-nav-btn');
+          navBtns.forEach(function(b){ b.style.display = 'none'; });
+          // 替换关闭按钮文案为"完成测试"
+          var closeBtn = document.querySelector('#cog-report-overlay [onclick*="_closeCogReport"], #cog-report-overlay button.cog-close-btn');
+          if (closeBtn) { closeBtn.textContent = '完成测试'; }
+          // 加显眼顶部标识, 让患者清楚"只能看自己"
+          var topBanner = document.createElement('div');
+          topBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:30010;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;text-align:center;padding:8px 12px;font-size:13px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
+          topBanner.textContent = '🔒 仅显示您的本次测试报告';
+          document.body.appendChild(topBanner);
+        } catch(e) { try { console.warn('[cog-flow v5] sandbox UI 调整失败', e); } catch(_){} }
+      }
+    }, 250);
   }
 
   // 弹出登记表单（姓名/年龄/性别），提交后回调
@@ -2342,11 +2369,11 @@
       } catch(e) {}
     }
     if (!confirmed) {
-      try { console.log('[cog-flow v4] 弹登记表单 (未确认)'); } catch(e){}
+      try { console.log('[cog-flow v5] 弹登记表单 (未确认)'); } catch(e){}
       _showPatientRegForm(function() { _doRenderReport(rawLog, isQuick6); });
       return;
     }
-    try { console.log('[cog-flow v4] 跳过登记表单 (已确认)'); } catch(e){}
+    try { console.log('[cog-flow v5] 跳过登记表单 (已确认)'); } catch(e){}
 
     _doRenderReport(rawLog, isQuick6);
   };
@@ -2756,7 +2783,22 @@
 
   window._closeCogReport = function() {
     document.getElementById('cog-report-overlay').style.display = 'none';
-    window.goHome();
+    if (window._patientSandbox) {
+      // 🔒 患者沙盒: 关闭报告不返回首页, 显示"完成"提示
+      try {
+        var done = document.createElement('div');
+        done.id = 'cog-test-done';
+        done.style.cssText = 'position:fixed;inset:0;z-index:40000;background:linear-gradient(135deg,#1a1a2e,#16213e);display:flex;align-items:center;justify-content:center;flex-direction:column;color:#fff;text-align:center;padding:20px;';
+        done.innerHTML =
+          '<div style="font-size:72px;margin-bottom:20px;">✅</div>' +
+          '<h2 style="font-size:24px;margin:0 0 12px;">测试已完成</h2>' +
+          '<p style="color:#bdc3c7;font-size:14px;margin:0 0 30px;max-width:320px;">您的报告已生成 · 请将此页面展示给您的治疗师</p>' +
+          '<p style="color:#888;font-size:12px;margin:0;">如需再次测试请联系治疗师重新扫码</p>';
+        document.body.appendChild(done);
+      } catch(e) {}
+    } else {
+      window.goHome();
+    }
   };
 
   window._viewCogReport = function(recordIndex) {

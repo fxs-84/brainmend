@@ -1133,11 +1133,68 @@
 
         // Deep-link: 患者扫码后自动开始做题
         function _startPatientTest(testType, patientInfo) {
-            // 🔒 v4 正向白名单: 启动患者测试时, 强制清除所有"已确认"状态
-            // 这样无论 bundle 异步怎么写患者名, 报告前都会弹登记表单
+            // 🔒 v5 患者沙盒: 锁定整个 app 只暴露测试流程, 屏蔽所有逃离路径
+            window._patientSandbox = true;
             window._cogPatientConfirmed = false;
             try { sessionStorage.removeItem('cog_patient_confirmed'); } catch(e) {}
-            try { console.log('[cog-flow v4] _startPatientTest, confirmed=false, type=' + testType); } catch(e){}
+            try { console.log('[cog-flow v5] _startPatientTest, sandbox=ON, type=' + testType); } catch(e){}
+
+            // 屏蔽 page2 (首页三大入口)
+            try { var p2 = document.getElementById('page2'); if (p2) p2.style.display = 'none'; } catch(e){}
+            // 屏蔽 header (顶部 BrainMend 导航 + 头像/报告按钮)
+            try {
+              var hdr = document.querySelector('header') || document.querySelector('.header') || document.getElementById('header');
+              if (hdr) hdr.style.display = 'none';
+              var navs = document.querySelectorAll('.header-nav, .top-nav, #top-nav, #header-nav');
+              navs.forEach(function(n){ n.style.display = 'none'; });
+            } catch(e){}
+            // 屏蔽返回首页按钮
+            try {
+              var backBtns = document.querySelectorAll('#back-to-page2-btn, .back-to-home, [data-action="home"]');
+              backBtns.forEach(function(b){
+                b.style.display = 'none';
+                b.style.pointerEvents = 'none';
+              });
+            } catch(e){}
+            // 屏蔽 side-panel (侧边栏含头动追踪入口)
+            try {
+              var sp = document.getElementById('side-panel');
+              if (sp) { sp.style.setProperty('display','none','important'); sp.style.setProperty('width','0','important'); }
+            } catch(e){}
+            // 屏蔽所有 tracking/头动追踪入口按钮 (CSS 兜底)
+            try {
+              var style = document.createElement('style');
+              style.id = 'patient-sandbox-css';
+              style.textContent =
+                'body[data-patient-sandbox="1"] #page2-tracking, ' +
+                'body[data-patient-sandbox="1"] #page2-cog-report, ' +
+                'body[data-patient-sandbox="1"] [data-feature="head-tracking"], ' +
+                'body[data-patient-sandbox="1"] [data-feature="records"] { display:none!important; }';
+              if (!document.getElementById('patient-sandbox-css')) document.head.appendChild(style);
+              document.body.setAttribute('data-patient-sandbox', '1');
+            } catch(e){}
+            // 屏蔽键盘 ESC/Backspace 退出
+            try {
+              window._sandboxKeyHandler = function(e) {
+                if (!window._patientSandbox) return;
+                if (e.key === 'Escape' || (e.key === 'Backspace' && !['INPUT','TEXTAREA','SELECT'].includes((e.target||{}).tagName))) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  try { console.log('[cog-flow v5] 屏蔽 ESC/Backspace 退出'); } catch(_){}
+                }
+              };
+              window.addEventListener('keydown', window._sandboxKeyHandler, true);
+            } catch(e){}
+            // 拦截 history back (浏览器返回)
+            try {
+              history.pushState({sandbox:'patient'}, '', location.href);
+              window.addEventListener('popstate', function(e){
+                if (window._patientSandbox) {
+                  history.pushState({sandbox:'patient'}, '', location.href);
+                  try { console.log('[cog-flow v5] 屏蔽浏览器返回'); } catch(_){}
+                }
+              });
+            } catch(e){}
             window.D = window.D || {};
             window.D.clientInfo = {};
             window._cogPatientInfo = null;
