@@ -1,6 +1,6 @@
 (function(){
   // 版本标记 (用于诊断缓存问题, 浏览器控制台输入 window.__cogFlowVersion 验证)
-  window.__cogFlowVersion = 'v3-awaiting-flag-2026-06-19';
+  window.__cogFlowVersion = 'v4-positive-confirm-2026-06-19';
   // ========== CONFIG ==========
   // 模块描述取自对应测试题文件的 fillText 真源 (非编造)
   // 来源: dist-stable/assets/cognitive/cognitive-*.js
@@ -2271,8 +2271,7 @@
     var overlay = document.createElement('div');
     overlay.id = 'cog-reg-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:30000;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;';
-    // 大字标识防错过
-    overlay.setAttribute('data-cog-reg', 'v3');
+    overlay.setAttribute('data-cog-reg', 'v4');
     var card = document.createElement('div');
     card.style.cssText = 'background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:16px;padding:30px 28px;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5);';
     card.innerHTML =
@@ -2310,6 +2309,10 @@
       var age = (document.getElementById('cog-reg-age').value || '').trim();
       var gender = document.getElementById('cog-reg-gender').value;
       window._cogPatientInfo = { name: name, age: age, gender: gender, id: '' };
+      // 🔒 正向白名单: 表单提交后才置 true, 此后查看历史报告不会重弹
+      window._cogPatientConfirmed = true;
+      // 持久化确认态到 sessionStorage (本次会话有效)
+      try { sessionStorage.setItem('cog_patient_confirmed', '1'); } catch(e) {}
       try { localStorage.setItem('cervical_current_client', JSON.stringify(window._cogPatientInfo)); } catch(e) {}
       try { window.D = window.D || {}; window.D.clientInfo = window._cogPatientInfo; } catch(e) {}
       var lbl = document.getElementById('current-patient');
@@ -2327,22 +2330,23 @@
 
     var isQuick6 = !!window._quick6Mode;
 
-    // 流程重构关键拦截 (双保险):
-    //   1) _cogAwaitingPatientReg 标志 (患者扫码深链启动时强制置 true, 治疗师登录态不算数)
-    //   2) getPatientInfo() 拿到姓名兜底 (兼容治疗师本人扫码等非标准路径)
-    var info = getPatientInfo();
-    var nm = info && info.name ? String(info.name).trim() : '';
-    var awaiting = !!window._cogAwaitingPatientReg;
-    if (awaiting || !nm || nm === '未知' || nm === '点击登录') {
-      try { console.log('[cog-flow v3] 弹登记表单, awaiting=' + awaiting + ', name=' + nm); } catch(e){}
-      _showPatientRegForm(function() {
-        window._cogAwaitingPatientReg = false;
-        if (window._cogFlagGuard) { clearInterval(window._cogFlagGuard); window._cogFlagGuard = null; }
-        _doRenderReport(rawLog, isQuick6);
-      });
+    // 🔒 正向白名单逻辑 (v4): 默认弹登记表单, 除非 _cogPatientConfirmed = true
+    //   - 治疗师查看历史报告 (_viewCogReport 调用) 时设 _cogPatientConfirmed=true 跳过
+    //   - 患者完成测试刚提交过表单 (_cogPatientConfirmed=true) 跳过
+    //   - 其他任何路径都弹表单 (包括 bundle 异步偷塞患者名也拦不住)
+    var confirmed = !!window._cogPatientConfirmed;
+    if (!confirmed) {
+      try { sessionStorage.getItem('cog_patient_confirmed'); } catch(e) {}
+      try {
+        if (sessionStorage.getItem('cog_patient_confirmed') === '1') confirmed = true;
+      } catch(e) {}
+    }
+    if (!confirmed) {
+      try { console.log('[cog-flow v4] 弹登记表单 (未确认)'); } catch(e){}
+      _showPatientRegForm(function() { _doRenderReport(rawLog, isQuick6); });
       return;
     }
-    try { console.log('[cog-flow v3] 跳过登记表单 (已有姓名: ' + nm + ')'); } catch(e){}
+    try { console.log('[cog-flow v4] 跳过登记表单 (已确认)'); } catch(e){}
 
     _doRenderReport(rawLog, isQuick6);
   };
@@ -2756,6 +2760,8 @@
   };
 
   window._viewCogReport = function(recordIndex) {
+    // 🔒 查看历史报告: 视为已确认患者信息, 跳过登记表单
+    window._cogPatientConfirmed = true;
     try {
       var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
       if (records.length === 0) {
@@ -2896,6 +2902,8 @@
 
   // 报告记录列表 (点击"认知报告"时先弹出选择窗口)
   window._showCogRecordList = function() {
+    // 🔒 查看历史记录列表: 视为已确认, 打开记录时跳过登记表单
+    window._cogPatientConfirmed = true;
     try {
       var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
     } catch(e) { records = []; }
