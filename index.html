@@ -204,6 +204,33 @@
         </div>
     </div>
 
+    <!-- 头动追踪 QR 码弹窗 (支持自定义有效期) -->
+    <div id="trk-qr-overlay" style="display:none;position:fixed;inset:0;z-index:26000;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
+        <div style="background:#fff;border-radius:16px;padding:30px;text-align:center;max-width:380px;width:90%;">
+            <h3 style="color:#1a1a2e;margin:0 0 6px;">📱 分享头动追踪</h3>
+            <p style="color:#666;font-size:12px;margin:0 0 12px;">患者扫码后直接进入指定检测模式</p>
+            <div style="margin-bottom:12px;">
+                <label style="font-size:12px;color:#666;margin-right:6px;">有效期:</label>
+                <select id="trk-qr-ttl" style="padding:4px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;">
+                    <option value="30">30 分钟</option>
+                    <option value="60">1 小时</option>
+                    <option value="120">2 小时</option>
+                    <option value="360">6 小时</option>
+                    <option value="720">12 小时</option>
+                    <option value="1440" selected>24 小时</option>
+                    <option value="custom">自定义...</option>
+                </select>
+                <input id="trk-qr-ttl-custom" type="number" min="1" max="10080" placeholder="分钟" style="display:none;width:70px;padding:4px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;margin-left:4px;">
+            </div>
+            <div id="trk-qr-canvas" style="display:inline-block;"></div>
+            <p id="trk-qr-url" style="color:#999;font-size:11px;margin:12px 0 0;word-break:break-all;"></p>
+            <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;">
+                <button id="trk-qr-share" style="padding:8px 24px;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;">📤 分享二维码</button>
+                <button id="trk-qr-close" style="padding:8px 24px;background:#1a1a2e;color:#fff;border:none;border-radius:8px;cursor:pointer;">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 认知评估报告覆盖层 -->
     <div id="cog-report-overlay" style="display:none;position:fixed;inset:0;z-index:30000;background:#f0f2f5;overflow-y:auto;font-family:'Microsoft YaHei','PingFang SC',sans-serif;">
       <div id="cog-report-nav" style="position:sticky;top:0;z-index:10;background:linear-gradient(135deg,#1a1a2e,#16213e);padding:8px 12px;display:flex;gap:4px;overflow-x:auto;white-space:nowrap;flex-wrap:nowrap;align-items:center;">
@@ -278,7 +305,10 @@
                 </div>
                 <!-- 模式选择视图 -->
                 <div id="view-mode-select">
-                    <div class="panel-title">检测模式</div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div class="panel-title" style="margin:0;">检测模式</div>
+                        <button id="trk-qr-btn" title="生成分享二维码" style="background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:600;">📱 生成二维码</button>
+                    </div>
                     <div class="mode-grid">
                         <button class="mode-btn" data-mode="integrated" style="display:none"><span class="icon">◎</span>综合检测</button>
                         <button class="mode-btn active" data-mode="coordination"><span class="icon">∞</span>协调性</button>
@@ -1292,6 +1322,120 @@
             if (qrClose) qrClose.addEventListener('click', function() {
                 document.getElementById('cog-qr-overlay').style.display = 'none';
             });
+
+            // === 头动追踪 QR 码 (支持自定义有效期) ===
+            function _getActiveTrackingMode() {
+                var active = document.querySelector('#view-mode-select .mode-btn.active');
+                return active ? active.dataset.mode : 'coordination';
+            }
+            function _showTrkQR() {
+                var mode = _getActiveTrackingMode();
+                var sel = document.getElementById('trk-qr-ttl');
+                var ttlMin = sel.value === 'custom' ? (parseInt(document.getElementById('trk-qr-ttl-custom').value) || 1440) : parseInt(sel.value);
+                var ttlMs = ttlMin * 60 * 1000;
+                var baseUrl = window.location.origin + window.location.pathname;
+                var params = ['mode=tracking', 'test=' + mode, 't=' + Date.now(), 'ttl=' + ttlMs, 'v=' + Date.now()];
+                var url = baseUrl + '?' + params.join('&');
+
+                var overlay = document.getElementById('trk-qr-overlay');
+                overlay.style.display = 'flex';
+                document.getElementById('trk-qr-url').textContent = url;
+                var canvasDiv = document.getElementById('trk-qr-canvas');
+                if (typeof QRCode !== 'undefined') {
+                    canvasDiv.innerHTML = '';
+                    new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
+                } else {
+                    canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载中...</div>';
+                    var script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
+                    script.onload = function() {
+                        canvasDiv.innerHTML = '';
+                        new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
+                    };
+                    document.head.appendChild(script);
+                }
+            }
+            // TTL 下拉: 自定义 → 显示输入框
+            var trkTtlSel = document.getElementById('trk-qr-ttl');
+            if (trkTtlSel) trkTtlSel.addEventListener('change', function() {
+                document.getElementById('trk-qr-ttl-custom').style.display = this.value === 'custom' ? 'inline' : 'none';
+            });
+            // 二维码按钮
+            var trkQrBtn = document.getElementById('trk-qr-btn');
+            if (trkQrBtn) trkQrBtn.addEventListener('click', function() { _showTrkQR(); });
+            // TTL 变更时刷新 QR
+            var trkQrRefresh = function() { if (document.getElementById('trk-qr-overlay').style.display === 'flex') _showTrkQR(); };
+            if (trkTtlSel) trkTtlSel.addEventListener('change', trkQrRefresh);
+            var trkTtlCustom = document.getElementById('trk-qr-ttl-custom');
+            if (trkTtlCustom) trkTtlCustom.addEventListener('input', trkQrRefresh);
+            // 模式切换时自动更新 QR (如果弹窗开着)
+            var modeObserver = new MutationObserver(function() { trkQrRefresh(); });
+            var modeGrid = document.querySelector('#view-mode-select .mode-grid');
+            if (modeGrid) modeObserver.observe(modeGrid, { attributes: true, subtree: true, attributeFilter: ['class'] });
+            // 分享 + 关闭
+            var trkQrShare = document.getElementById('trk-qr-share');
+            if (trkQrShare) trkQrShare.addEventListener('click', function() {
+                var shareUrl = document.getElementById('trk-qr-url').textContent;
+                if (navigator.share) {
+                    navigator.share({ title: '头动追踪检测', text: '请扫描二维码开始头动追踪检测', url: shareUrl }).catch(function(){});
+                } else if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(shareUrl).then(function() {
+                        var btn = document.getElementById('trk-qr-share');
+                        if (btn) { var orig = btn.textContent; btn.textContent = '✅ 已复制链接'; btn.style.background = '#4CAF50'; setTimeout(function() { btn.textContent = orig; btn.style.background = 'linear-gradient(135deg,#00D9A5,#0086FF)'; }, 2000); }
+                    }).catch(function() { alert('复制失败，请手动复制链接'); });
+                } else {
+                    var input = document.createElement('textarea'); input.value = shareUrl;
+                    input.style.position = 'fixed'; input.style.opacity = '0';
+                    document.body.appendChild(input); input.select();
+                    try { document.execCommand('copy'); alert('链接已复制到剪贴板'); } catch(e) { alert('请手动复制链接：\n' + shareUrl); }
+                    document.body.removeChild(input);
+                }
+            });
+            var trkQrClose = document.getElementById('trk-qr-close');
+            if (trkQrClose) trkQrClose.addEventListener('click', function() {
+                document.getElementById('trk-qr-overlay').style.display = 'none';
+            });
+
+            // Deep-link: ?mode=tracking 患者扫码进入头动追踪
+            (function() {
+                var params = new URLSearchParams(window.location.search);
+                if (params.get('mode') !== 'tracking') return;
+                // 过期校验 (使用 URL 中的 ttl 参数, 默认 24 小时)
+                var qrT = params.get('t');
+                var ttl = parseInt(params.get('ttl')) || (24 * 60 * 60 * 1000);
+                if (qrT && (Date.now() - parseInt(qrT) > ttl)) {
+                    page2.style.display = 'none';
+                    var expiredDiv = document.createElement('div');
+                    expiredDiv.style.cssText = 'position:fixed;inset:0;z-index:30000;background:#1a1a2e;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#fff;text-align:center;padding:20px;';
+                    expiredDiv.innerHTML = '<div style="font-size:64px;margin-bottom:20px;">⏰</div><h2 style="font-size:22px;margin:0 0 12px;">二维码已过期</h2><p style="color:#bdc3c7;font-size:14px;margin:0 0 8px;">此二维码已超过有效时间</p><p style="color:#888;font-size:13px;">请联系治疗师重新生成二维码</p>';
+                    document.body.appendChild(expiredDiv);
+                    return;
+                }
+                page2.style.display = 'none';
+                var testMode = params.get('test') || 'coordination';
+                // 等待 tracking 模块加载后激活指定模式
+                var retries = 0;
+                var readyTimer = setInterval(function() {
+                    retries++;
+                    var trkBtn = document.getElementById('page2-tracking');
+                    if (trkBtn) {
+                        clearInterval(readyTimer);
+                        // 模拟点击头动追踪按钮
+                        trkBtn.click();
+                        setTimeout(function() {
+                            var modeBtn = document.querySelector('#view-mode-select .mode-btn[data-mode="' + testMode + '"]');
+                            if (modeBtn) {
+                                // 取消其他 active, 激活目标
+                                document.querySelectorAll('#view-mode-select .mode-btn').forEach(function(b){ b.classList.remove('active'); });
+                                modeBtn.classList.add('active');
+                                modeBtn.click();
+                            }
+                        }, 300);
+                    } else if (retries > 50) {
+                        clearInterval(readyTimer);
+                    }
+                }, 100);
+            })();
 
             // Deep-link: ?mode=cognitive 自动进入认知评估
             // 患者扫码: ?mode=cognitive&start=full&name=张三&age=35&gender=男
