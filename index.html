@@ -1136,7 +1136,17 @@
             // 流程重构关键: 强制清除所有患者信息痕迹, 防止 bundle 异步把治疗师登录态塞回来
             // 用 _cogAwaitingPatientReg 标志强制走"测完再登记"路径
             window._cogAwaitingPatientReg = true;
-            try { console.log('[cog-flow v3] _startPatientTest called, flag=true, type=' + testType); } catch(e){}
+            try { console.log('[cog-flow v3] _startPatientTest called, flag SET true, type=' + testType); } catch(e){}
+
+            // 🔒 防御: 定时心跳检查 flag 是否被某处悄悄清掉
+            // 如果 5 秒后 flag 变成 false, 自动重置为 true (兜底保护)
+            if (window._cogFlagGuard) clearInterval(window._cogFlagGuard);
+            window._cogFlagGuard = setInterval(function() {
+              if (!window._cogAwaitingPatientReg) {
+                window._cogAwaitingPatientReg = true;
+                try { console.warn('[cog-flow v3] ⚠️ flag was cleared, restored to true'); } catch(e){}
+              }
+            }, 500);
             window.D = window.D || {};
             window.D.clientInfo = {};
             window._cogPatientInfo = null;

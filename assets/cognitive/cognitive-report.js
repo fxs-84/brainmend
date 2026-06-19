@@ -2337,6 +2337,7 @@
       try { console.log('[cog-flow v3] 弹登记表单, awaiting=' + awaiting + ', name=' + nm); } catch(e){}
       _showPatientRegForm(function() {
         window._cogAwaitingPatientReg = false;
+        if (window._cogFlagGuard) { clearInterval(window._cogFlagGuard); window._cogFlagGuard = null; }
         _doRenderReport(rawLog, isQuick6);
       });
       return;
