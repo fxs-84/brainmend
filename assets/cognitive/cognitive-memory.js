@@ -177,7 +177,7 @@ function renderMemGame(ctx,W,H){
         var idx=Math.floor((n2-mem.showTimer)/1000);
         if(idx>=mem.digits.length){mem.displayPhase=(mem.phase==='tutorial_play'&&mem.tutRound<3)?'revealed':'input';mem.showTimer=n2;}
         if(mem.displayPhase==='showing'){
-            var ci=Math.min(idx,mem.digits.length-1);ctx.font='bold 72px sans-serif';ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(mem.digits[ci],W/2,boxY+boxH/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';
+            var ci=Math.min(idx,mem.digits.length-1);ctx.font='bold 96px sans-serif';ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(mem.digits[ci],W/2,boxY+boxH/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';
         }
     }
     // 展示完自动进输入
@@ -185,7 +185,7 @@ function renderMemGame(ctx,W,H){
     // 输入/结果
     if(mem.displayPhase==='input'||mem.displayPhase==='result'||mem.displayPhase==='revealed'){
         ctx.font='bold 16px sans-serif';ctx.fillStyle='#aaa';ctx.textAlign='center';ctx.fillText('请按顺序输入数字',W/2,boxY+boxH+25);ctx.textAlign='start';
-        if(mem.userInput.length>0){ctx.font='bold 46px sans-serif';ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(mem.userInput[mem.userInput.length-1],W/2,boxY+boxH/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';}
+        if(mem.userInput.length>0){ctx.font='bold 64px sans-serif';ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(mem.userInput[mem.userInput.length-1],W/2,boxY+boxH/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';}
     }
     // 键盘 (仅输入阶段显示)
     if(mem.displayPhase==='input'||mem.displayPhase==='revealed'){
