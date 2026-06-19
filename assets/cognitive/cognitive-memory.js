@@ -192,7 +192,7 @@ function renderMemGame(ctx,W,H){
     var kw=80,kh=52,kg=10,ky=boxY+boxH+70,cols=3,digs=[1,2,3,4,5,6,7,8,9];
     for(var k=0;k<digs.length;k++){var d=digs[k],col=k%cols,row=Math.floor(k/cols);var kx=W/2-cols*(kw+kg)/2+kg/2+col*(kw+kg),ky2=ky+row*(kh+kg);var isFl=(d===flashKey),ins=isFl?3:0;drawRR(ctx,kx+ins,ky2+ins,kw-ins*2,kh-ins*2,8);var fc=isFl?'#00C853':ORANGE,sc=isFl?'#00E676':ORANGE;ctx.fillStyle=fc;ctx.fill();ctx.strokeStyle=sc;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#fff';ctx.font='bold 24px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(d,kx+kw/2,ky2+kh/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';}
     var kx0=W/2-kw/2,ky0=ky+3*(kh+kg);var isFl0=(0===flashKey),ins0=isFl0?3:0;drawRR(ctx,kx0+ins0,ky0+ins0,kw-ins0*2,kh-ins0*2,8);var fc0=isFl0?'#00C853':ORANGE,sc0=isFl0?'#00E676':ORANGE;ctx.fillStyle=fc0;ctx.fill();ctx.strokeStyle=sc0;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#fff';ctx.font='bold 24px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('0',kx0+kw/2,ky0+kh/2);ctx.textBaseline='alphabetic';ctx.textAlign='start';
-    mem._kp={kw:kw,kh:kh,kg:kg,ky:ky,cols:cols,digs:digs,ky0:ky0,kx0:kx0};}}
+    mem._kp={kw:kw,kh:kh,kg:kg,ky:ky,cols:cols,digs:digs,ky0:ky0,kx0:kx0};}
     // 按键反馈 flash overlay — 独立于 displayPhase，即使 checkAnswer 切到 result 也能渲染
     if(mem._lastKey!==undefined&&n2-mem._keyFlashT<350&&mem._kp){
         var kp2=mem._kp,fPos=null;
