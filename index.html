@@ -1128,14 +1128,16 @@
 
         // Deep-link: 患者扫码后自动开始做题
         function _startPatientTest(testType, patientInfo) {
-            // Set patient info (D.clientInfo may be overwritten by deferred bundle, so also save to _cogPatientInfo)
+            // 流程重构关键: 强制清除所有患者信息痕迹, 防止 bundle 异步把治疗师登录态塞回来
+            // 用 _cogAwaitingPatientReg 标志强制走"测完再登记"路径
+            window._cogAwaitingPatientReg = true;
             window.D = window.D || {};
-            window.D.clientInfo = patientInfo;
-            window._cogPatientInfo = patientInfo;
-            try { localStorage.setItem('cervical_current_client', JSON.stringify(patientInfo)); } catch(e) {}
-            // Update header display
+            window.D.clientInfo = {};
+            window._cogPatientInfo = null;
+            try { localStorage.removeItem('cervical_current_client'); } catch(e) {}
+            // 清空 header
             var lbl = document.getElementById('current-patient');
-            if (lbl) { lbl.textContent = '👤 ' + (patientInfo.name || '患者') + ' ' + (patientInfo.age||'') + '岁'; }
+            if (lbl) lbl.textContent = '';
             // Start the test
             window._quick6Mode = (testType === 'quick6');
             hideSidebarViews();

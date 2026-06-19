@@ -2323,11 +2323,17 @@
 
     var isQuick6 = !!window._quick6Mode;
 
-    // 流程重构关键拦截：没有姓名就先弹登记表单，再出报告
+    // 流程重构关键拦截 (双保险):
+    //   1) _cogAwaitingPatientReg 标志 (患者扫码深链启动时强制置 true, 治疗师登录态不算数)
+    //   2) getPatientInfo() 拿到姓名兜底 (兼容治疗师本人扫码等非标准路径)
     var info = getPatientInfo();
     var nm = info && info.name ? String(info.name).trim() : '';
-    if (!nm || nm === '未知' || nm === '点击登录') {
-      _showPatientRegForm(function() { _doRenderReport(rawLog, isQuick6); });
+    var awaiting = !!window._cogAwaitingPatientReg;
+    if (awaiting || !nm || nm === '未知' || nm === '点击登录') {
+      _showPatientRegForm(function() {
+        window._cogAwaitingPatientReg = false;
+        _doRenderReport(rawLog, isQuick6);
+      });
       return;
     }
 
