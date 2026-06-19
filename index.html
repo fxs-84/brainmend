@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>BrainMend 脑优化</title>
   <style>
     .cog-mod-btn { background:transparent; border:1px solid rgba(255,255,255,0.15); color:var(--text); border-radius:6px; cursor:pointer; }
@@ -1097,6 +1100,8 @@
             var tid = '';
             try { tid = localStorage.getItem('cog_therapist_id') || 'default'; } catch(e) {}
             params.push('tid=' + encodeURIComponent(tid));
+            // 加 cache-bust 防止患者手机浏览器用缓存的旧 JS
+            params.push('v=' + Date.now());
             return baseUrl + '?' + params.join('&');
         }
 

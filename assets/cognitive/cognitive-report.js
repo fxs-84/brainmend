@@ -1,4 +1,6 @@
 (function(){
+  // 版本标记 (用于诊断缓存问题, 浏览器控制台输入 window.__cogFlowVersion 验证)
+  window.__cogFlowVersion = 'v3-awaiting-flag-2026-06-19';
   // ========== CONFIG ==========
   // 模块描述取自对应测试题文件的 fillText 真源 (非编造)
   // 来源: dist-stable/assets/cognitive/cognitive-*.js
@@ -2269,6 +2271,8 @@
     var overlay = document.createElement('div');
     overlay.id = 'cog-reg-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:30000;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;';
+    // 大字标识防错过
+    overlay.setAttribute('data-cog-reg', 'v3');
     var card = document.createElement('div');
     card.style.cssText = 'background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:16px;padding:30px 28px;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5);';
     card.innerHTML =
@@ -2330,12 +2334,14 @@
     var nm = info && info.name ? String(info.name).trim() : '';
     var awaiting = !!window._cogAwaitingPatientReg;
     if (awaiting || !nm || nm === '未知' || nm === '点击登录') {
+      try { console.log('[cog-flow v3] 弹登记表单, awaiting=' + awaiting + ', name=' + nm); } catch(e){}
       _showPatientRegForm(function() {
         window._cogAwaitingPatientReg = false;
         _doRenderReport(rawLog, isQuick6);
       });
       return;
     }
+    try { console.log('[cog-flow v3] 跳过登记表单 (已有姓名: ' + nm + ')'); } catch(e){}
 
     _doRenderReport(rawLog, isQuick6);
   };
