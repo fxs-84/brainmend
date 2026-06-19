@@ -57,7 +57,6 @@
   var CLOUD_API = 'https://jsonblob.com/api/jsonBlob';
   var CLOUD_ENABLED = true;
   // 每个治疗师一个 blob ID, 存在 localStorage('cog_cloud_blob_id')
-  var CLOUD_ENABLED = (SUPABASE_URL.indexOf('xxxxxxxxxxxx') === -1);
 
   // ========== 年龄分层常模 (儿童发育校正系数) ==========
   // 乘数: 儿童原始分 × 系数 = 成人等效分, 用于阈值比较
@@ -2249,6 +2248,73 @@
   }
 
   // ========== PUBLIC API ==========
+  // ========== PUBLIC API ==========
+  // 流程重构：测完先弹出登记表单 → 拿到姓名/年龄/性别再 saveRecord+render
+  function _doRenderReport(rawLog, isQuick6) {
+    var history = loadHistory();
+    var record = saveRecord(rawLog, isQuick6);
+    setTimeout(function() { uploadToCloud(record); }, 0);
+    history = loadHistory();
+    var reportTime = record && record.date && record.time ? (record.date + ' ' + record.time) : null;
+    renderReport(rawLog, history, isQuick6, reportTime);
+    window._quick6Mode = false;
+    window._lastCogRecord = record;
+    setTimeout(function() { _updateCogRecordNav(0); }, 200);
+  }
+
+  // 弹出登记表单（姓名/年龄/性别），提交后回调
+  function _showPatientRegForm(onSubmit) {
+    var existing = document.getElementById('cog-reg-overlay');
+    if (existing) existing.remove();
+    var overlay = document.createElement('div');
+    overlay.id = 'cog-reg-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:30000;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;';
+    var card = document.createElement('div');
+    card.style.cssText = 'background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:16px;padding:30px 28px;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5);';
+    card.innerHTML =
+      '<h3 style="color:#fff;text-align:center;margin:0 0 6px;font-size:20px;">📝 登记患者信息</h3>' +
+      '<p style="color:#bdc3c7;text-align:center;font-size:12px;margin:0 0 22px;">测试已完成 · 填写信息后生成报告</p>' +
+      '<div style="margin-bottom:14px;">' +
+        '<label style="display:block;color:#bdc3c7;font-size:12px;margin-bottom:6px;">姓名 *</label>' +
+        '<input id="cog-reg-name" type="text" placeholder="如：张三" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:8px;font-size:15px;box-sizing:border-box;outline:none;">' +
+      '</div>' +
+      '<div style="margin-bottom:14px;">' +
+        '<label style="display:block;color:#bdc3c7;font-size:12px;margin-bottom:6px;">年龄</label>' +
+        '<input id="cog-reg-age" type="number" min="3" max="120" placeholder="如：35" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:8px;font-size:15px;box-sizing:border-box;outline:none;">' +
+      '</div>' +
+      '<div style="margin-bottom:22px;">' +
+        '<label style="display:block;color:#bdc3c7;font-size:12px;margin-bottom:6px;">性别</label>' +
+        '<select id="cog-reg-gender" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:8px;font-size:15px;box-sizing:border-box;outline:none;">' +
+          '<option value="" style="background:#1a1a2e;">请选择</option>' +
+          '<option value="男" style="background:#1a1a2e;">男</option>' +
+          '<option value="女" style="background:#1a1a2e;">女</option>' +
+          '<option value="其他" style="background:#1a1a2e;">其他</option>' +
+        '</select>' +
+      '</div>' +
+      '<button id="cog-reg-submit" style="display:block;width:100%;padding:14px;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:16px;font-weight:700;">生成报告</button>';
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    setTimeout(function(){ var n = document.getElementById('cog-reg-name'); if (n) n.focus(); }, 50);
+    document.getElementById('cog-reg-submit').addEventListener('click', function() {
+      var name = (document.getElementById('cog-reg-name').value || '').trim();
+      if (!name) {
+        var n2 = document.getElementById('cog-reg-name');
+        n2.style.borderColor = '#ff6b6b';
+        n2.focus();
+        return;
+      }
+      var age = (document.getElementById('cog-reg-age').value || '').trim();
+      var gender = document.getElementById('cog-reg-gender').value;
+      window._cogPatientInfo = { name: name, age: age, gender: gender, id: '' };
+      try { localStorage.setItem('cervical_current_client', JSON.stringify(window._cogPatientInfo)); } catch(e) {}
+      try { window.D = window.D || {}; window.D.clientInfo = window._cogPatientInfo; } catch(e) {}
+      var lbl = document.getElementById('current-patient');
+      if (lbl) lbl.textContent = '👤 ' + name + (age ? ' ' + age + '岁' : '');
+      overlay.remove();
+      onSubmit();
+    });
+  }
+
   window._showCognitiveReport = function() {
     var rawLog = window._cogScoreLog || {};
     var hasAny = false;
@@ -2256,26 +2322,16 @@
     if (!hasAny) { window.goHome(); return; }
 
     var isQuick6 = !!window._quick6Mode;
-    var history = loadHistory();
-    // Save current (携带 isQuick6 标记, 历史记录区分)
-    var record = saveRecord(rawLog, isQuick6);
-    // Upload to cloud (async, non-blocking)
-    setTimeout(function() { uploadToCloud(record); }, 0);
-    // Reload history including current
-    history = loadHistory();
 
-    // 报告时间跟着 record 走 (首次生成冻结), 不跟着 render 时间走
-    var reportTime = record && record.date && record.time ? (record.date + ' ' + record.time) : null;
-    renderReport(rawLog, history, isQuick6, reportTime);
+    // 流程重构关键拦截：没有姓名就先弹登记表单，再出报告
+    var info = getPatientInfo();
+    var nm = info && info.name ? String(info.name).trim() : '';
+    if (!nm || nm === '未知' || nm === '点击登录') {
+      _showPatientRegForm(function() { _doRenderReport(rawLog, isQuick6); });
+      return;
+    }
 
-    // 用完清掉 quick6 标志, 避免下次开正常测试被误判
-    window._quick6Mode = false;
-
-    // Store for "认知报告" button access
-    window._lastCogRecord = record;
-
-    // 更新记录切换导航 (新记录 → 索引 0)
-    setTimeout(function() { _updateCogRecordNav(0); }, 200);
+    _doRenderReport(rawLog, isQuick6);
   };
 
   window._demoCogReport = function() {

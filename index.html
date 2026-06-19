@@ -1178,25 +1178,21 @@
             });
             document.getElementById("cog-modal-close").addEventListener("click", function() { overlay.classList.remove("show"); });
             overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.classList.remove("show"); });
+            // ⚠️ 流程重构：去掉前置 ensureLogin → 直接弹二维码
+            // 患者扫码做题 → 12模块做完 → 弹出登记表单 → 出报告
             document.getElementById("cog-modal-full-test").addEventListener("click", function() {
                 overlay.classList.remove("show");
-                ensureLogin(function() {
-                    _showQRForTest('full');
-                });
+                _showQRForTest('full');
             });
             document.getElementById("cog-modal-quick6").addEventListener("click", function() {
                 overlay.classList.remove("show");
-                ensureLogin(function() {
-                    _showQRForTest('quick6');
-                });
+                _showQRForTest('quick6');
             });
 
             // QR Code button (manual share, no test type preselected)
             var qrBtn = document.getElementById('cog-qr-btn');
             if (qrBtn) qrBtn.addEventListener('click', function() {
-                ensureLogin(function() {
-                    _showQRForTest('full');
-                });
+                _showQRForTest('full');
             });
             var qrClose = document.getElementById('cog-qr-close');
             if (qrClose) qrClose.addEventListener('click', function() {
