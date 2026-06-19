@@ -3110,28 +3110,4 @@
     overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
   };
 
-  // Add "认知报告" to report dropdown
-  setTimeout(function() {
-    var dropdown = document.getElementById('report-dropdown');
-    if (dropdown) {
-      var cogItem = document.createElement('div');
-      cogItem.textContent = '🧠 认知报告';
-      cogItem.className = 'dropdown-item';
-      cogItem.style.cssText = 'padding:8px 16px;cursor:pointer;font-size:13px;';
-      cogItem.addEventListener('click', function() {
-        window._showCogRecordList();
-        var rmb = document.getElementById('report-menu-btn');
-        if (rmb) rmb.setAttribute('aria-expanded', 'false');
-        dropdown.style.display = 'none';
-      });
-      // Insert before "报告查询"
-      var recordsItem = document.getElementById('records-item');
-      if (recordsItem) {
-        dropdown.insertBefore(cogItem, recordsItem);
-      } else {
-        dropdown.appendChild(cogItem);
-      }
-    }
-  }, 2000);
-
 })();
