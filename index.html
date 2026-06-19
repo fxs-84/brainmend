@@ -268,6 +268,7 @@
                     </div>
                 </div>
                 <button id="open-gyro-modal" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">蓝牙连接</button>
+                <button id="trk-qr-btn" title="生成头动追踪分享二维码" style="background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:600;">📱 分享</button>
                 <button id="back-to-home" title="返回首页" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">🏠 首页</button>
                 <button id="theme-toggle" title="切换主题" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">🌙 暗色</button>
                 <button id="fullscreen-btn" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;" title="全屏">⛶</button>
@@ -309,10 +310,7 @@
                 </div>
                 <!-- 模式选择视图 -->
                 <div id="view-mode-select">
-                    <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <div class="panel-title" style="margin:0;">检测模式</div>
-                        <button id="trk-qr-btn" title="生成分享二维码" style="background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:600;">📱 生成二维码</button>
-                    </div>
+                    <div class="panel-title">检测模式</div>
                     <div class="mode-grid">
                         <button class="mode-btn" data-mode="integrated" style="display:none"><span class="icon">◎</span>综合检测</button>
                         <button class="mode-btn active" data-mode="coordination"><span class="icon">∞</span>协调性</button>
