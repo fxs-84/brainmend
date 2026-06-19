@@ -1170,17 +1170,18 @@
             }
         }
 
-        // Deep-link: 患者扫码后自动开始做题
-        function _startPatientTest(testType, patientInfo) {
-            // 🔒 v5 患者沙盒: 锁定整个 app 只暴露测试流程, 屏蔽所有逃离路径
+        // 🔒 患者沙盒 (认知/追踪共用)
+        function _activatePatientSandbox(opts) {
+            opts = opts || {};
+            var hideSidePanel = opts.hideSidePanel !== false; // 默认隐藏侧边栏
+
             window._patientSandbox = true;
             window._cogPatientConfirmed = false;
             try { sessionStorage.removeItem('cog_patient_confirmed'); } catch(e) {}
-            try { console.log('[cog-flow v5] _startPatientTest, sandbox=ON, type=' + testType); } catch(e){}
 
             // 屏蔽 page2 (首页三大入口)
             try { var p2 = document.getElementById('page2'); if (p2) p2.style.display = 'none'; } catch(e){}
-            // 屏蔽 header (顶部 BrainMend 导航 + 头像/报告按钮)
+            // 屏蔽 header
             try {
               var hdr = document.querySelector('header') || document.querySelector('.header') || document.getElementById('header');
               if (hdr) hdr.style.display = 'none';
@@ -1190,50 +1191,55 @@
             // 屏蔽返回首页按钮
             try {
               var backBtns = document.querySelectorAll('#back-to-page2-btn, .back-to-home, [data-action="home"]');
-              backBtns.forEach(function(b){
-                b.style.display = 'none';
-                b.style.pointerEvents = 'none';
-              });
+              backBtns.forEach(function(b){ b.style.display = 'none'; b.style.pointerEvents = 'none'; });
             } catch(e){}
-            // 屏蔽 side-panel (侧边栏含头动追踪入口)
-            try {
-              var sp = document.getElementById('side-panel');
-              if (sp) { sp.style.setProperty('display','none','important'); sp.style.setProperty('width','0','important'); }
-            } catch(e){}
-            // 屏蔽所有 tracking/头动追踪入口按钮 (CSS 兜底)
+            // 屏蔽 side-panel (认知模式需要, 追踪模式保留)
+            if (hideSidePanel) {
+              try {
+                var sp = document.getElementById('side-panel');
+                if (sp) { sp.style.setProperty('display','none','important'); sp.style.setProperty('width','0','important'); }
+              } catch(e){}
+            }
+            // CSS 兜底: 屏蔽首页其他入口
             try {
               var style = document.createElement('style');
               style.id = 'patient-sandbox-css';
-              style.textContent =
-                'body[data-patient-sandbox="1"] #page2-tracking, ' +
+              var cssRules = 'body[data-patient-sandbox="1"] #page2-tracking, ' +
                 'body[data-patient-sandbox="1"] #page2-cog-report, ' +
                 'body[data-patient-sandbox="1"] [data-feature="head-tracking"], ' +
                 'body[data-patient-sandbox="1"] [data-feature="records"] { display:none!important; }';
-              if (!document.getElementById('patient-sandbox-css')) document.head.appendChild(style);
+              if (!hideSidePanel) {
+                cssRules += 'body[data-patient-sandbox="1"] #page2-cognitive { display:none!important; }';
+              }
+              if (!document.getElementById('patient-sandbox-css')) {
+                style.textContent = cssRules;
+                document.head.appendChild(style);
+              }
               document.body.setAttribute('data-patient-sandbox', '1');
             } catch(e){}
-            // 屏蔽键盘 ESC/Backspace 退出
+            // 屏蔽键盘 ESC/Backspace
             try {
               window._sandboxKeyHandler = function(e) {
                 if (!window._patientSandbox) return;
                 if (e.key === 'Escape' || (e.key === 'Backspace' && !['INPUT','TEXTAREA','SELECT'].includes((e.target||{}).tagName))) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  try { console.log('[cog-flow v5] 屏蔽 ESC/Backspace 退出'); } catch(_){}
+                  e.preventDefault(); e.stopPropagation();
                 }
               };
               window.addEventListener('keydown', window._sandboxKeyHandler, true);
             } catch(e){}
-            // 拦截 history back (浏览器返回)
+            // 拦截 browser back
             try {
               history.pushState({sandbox:'patient'}, '', location.href);
               window.addEventListener('popstate', function(e){
-                if (window._patientSandbox) {
-                  history.pushState({sandbox:'patient'}, '', location.href);
-                  try { console.log('[cog-flow v5] 屏蔽浏览器返回'); } catch(_){}
-                }
+                if (window._patientSandbox) { history.pushState({sandbox:'patient'}, '', location.href); }
               });
             } catch(e){}
+        }
+
+        // Deep-link: 患者扫码后自动开始做题
+        function _startPatientTest(testType, patientInfo) {
+            _activatePatientSandbox({ hideSidePanel: true });
+            try { console.log('[cog-flow v5] _startPatientTest, sandbox=ON, type=' + testType); } catch(e){}
             window.D = window.D || {};
             window.D.clientInfo = {};
             window._cogPatientInfo = null;
@@ -1411,11 +1417,11 @@
                 document.getElementById('trk-qr-overlay').style.display = 'none';
             });
 
-            // Deep-link: ?mode=tracking 患者扫码进入头动追踪
+            // Deep-link: ?mode=tracking 患者扫码进入头动追踪 (沙盒隔离)
             (function() {
                 var params = new URLSearchParams(window.location.search);
                 if (params.get('mode') !== 'tracking') return;
-                // 过期校验 (使用 URL 中的 ttl 参数, 默认 24 小时)
+                // 过期校验
                 var qrT = params.get('t');
                 var ttl = parseInt(params.get('ttl')) || (24 * 60 * 60 * 1000);
                 if (qrT && (Date.now() - parseInt(qrT) > ttl)) {
@@ -1426,7 +1432,27 @@
                     document.body.appendChild(expiredDiv);
                     return;
                 }
-                page2.style.display = 'none';
+                // 🔒 激活沙盒 (保留侧边栏供追踪使用)
+                _activatePatientSandbox({ hideSidePanel: false });
+                // 替换返回按钮为沙盒完成屏
+                setTimeout(function() {
+                    var backBtn = document.getElementById('back-to-page2-btn');
+                    if (backBtn && window._patientSandbox) {
+                        var newBack = backBtn.cloneNode(true);
+                        backBtn.parentNode.replaceChild(newBack, backBtn);
+                        newBack.textContent = '✅ 完成检测';
+                        newBack.style.background = 'linear-gradient(135deg,#00D9A5,#0086FF)';
+                        newBack.style.color = '#fff';
+                        newBack.style.border = 'none';
+                        newBack.addEventListener('click', function() {
+                            var done = document.createElement('div');
+                            done.id = 'trk-test-done';
+                            done.style.cssText = 'position:fixed;inset:0;z-index:40000;background:linear-gradient(135deg,#1a1a2e,#16213e);display:flex;align-items:center;justify-content:center;flex-direction:column;color:#fff;text-align:center;padding:20px;';
+                            done.innerHTML = '<div style="font-size:72px;margin-bottom:20px;">✅</div><h2 style="font-size:24px;margin:0 0 12px;">检测已完成</h2><p style="color:#bdc3c7;font-size:14px;margin:0 0 30px;">您的检测数据已记录 · 请将此页面展示给您的治疗师</p><p style="color:#888;font-size:12px;">如需再次检测请联系治疗师重新扫码</p>';
+                            document.body.appendChild(done);
+                        });
+                    }
+                }, 500);
                 var testMode = params.get('test') || 'coordination';
                 // 等待 tracking 模块加载后激活指定模式
                 var retries = 0;
@@ -1435,12 +1461,10 @@
                     var trkBtn = document.getElementById('page2-tracking');
                     if (trkBtn) {
                         clearInterval(readyTimer);
-                        // 模拟点击头动追踪按钮
                         trkBtn.click();
                         setTimeout(function() {
                             var modeBtn = document.querySelector('#view-mode-select .mode-btn[data-mode="' + testMode + '"]');
                             if (modeBtn) {
-                                // 取消其他 active, 激活目标
                                 document.querySelectorAll('#view-mode-select .mode-btn').forEach(function(b){ b.classList.remove('active'); });
                                 modeBtn.classList.add('active');
                                 modeBtn.click();
