@@ -1136,6 +1136,7 @@
             // 流程重构关键: 强制清除所有患者信息痕迹, 防止 bundle 异步把治疗师登录态塞回来
             // 用 _cogAwaitingPatientReg 标志强制走"测完再登记"路径
             window._cogAwaitingPatientReg = true;
+            try { console.log('[cog-flow v3] _startPatientTest called, flag=true, type=' + testType); } catch(e){}
             window.D = window.D || {};
             window.D.clientInfo = {};
             window._cogPatientInfo = null;
