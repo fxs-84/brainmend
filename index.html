@@ -1179,10 +1179,17 @@
 
             // 屏蔽 page2 (首页三大入口)
             try { var p2 = document.getElementById('page2'); if (p2) p2.style.display = 'none'; } catch(e){}
-            // 屏蔽 header
+            // 屏蔽 header: 认知模式全隐藏, 追踪模式只隐藏导航按钮保留蓝牙
             try {
               var hdr = document.querySelector('header') || document.querySelector('.header') || document.getElementById('header');
-              if (hdr) hdr.style.display = 'none';
+              if (hideSidePanel) {
+                if (hdr) hdr.style.display = 'none';
+              } else {
+                // 追踪沙盒: 保留 header 框架, 只隐藏非必要按钮
+                var hideSelectors = '#back-to-home, #trk-qr-btn, #theme-toggle, #fullscreen-btn, #report-menu-btn, #report-dropdown, #current-patient, #back-to-page2-btn, .header-info span';
+                var btns = document.querySelectorAll(hideSelectors);
+                btns.forEach(function(b){ b.style.display = 'none'; b.style.pointerEvents = 'none'; });
+              }
               var navs = document.querySelectorAll('.header-nav, .top-nav, #top-nav, #header-nav');
               navs.forEach(function(n){ n.style.display = 'none'; });
             } catch(e){}
