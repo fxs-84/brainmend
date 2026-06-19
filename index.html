@@ -212,15 +212,14 @@
             <div style="margin-bottom:12px;">
                 <label style="font-size:12px;color:#666;margin-right:6px;">有效期:</label>
                 <select id="trk-qr-ttl" style="padding:4px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;">
-                    <option value="30">30 分钟</option>
-                    <option value="60">1 小时</option>
-                    <option value="120">2 小时</option>
-                    <option value="360">6 小时</option>
-                    <option value="720">12 小时</option>
-                    <option value="1440" selected>24 小时</option>
+                    <option value="1">1 天</option>
+                    <option value="3">3 天</option>
+                    <option value="7" selected>7 天</option>
+                    <option value="14">2 周</option>
+                    <option value="30">1 个月</option>
                     <option value="custom">自定义...</option>
                 </select>
-                <input id="trk-qr-ttl-custom" type="number" min="1" max="10080" placeholder="分钟" style="display:none;width:70px;padding:4px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;margin-left:4px;">
+                <input id="trk-qr-ttl-custom" type="number" min="1" max="365" placeholder="天" style="display:none;width:70px;padding:4px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;margin-left:4px;">
             </div>
             <div id="trk-qr-canvas" style="display:inline-block;"></div>
             <p id="trk-qr-url" style="color:#999;font-size:11px;margin:12px 0 0;word-break:break-all;"></p>
@@ -1331,8 +1330,8 @@
             function _showTrkQR() {
                 var mode = _getActiveTrackingMode();
                 var sel = document.getElementById('trk-qr-ttl');
-                var ttlMin = sel.value === 'custom' ? (parseInt(document.getElementById('trk-qr-ttl-custom').value) || 1440) : parseInt(sel.value);
-                var ttlMs = ttlMin * 60 * 1000;
+                var ttlDays = sel.value === 'custom' ? (parseInt(document.getElementById('trk-qr-ttl-custom').value) || 7) : parseInt(sel.value);
+                var ttlMs = ttlDays * 24 * 60 * 60 * 1000;
                 var baseUrl = window.location.origin + window.location.pathname;
                 var params = ['mode=tracking', 'test=' + mode, 't=' + Date.now(), 'ttl=' + ttlMs, 'v=' + Date.now()];
                 var url = baseUrl + '?' + params.join('&');
