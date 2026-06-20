@@ -2150,12 +2150,25 @@
   function uploadToCloud(record) {
     if (!CLOUD_ENABLED) return;
     var blobId = _getCloudBlobId();
+    // 精简 rawScores: 只保留计算分数必需的汇总字段,避免 12 模块 trial-by-trial 撑爆 jsonblob 10KB 限额
+    var trimmedRaw = {};
+    try {
+      Object.keys(record.rawScores || {}).forEach(function(modId) {
+        var r = record.rawScores[modId] || {};
+        trimmedRaw[modId] = {
+          score: r.score, correct: r.correct, trials: r.trials,
+          completionRate: r.completionRate, digitCount: r.digitCount,
+          totalIcons: r.totalIcons, totalCards: r.totalCards,
+          rtTotal: r.rtTotal, rtAvg: r.rtAvg, level: r.level
+        };
+      });
+    } catch(e) { trimmedRaw = {}; }
     var cloudRecord = {
       id: record.id,
       date: record.date, time: record.time,
       patientInfo: record.patientInfo,
       normalizedScores: record.normalizedScores,
-      rawScores: record.rawScores,
+      rawScores: trimmedRaw,
       brainRegions: record.brainRegions,
       riskIndex: record.riskIndex,
       overallScore: record.overallScore,
@@ -3057,7 +3070,17 @@
       if (!cloudRecs || cloudRecs.length === 0) {
         var empty = document.createElement('div');
         empty.style.cssText = 'text-align:center;padding:40px 20px;color:#999;';
-        empty.innerHTML = '<div style="font-size:48px;margin-bottom:12px;">☁️</div><div style="font-size:15px;">暂无云端记录</div><div style="font-size:12px;margin-top:4px;color:#bbb;">完成认知测试且配置云端后自动同步</div>';
+        var hasBlobId = !!_getCloudBlobId();
+        if (!hasBlobId) {
+          empty.innerHTML = '<div style="font-size:48px;margin-bottom:12px;">☁️</div>'
+            + '<div style="font-size:15px;color:#999;">尚未同步到云端</div>'
+            + '<div style="font-size:12px;margin-top:6px;color:#bbb;">完成一次认知测试后,记录会自动上传到 jsonblob</div>'
+            + '<div style="font-size:11px;margin-top:12px;color:#aaa;">云端 ID: ' + (_getCloudBlobId() || '(未创建)') + '</div>';
+        } else {
+          empty.innerHTML = '<div style="font-size:48px;margin-bottom:12px;">☁️</div>'
+            + '<div style="font-size:15px;color:#999;">云端暂无记录</div>'
+            + '<div style="font-size:12px;margin-top:6px;color:#bbb;">云端 ID: ' + _getCloudBlobId() + '</div>';
+        }
         wrap.appendChild(empty); return;
       }
       cloudRecs.forEach(function(rec, i) {
