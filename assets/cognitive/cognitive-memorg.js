@@ -46,7 +46,7 @@ function createSchedule(){
 	if(mo.phase==='tutorial_1'){schedule=[n];}
 	else if(mo.phase==='tutorial_2'){schedule=[2,n-2];}
 	else if(mo.phase==='tutorial_3'){var first=randInt(1,2),rest=n-first;if(rest<=2)schedule=[first,rest];else{var mid=Math.ceil(rest/2);schedule=[first,mid,rest-mid];}}
-	else{var nR=Math.min(n-1,2+Math.floor(n/4));var rem=n;for(var i=0;i<nR-1;i++){var mx=Math.min(rem-1,Math.ceil(rem*0.6));var mn=Math.max(1,Math.floor(rem*0.3));schedule.push(randInt(mn,mx));rem-=schedule[schedule.length-1];}schedule.push(rem);}
+	else{var nR=Math.max(2,Math.ceil(n/2.5));var base=Math.floor(n/nR),extra=n-base*nR;for(var i=0;i<nR;i++)schedule.push(base+(i<extra?1:0));schedule.sort(function(){return Math.random()>0.5?1:-1;});}
 	mo.roundSchedule=schedule;mo.currentRound=0;
 }
 
