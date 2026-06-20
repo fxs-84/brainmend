@@ -55,16 +55,14 @@ function genTrial(){
 		var pos=shuffle([0,1,2,3,4,5,6,7,8]);
 		var i;
 
-		// 3-4组, 每组>=2格
 		var numGroups=randInt(3,4);
 		var groupShapes=pick([0,1,2,3,4,5],numGroups);
 		var groupCols=pick(COLORS,numGroups);
 		var ds=[],rem=8;for(i=0;i<numGroups-1;i++){var sz=randInt(2,rem-(numGroups-i-1)*2);ds.push(sz);rem-=sz;}ds.push(rem);
-		var colRand=pick(COLORS,randInt(3,4));
 		var cntRand=shuffle([1,2,3,4,5,6,7,8,9]).slice(0,randInt(3,4));
 
 		if(type==='color'){
-			// 颜色推理: 每组同形状同颜色; odd格颜色全局唯一, count从同组取
+			// 颜色推理: 每组同形状同颜色; odd格颜色唯一, count随机
 			for(i=0;i<numGroups;i++){for(var j=0;j<ds[i];j++){var ci=ds.slice(0,i).reduce(function(a,b){return a+b;},0)+j;
 				grid[pos[ci]]={shape:groupShapes[i],color:groupCols[i],count:cntRand[randInt(0,cntRand.length-1)],rot:randInt(0,3)*90};}}
 			var oddG=randInt(0,numGroups-1),oddS=groupShapes[oddG];
@@ -73,31 +71,24 @@ function genTrial(){
 			grid[pos[8]]={shape:oddS,color:oddCol,count:gCnts[randInt(0,gCnts.length-1)],rot:randInt(0,3)*90};
 			rn.oddIdx=pos[8];
 		}else if(type==='shape'){
-			// 形状推理: 每组同形状; odd格形状唯一; 颜色count从出现>=2次的值取(绝不唯一)
+			// 形状推理: 每组同形状同颜色; odd格形状唯一+颜色从某组取(不唯一), count随机
 			var allShapes=[0,1,2,3,4,5];
 			var usedShapes={};for(i=0;i<groupShapes.length;i++)usedShapes[groupShapes[i]]=true;
 			var oddS;for(i=0;i<allShapes.length;i++){if(!usedShapes[allShapes[i]]){oddS=allShapes[i];break;}}
 			for(i=0;i<numGroups;i++){for(var j=0;j<ds[i];j++){var ci=ds.slice(0,i).reduce(function(a,b){return a+b;},0)+j;
-				grid[pos[ci]]={shape:groupShapes[i],color:colRand[randInt(0,colRand.length-1)],count:cntRand[randInt(0,cntRand.length-1)],rot:randInt(0,3)*90};}}
-			// 统计8格中每种颜色/数量出现次数, 只取出现>=2的值避免odd格颜色显眼
-			var colFreq={},cntFreq={};for(var k=0;k<8;k++){var c=grid[pos[k]];colFreq[c.color]=(colFreq[c.color]||0)+1;cntFreq[c.count]=(cntFreq[c.count]||0)+1;}
-			var safeCols=[],safeCnts=[];for(var key in colFreq){if(colFreq[key]>=2)safeCols.push(key);}for(var key in cntFreq){if(cntFreq[key]>=2)safeCnts.push(parseInt(key));}
-			if(safeCols.length===0)safeCols=Object.keys(colFreq);
-			if(safeCnts.length===0)safeCnts=Object.keys(cntFreq).map(Number);
-			grid[pos[8]]={shape:oddS,color:safeCols[randInt(0,safeCols.length-1)],count:safeCnts[randInt(0,safeCnts.length-1)],rot:randInt(0,3)*90};
+				grid[pos[ci]]={shape:groupShapes[i],color:groupCols[i],count:cntRand[randInt(0,cntRand.length-1)],rot:randInt(0,3)*90};}}
+			// odd格颜色从某一组取(全局>=2次, 不形成唯一色)
+			var oddCol=groupCols[randInt(0,groupCols.length-1)];
+			grid[pos[8]]={shape:oddS,color:oddCol,count:cntRand[randInt(0,cntRand.length-1)],rot:randInt(0,3)*90};
 			rn.oddIdx=pos[8];
 		}else{
-			// 数量推理: 每组同形状同数量; odd格数量全局唯一; 颜色从同组取且出现>=2次
+			// 数量推理: 每组同形状同数量; odd格数量唯一+颜色从同组取(不唯一)
 			var gc=shuffle([1,2,3,4,5,6,7,8,9]).slice(0,numGroups);
 			for(i=0;i<numGroups;i++){for(var j=0;j<ds[i];j++){var ci=ds.slice(0,i).reduce(function(a,b){return a+b;},0)+j;
-				grid[pos[ci]]={shape:groupShapes[i],color:colRand[randInt(0,colRand.length-1)],count:gc[i],rot:randInt(0,3)*90};}}
+				grid[pos[ci]]={shape:groupShapes[i],color:groupCols[i],count:gc[i],rot:randInt(0,3)*90};}}
 			var oddG=randInt(0,numGroups-1),oddS=groupShapes[oddG],oddC;do{oddC=randInt(1,9);}while(gc.indexOf(oddC)>=0);
-			// 从同shape组取颜色, 且该颜色在整个8格中出现>=2次
 			var gCols=[];for(var k=0;k<8;k++){if(grid[pos[k]].shape===oddS)gCols.push(grid[pos[k]].color);}
-			var allColFreq={};for(var k=0;k<8;k++){var c=grid[pos[k]];allColFreq[c.color]=(allColFreq[c.color]||0)+1;}
-			var safeGCols=[];for(var k=0;k<gCols.length;k++){if(allColFreq[gCols[k]]>=2)safeGCols.push(gCols[k]);}
-			if(safeGCols.length===0)safeGCols=gCols;
-			grid[pos[8]]={shape:oddS,color:safeGCols[randInt(0,safeGCols.length-1)],count:oddC,rot:randInt(0,3)*90};
+			grid[pos[8]]={shape:oddS,color:gCols[randInt(0,gCols.length-1)],count:oddC,rot:randInt(0,3)*90};
 			rn.oddIdx=pos[8];
 		}
 		rn.grid=grid;
