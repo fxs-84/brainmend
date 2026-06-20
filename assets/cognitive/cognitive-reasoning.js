@@ -55,15 +55,17 @@ function genTrial(){
 		var pos=shuffle([0,1,2,3,4,5,6,7,8]);
 		var i;
 
-		var numGroups=randInt(2,3);
+		// 3-4组, 每组>=2格, 最多4种基本元素+1个odd=5种
+		var numGroups=randInt(3,4);
 		var groupShapes=pick([0,1,2,3,4,5],numGroups);
 		var groupCols=pick(COLORS,numGroups);
 		var ds=[],rem=8;for(i=0;i<numGroups-1;i++){var sz=randInt(2,rem-(numGroups-i-1)*2);ds.push(sz);rem-=sz;}ds.push(rem);
-		var colRand=pick(COLORS,randInt(2,3));
-		var cntRand=shuffle([1,2,3,4,5,6,7,8,9]).slice(0,randInt(2,3));
+		// 无关维度取3个值增加噪声
+		var colRand=pick(COLORS,randInt(3,4));
+		var cntRand=shuffle([1,2,3,4,5,6,7,8,9]).slice(0,randInt(3,4));
 
 		if(type==='color'){
-			// 颜色推理: 每组同形状同颜色, odd格同形状+颜色唯一, count从同组取不异常
+			// 颜色推理: 每组同形状同颜色; odd格同形状+颜色唯一, count从同组取
 			for(i=0;i<numGroups;i++){for(var j=0;j<ds[i];j++){var ci=ds.slice(0,i).reduce(function(a,b){return a+b;},0)+j;
 				grid[pos[ci]]={shape:groupShapes[i],color:groupCols[i],count:cntRand[randInt(0,cntRand.length-1)],rot:randInt(0,3)*90};}}
 			var oddG=randInt(0,numGroups-1),oddS=groupShapes[oddG];
@@ -72,7 +74,7 @@ function genTrial(){
 			grid[pos[8]]={shape:oddS,color:oddCol,count:gCnts[randInt(0,gCnts.length-1)],rot:randInt(0,3)*90};
 			rn.oddIdx=pos[8];
 		}else if(type==='shape'){
-			// 形状推理: 每组同形状, odd格形状唯一, 颜色count从8格已有值取不异常
+			// 形状推理: 每组同形状; odd格形状唯一, 颜色count从8格已有值取
 			var allShapes=[0,1,2,3,4,5];
 			var usedShapes={};for(i=0;i<groupShapes.length;i++)usedShapes[groupShapes[i]]=true;
 			var oddS;for(i=0;i<allShapes.length;i++){if(!usedShapes[allShapes[i]]){oddS=allShapes[i];break;}}
@@ -82,7 +84,7 @@ function genTrial(){
 			grid[pos[8]]={shape:oddS,color:usedCols[randInt(0,usedCols.length-1)],count:usedCnts[randInt(0,usedCnts.length-1)],rot:randInt(0,3)*90};
 			rn.oddIdx=pos[8];
 		}else{
-			// 数量推理: 每组同形状同数量, odd格同形状+数量唯一, 颜色从同组取不异常
+			// 数量推理: 每组同形状同数量; odd格同形状+数量唯一, 颜色从同组取
 			var gc=shuffle([1,2,3,4,5,6,7,8,9]).slice(0,numGroups);
 			for(i=0;i<numGroups;i++){for(var j=0;j<ds[i];j++){var ci=ds.slice(0,i).reduce(function(a,b){return a+b;},0)+j;
 				grid[pos[ci]]={shape:groupShapes[i],color:colRand[randInt(0,colRand.length-1)],count:gc[i],rot:randInt(0,3)*90};}}
