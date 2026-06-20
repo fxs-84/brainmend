@@ -2269,7 +2269,9 @@
   function _doRenderReport(rawLog, isQuick6) {
     var history = loadHistory();
     var record = saveRecord(rawLog, isQuick6);
-    setTimeout(function() { uploadToCloud(record); }, 0);
+    // 云端上传 (jsonblob.com) 已被废弃 — 该域名目前 POST 响应缺 Access-Control-Allow-Origin,
+    // 浏览器拦截导致 blobId 永远拿不到。改用本地 JSON 导出/导入 + 患者报告 QR 分享。
+    // if (window._cogCloudEnabled) setTimeout(function() { uploadToCloud(record); }, 0);
     history = loadHistory();
     var reportTime = record && record.date && record.time ? (record.date + ' ' + record.time) : null;
     renderReport(rawLog, history, isQuick6, reportTime);
@@ -2983,7 +2985,7 @@
     title.appendChild(closeBtn);
     panel.appendChild(title);
 
-    // Tab bar: 本机 / 云端
+    // Tab bar: 本机 / 导入
     var tabRow = document.createElement('div');
     tabRow.style.cssText = 'display:flex;gap:0;margin-bottom:12px;border-radius:8px;overflow:hidden;border:1px solid #ddd;';
     var localTab = document.createElement('button');
@@ -2991,7 +2993,7 @@
     var tabBtnStyle = 'flex:1;padding:8px 12px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:background 0.2s;';
     localTab.style.cssText = tabBtnStyle + 'background:#1a1a2e;color:#fff;';
     var cloudTab = document.createElement('button');
-    cloudTab.textContent = '☁️ 云端记录';
+    cloudTab.textContent = '📁 导入/导出';
     cloudTab.style.cssText = tabBtnStyle + 'background:#f5f5f5;color:#999;';
     tabRow.appendChild(localTab); tabRow.appendChild(cloudTab);
     panel.appendChild(tabRow);
@@ -3067,21 +3069,29 @@
     // Render cloud records
     function _renderCloudRows(wrap, cloudRecs) {
       wrap.innerHTML = '';
+      // 工具栏: 导出全部 + 导入
+      var toolbar = document.createElement('div');
+      toolbar.style.cssText = 'display:flex;gap:8px;padding:8px 0 12px;border-bottom:1px solid #f0f0f0;margin-bottom:8px;';
+      var exportAllBtn = document.createElement('button');
+      exportAllBtn.textContent = '⬇️ 导出全部记录(JSON)';
+      exportAllBtn.style.cssText = 'flex:1;padding:8px 12px;background:#0086FF;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;';
+      exportAllBtn.onclick = function() { _exportAllCogRecords(); };
+      var importBtn = document.createElement('button');
+      importBtn.textContent = '⬆️ 导入记录文件';
+      importBtn.style.cssText = 'flex:1;padding:8px 12px;background:#00D9A5;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;';
+      importBtn.onclick = function() { _importCogRecords(overlay, listWrap); };
+      toolbar.appendChild(exportAllBtn);
+      toolbar.appendChild(importBtn);
+      wrap.appendChild(toolbar);
+
       if (!cloudRecs || cloudRecs.length === 0) {
         var empty = document.createElement('div');
-        empty.style.cssText = 'text-align:center;padding:40px 20px;color:#999;';
-        var hasBlobId = !!_getCloudBlobId();
-        if (!hasBlobId) {
-          empty.innerHTML = '<div style="font-size:48px;margin-bottom:12px;">☁️</div>'
-            + '<div style="font-size:15px;color:#999;">尚未同步到云端</div>'
-            + '<div style="font-size:12px;margin-top:6px;color:#bbb;">完成一次认知测试后,记录会自动上传到 jsonblob</div>'
-            + '<div style="font-size:11px;margin-top:12px;color:#aaa;">云端 ID: ' + (_getCloudBlobId() || '(未创建)') + '</div>';
-        } else {
-          empty.innerHTML = '<div style="font-size:48px;margin-bottom:12px;">☁️</div>'
-            + '<div style="font-size:15px;color:#999;">云端暂无记录</div>'
-            + '<div style="font-size:12px;margin-top:6px;color:#bbb;">云端 ID: ' + _getCloudBlobId() + '</div>';
-        }
-        wrap.appendChild(empty); return;
+        empty.style.cssText = 'text-align:center;padding:20px 20px 10px;color:#999;';
+        empty.innerHTML = '<div style="font-size:36px;margin-bottom:8px;">📁</div>'
+          + '<div style="font-size:14px;color:#666;margin-bottom:4px;">尚未导入云端/跨设备记录</div>'
+          + '<div style="font-size:11px;color:#bbb;">点击"导入记录文件"选择患者发来的 JSON 报告文件</div>';
+        wrap.appendChild(empty);
+        return;
       }
       cloudRecs.forEach(function(rec, i) {
         var row = document.createElement('div');
@@ -3125,9 +3135,73 @@
       currentView = 'cloud';
       cloudTab.style.background = '#1a1a2e'; cloudTab.style.color = '#fff';
       localTab.style.background = '#f5f5f5'; localTab.style.color = '#999';
-      listWrap.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#999;">⏳ 加载中...</div>';
-      fetchCloudReports(function(cloudRecords) { _renderCloudRows(listWrap, cloudRecords); });
+      listWrap.innerHTML = '';
+      _renderCloudRows(listWrap, _getImportedRecords());
     });
+
+    // ========== 导出全部记录为 JSON 文件 ==========
+    function _exportAllCogRecords() {
+      try {
+        var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
+        if (records.length === 0) { alert('本机暂无记录可导出'); return; }
+        var payload = {
+          app: 'BrainMend 脑优化',
+          exportTime: new Date().toISOString(),
+          version: 1,
+          records: records
+        };
+        var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'cog-records-' + new Date().toISOString().slice(0,10) + '.json';
+        document.body.appendChild(a); a.click();
+        setTimeout(function() { URL.revokeObjectURL(url); a.remove(); }, 100);
+      } catch(e) { alert('导出失败: ' + e.message); }
+    }
+
+    // ========== 导入 JSON 报告文件 ==========
+    function _importCogRecords(overlay, listWrap) {
+      var input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,application/json';
+      input.onchange = function() {
+        var file = input.files && input.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function() {
+          try {
+            var data = JSON.parse(reader.result);
+            var incoming = Array.isArray(data) ? data : (data.records || []);
+            if (!incoming.length) { alert('文件中无有效记录'); return; }
+            var existing = JSON.parse(localStorage.getItem('cog_records') || '[]');
+            var existingIds = {};
+            existing.forEach(function(r) { existingIds[r.id] = true; });
+            var added = 0;
+            incoming.forEach(function(r) {
+              if (!r.id || !existingIds[r.id]) { existing.push(r); added++; existingIds[r.id] = true; }
+            });
+            existing.sort(function(a, b) {
+              var ka = (a.date||'') + (a.time||''); var kb = (b.date||'') + (b.time||'');
+              return kb.localeCompare(ka);
+            });
+            localStorage.setItem('cog_records', JSON.stringify(existing));
+            alert('导入完成:新增 ' + added + ' 条记录');
+            _renderCloudRows(listWrap, _getImportedRecords());
+          } catch(e) { alert('导入失败: ' + e.message); }
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    }
+
+    function _getImportedRecords() {
+      try {
+        var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
+        var tags = JSON.parse(localStorage.getItem('cog_imported_tags') || '{}');
+        return records.filter(function(r) { return tags[r.id]; });
+      } catch(e) { return []; }
+    }
 
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
