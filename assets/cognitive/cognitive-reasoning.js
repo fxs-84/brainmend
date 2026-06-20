@@ -47,59 +47,48 @@ function drawIcon(ctx,shapeIdx,color,cx,cy,size,rotation){
 }
 
 function genTrial(){
-	rn.answerGiven=false;rn.feedbackText='';
-	if(rn.phase==='tutorial'){rn.reasonType=REASON_TYPES[rn.tutCorrect];}
-	else{rn.reasonType=rn.wrongStreak>0?rn.wrongType:REASON_TYPES[randInt(0,2)];}
-	var type=rn.reasonType;
-	var grid=new Array(9);
-	var pos=shuffle([0,1,2,3,4,5,6,7,8]);
-	var i;
+		rn.answerGiven=false;rn.feedbackText='';
+		if(rn.phase==='tutorial'){rn.reasonType=REASON_TYPES[rn.tutCorrect];}
+		else{rn.reasonType=rn.wrongStreak>0?rn.wrongType:REASON_TYPES[randInt(0,2)];}
+		var type=rn.reasonType;
+		var grid=new Array(9);
+		var pos=shuffle([0,1,2,3,4,5,6,7,8]);
+		var i;
 
-	// 每道题用 2-3 种图形; 无关维度也限 2-3 种值, 防止随机太散导致无规律
-	// 规则维度确保3个不同值 (2个正常+1个异常), 不够则从全量池补
-	var numShapes=randInt(3,4);
-	function leastFreq(arr){var m={},minK,minV=99;for(var i2=0;i2<arr.length;i2++){var v=arr[i2];m[v]=(m[v]||0)+1;}for(var k in m){if(m[k]<minV){minV=m[k];minK=k;}}return isNaN(minK)?arr[0]:parseInt(minK);}
-	var shapePool=pick([0,1,2,3,4,5],numShapes);
-	var colPool=pick(COLORS,randInt(2,3));
-	var cntPool=shuffle([1,2,3,4,5,6,7,8,9]).slice(0,randInt(2,3));
-	function extraFrom(pool,exclude){
-		var rest=[];for(var k=0;k<pool.length;k++){if(exclude.indexOf(pool[k])<0)rest.push(pool[k]);}
-		return rest[randInt(0,rest.length-1)];
-	}
+		var numGroups=randInt(2,4);
+		var groupShapes=pick([0,1,2,3,4,5],numGroups);
+		var groupCols=pick(COLORS,numGroups);
+		var cntVals=shuffle([1,2,3,4,5,6,7,8,9]).slice(0,randInt(2,3));
+		var ds=[],rem=8;for(i=0;i<numGroups-1;i++){var sz=randInt(2,rem-(numGroups-i-1)*2);ds.push(sz);rem-=sz;}ds.push(rem);
 
-	// 构建8个平衡值: 每个维度值均匀分布, 防止任何一个值只出现1次导致视觉假异常
-	function balanced8(pool){
-		var arr=[];
-		if(pool.length===2){for(i=0;i<4;i++){arr.push(pool[0]);arr.push(pool[1]);}}
-		else if(pool.length===3){arr.push(pool[0]);arr.push(pool[0]);arr.push(pool[0]);arr.push(pool[1]);arr.push(pool[1]);arr.push(pool[1]);arr.push(pool[2]);arr.push(pool[2]);}
-		else if(pool.length===4){for(i=0;i<2;i++){arr.push(pool[0]);arr.push(pool[1]);arr.push(pool[2]);arr.push(pool[3]);}}else{for(i=0;i<8;i++)arr.push(pool[i%pool.length]);}
-		return shuffle(arr);
-	}
-
-	if(type==='color'){var ruleCols=[colPool[0],colPool[1]],oddCol=colPool.length>2?colPool[2]:extraFrom(COLORS,ruleCols);
-		var sh8=balanced8(shapePool),cn8=balanced8(cntPool),cl8=balanced8(ruleCols);
-		for(i=0;i<8;i++){grid[pos[i]]={shape:sh8[i],color:cl8[i],count:cn8[i],rot:randInt(0,3)*90};}
-		grid[pos[8]]={shape:leastFreq(sh8),color:oddCol,count:leastFreq(cn8),rot:randInt(0,3)*90};
-		rn.oddIdx=pos[8];
-	}else if(type==='shape'){
-		var oddS=shapePool[numShapes-1];var ruleShapes=shapePool.slice(0,numShapes-1);if(ruleShapes.length<2)ruleShapes.push(ruleShapes[0]);
-		var sh8=balanced8(ruleShapes),cn8=balanced8(cntPool),cl8=balanced8(colPool);
-		for(i=0;i<8;i++){grid[pos[i]]={shape:sh8[i],color:cl8[i],count:cn8[i],rot:randInt(0,3)*90};}
-		grid[pos[8]]={shape:oddS,color:leastFreq(cl8),count:leastFreq(cn8),rot:randInt(0,3)*90};
-		rn.oddIdx=pos[8];
+		if(type==='color'){
+			// 颜色推理: 每组同形状同颜色, odd格同形状但借用另一组的颜色
+			for(i=0;i<numGroups;i++){for(var j=0;j<ds[i];j++){var ci=ds.slice(0,i).reduce(function(a,b){return a+b;},0)+j;
+				grid[pos[ci]]={shape:groupShapes[i],color:groupCols[i],count:cntVals[randInt(0,cntVals.length-1)],rot:randInt(0,3)*90};}}
+			var oddG=randInt(0,numGroups-1),oddS=groupShapes[oddG];
+			var otherG;do{otherG=randInt(0,numGroups-1);}while(otherG===oddG);
+			grid[pos[8]]={shape:oddS,color:groupCols[otherG],count:cntVals[randInt(0,cntVals.length-1)],rot:randInt(0,3)*90};
+			rn.oddIdx=pos[8];
+		}else if(type==='shape'){
+			// 形状推理: 8格用2-3种形状, odd格形状不在任何组中
+			var allShapes=[0,1,2,3,4,5];
+			var usedShapes={};for(i=0;i<groupShapes.length;i++)usedShapes[groupShapes[i]]=true;
+			var oddS;for(i=0;i<allShapes.length;i++){if(!usedShapes[allShapes[i]]){oddS=allShapes[i];break;}}
+			for(i=0;i<numGroups;i++){for(var j=0;j<ds[i];j++){var ci=ds.slice(0,i).reduce(function(a,b){return a+b;},0)+j;
+				grid[pos[ci]]={shape:groupShapes[i],color:groupCols[randInt(0,groupCols.length-1)],count:cntVals[randInt(0,cntVals.length-1)],rot:randInt(0,3)*90};}}
+			grid[pos[8]]={shape:oddS,color:groupCols[randInt(0,groupCols.length-1)],count:cntVals[randInt(0,cntVals.length-1)],rot:randInt(0,3)*90};
+			rn.oddIdx=pos[8];
 		}else{
-		// count: 同组同数量,1格混入某组数量不同
-	var cShapes=pick([0,1,2,3,4,5],3);
-	var ds=[],rem=8;for(var g=0;g<cShapes.length-1;g++){var sz=randInt(2,rem-(cShapes.length-g-1)*2);ds.push(sz);rem-=sz;}ds.push(rem);
-	var nC=randInt(3,9),oddC=randInt(1,4);
-	if(Math.abs(oddC-nC)<2)oddC=nC>=7?1:nC+2;if(oddC>9)oddC=9;
-	var oddG=randInt(0,cShapes.length-1),oddS=cShapes[oddG];
-	var cl8c=balanced8(colPool);var ci=0;for(var g=0;g<cShapes.length;g++){for(var j=0;j<ds[g];j++){grid[pos[ci]]={shape:cShapes[g],color:cl8c[ci],count:nC,rot:randInt(0,3)*90};ci++;}}
-	grid[pos[8]]={shape:oddS,color:cl8c[randInt(0,cl8c.length-1)],count:oddC,rot:randInt(0,3)*90};
-	rn.oddIdx=pos[8];
-	rn.grid=grid;
-}
-
+			// 数量推理: 每组同形状同数量, odd格同形状但数量不同
+			var gc=shuffle([1,2,3,4,5,6,7,8,9]).slice(0,numGroups);
+			for(i=0;i<numGroups;i++){for(var j=0;j<ds[i];j++){var ci=ds.slice(0,i).reduce(function(a,b){return a+b;},0)+j;
+				grid[pos[ci]]={shape:groupShapes[i],color:groupCols[randInt(0,groupCols.length-1)],count:gc[i],rot:randInt(0,3)*90};}}
+			var oddG=randInt(0,numGroups-1),oddS=groupShapes[oddG],oddC;do{oddC=randInt(1,9);}while(gc.indexOf(oddC)>=0);
+			grid[pos[8]]={shape:oddS,color:groupCols[randInt(0,groupCols.length-1)],count:oddC,rot:randInt(0,3)*90};
+			rn.oddIdx=pos[8];
+		}
+		rn.grid=grid;
+	}
 rn.showFeedback=function(text,color,dur){rn.feedbackText=text;rn.feedbackT=performance.now();rn.feedbackDur=dur||1500;};
 
 function updateUI(){
