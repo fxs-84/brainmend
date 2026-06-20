@@ -56,10 +56,13 @@
     observation:  [   0,    0,0.15,0.25,0.24,0.32,    0,    0,0.02,0.02]
   };
 
-  // ========== CLOUD CONFIG (jsonblob — 零配置云端存储) ==========
-  var CLOUD_API = 'https://jsonblob.com/api/jsonBlob';
+  // ========== CLOUD CONFIG (restful-api.dev — CORS-friendly 替代 jsonblob) ==========
+  // jsonblob.com POST 响应缺 Access-Control-Allow-Origin, 浏览器拦截 → blobId 永远拿不到。
+  // restful-api.dev 已实测: POST/GET/PUT 都返回 Access-Control-Allow-Origin: *, 浏览器正常
+  var CLOUD_API = 'https://api.restful-api.dev/objects';
   var CLOUD_ENABLED = true;
-  // 每个治疗师一个 blob ID, 存在 localStorage('cog_cloud_blob_id')
+  // 每条报告 = 一个 object: {name: 'brainmend-cog-report', data: {tid: therapistId, report: {...}}}
+  // therapistId (tid) 用于多治疗师隔离, 通过 QR 码传给患者
 
   // ========== 年龄分层常模 (儿童发育校正系数) ==========
   // 乘数: 儿童原始分 × 系数 = 成人等效分, 用于阈值比较
@@ -2139,18 +2142,22 @@
     return record;
   }
 
-  // ========== CLOUD UPLOAD (jsonblob) ==========
-  function _getCloudBlobId() {
-    try { return localStorage.getItem('cog_cloud_blob_id') || ''; } catch(e) { return ''; }
+  // ========== CLOUD UPLOAD (restful-api.dev) ==========
+  function _getTherapistId() {
+    try { return localStorage.getItem('cog_therapist_id') || ''; } catch(e) { return ''; }
   }
-  function _setCloudBlobId(id) {
-    try { localStorage.setItem('cog_cloud_blob_id', id); } catch(e) {}
+  function _ensureTherapistId() {
+    var tid = _getTherapistId();
+    if (!tid) {
+      tid = 'th_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+      try { localStorage.setItem('cog_therapist_id', tid); } catch(e) {}
+    }
+    return tid;
   }
 
   function uploadToCloud(record) {
     if (!CLOUD_ENABLED) return;
-    var blobId = _getCloudBlobId();
-    // 精简 rawScores: 只保留计算分数必需的汇总字段,避免 12 模块 trial-by-trial 撑爆 jsonblob 10KB 限额
+    var tid = _getTherapistId() || _ensureTherapistId();
     var trimmedRaw = {};
     try {
       Object.keys(record.rawScores || {}).forEach(function(modId) {
@@ -2176,68 +2183,56 @@
       createdAt: new Date().toISOString()
     };
 
-    var doUpload = function(reports) {
-      reports.unshift(cloudRecord);
-      if (reports.length > 50) reports = reports.slice(0, 50);
-      var method = blobId ? 'PUT' : 'POST';
-      var url = blobId ? (CLOUD_API + '/' + blobId) : CLOUD_API;
-      fetch(url, {
-        method: method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reports)
-      }).then(function(res) {
-        if (res.ok) {
-          if (!blobId) {
-            var loc = res.headers.get('Location') || '';
-            var newId = loc.split('/').pop() || '';
-            if (!newId) {
-              var xid = res.headers.get('X-jsonblob-id');
-              if (xid) newId = xid;
-            }
-            if (newId) { _setCloudBlobId(newId); record._cloudId = newId; }
-          }
-          try {
-            var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
-            for (var i = 0; i < records.length; i++) {
-              if (records[i].id === record.id) { records[i]._cloudId = 'ok'; break; }
-            }
-            localStorage.setItem('cog_records', JSON.stringify(records));
-          } catch(e2) {}
+    fetch(CLOUD_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'brainmend-cog-report',
+        data: { tid: tid, report: cloudRecord, createdAt: Date.now() }
+      })
+    }).then(function(res) {
+      if (res.ok) {
+        return res.json();
+      }
+      throw new Error('HTTP ' + res.status);
+    }).then(function(obj) {
+      try {
+        var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
+        for (var i = 0; i < records.length; i++) {
+          if (records[i].id === record.id) { records[i]._cloudId = obj.id; break; }
         }
-      }).catch(function(err) {});
-    };
-
-    if (blobId) {
-      fetch(CLOUD_API + '/' + blobId).then(function(r) { return r.ok ? r.json() : []; })
-        .then(function(data) { doUpload(Array.isArray(data) ? data : []); })
-        .catch(function() { doUpload([]); });
-    } else {
-      doUpload([]);
-    }
+        localStorage.setItem('cog_records', JSON.stringify(records));
+      } catch(e2) {}
+    }).catch(function(err) {});
   }
 
-  // ========== CLOUD FETCH (jsonblob) ==========
+  // ========== CLOUD FETCH (restful-api.dev) ==========
   function fetchCloudReports(callback) {
     if (!CLOUD_ENABLED) { callback([]); return; }
-    var blobId = _getCloudBlobId();
-    if (!blobId) { callback([]); return; }
-    fetch(CLOUD_API + '/' + blobId)
+    var tid = _getTherapistId();
+    if (!tid) { callback([]); return; }
+    fetch(CLOUD_API)
       .then(function(res) { return res.ok ? res.json() : null; })
       .then(function(data) {
-        if (!data || !Array.isArray(data)) { callback([]); return; }
-        var records = data.map(function(r) {
-          return {
-            id: 'cloud_' + (r.id || ''),
-            date: r.date, time: r.time,
-            patientInfo: r.patientInfo || {},
-            normalizedScores: r.normalizedScores || {},
-            rawScores: r.rawScores || {},
-            brainRegions: r.brainRegions || {},
-            riskIndex: r.riskIndex, overallScore: r.overallScore,
-            isQuick6: !!r.isQuick6,
-            _isCloud: true, _cloudId: r.id
-          };
-        });
+        if (!Array.isArray(data)) { callback([]); return; }
+        var records = data
+          .filter(function(o) { return o.name === 'brainmend-cog-report' && o.data && o.data.tid === tid; })
+          .map(function(o) {
+            var r = o.data.report || {};
+            return {
+              id: 'cloud_' + (r.id || o.id),
+              date: r.date, time: r.time,
+              patientInfo: r.patientInfo || {},
+              normalizedScores: r.normalizedScores || {},
+              rawScores: r.rawScores || {},
+              brainRegions: r.brainRegions || {},
+              riskIndex: r.riskIndex, overallScore: r.overallScore,
+              isQuick6: !!r.isQuick6,
+              _isCloud: true, _cloudId: o.id,
+              _cloudCreatedAt: o.data.createdAt || 0
+            };
+          })
+          .sort(function(a, b) { return (b._cloudCreatedAt || 0) - (a._cloudCreatedAt || 0); });
         callback(records);
       })
       .catch(function(err) { callback([]); });
@@ -2269,9 +2264,8 @@
   function _doRenderReport(rawLog, isQuick6) {
     var history = loadHistory();
     var record = saveRecord(rawLog, isQuick6);
-    // 云端上传 (jsonblob.com) 已被废弃 — 该域名目前 POST 响应缺 Access-Control-Allow-Origin,
-    // 浏览器拦截导致 blobId 永远拿不到。改用本地 JSON 导出/导入 + 患者报告 QR 分享。
-    // if (window._cogCloudEnabled) setTimeout(function() { uploadToCloud(record); }, 0);
+    // 云端上传 — restful-api.dev (CORS-friendly)
+    setTimeout(function() { uploadToCloud(record); }, 0);
     history = loadHistory();
     var reportTime = record && record.date && record.time ? (record.date + ' ' + record.time) : null;
     renderReport(rawLog, history, isQuick6, reportTime);
@@ -2985,7 +2979,7 @@
     title.appendChild(closeBtn);
     panel.appendChild(title);
 
-    // Tab bar: 本机 / 导入
+    // Tab bar: 本机 / 云端
     var tabRow = document.createElement('div');
     tabRow.style.cssText = 'display:flex;gap:0;margin-bottom:12px;border-radius:8px;overflow:hidden;border:1px solid #ddd;';
     var localTab = document.createElement('button');
@@ -2993,7 +2987,7 @@
     var tabBtnStyle = 'flex:1;padding:8px 12px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:background 0.2s;';
     localTab.style.cssText = tabBtnStyle + 'background:#1a1a2e;color:#fff;';
     var cloudTab = document.createElement('button');
-    cloudTab.textContent = '📁 导入/导出';
+    cloudTab.textContent = '☁️ 云端记录';
     cloudTab.style.cssText = tabBtnStyle + 'background:#f5f5f5;color:#999;';
     tabRow.appendChild(localTab); tabRow.appendChild(cloudTab);
     panel.appendChild(tabRow);
@@ -3069,29 +3063,15 @@
     // Render cloud records
     function _renderCloudRows(wrap, cloudRecs) {
       wrap.innerHTML = '';
-      // 工具栏: 导出全部 + 导入
-      var toolbar = document.createElement('div');
-      toolbar.style.cssText = 'display:flex;gap:8px;padding:8px 0 12px;border-bottom:1px solid #f0f0f0;margin-bottom:8px;';
-      var exportAllBtn = document.createElement('button');
-      exportAllBtn.textContent = '⬇️ 导出全部记录(JSON)';
-      exportAllBtn.style.cssText = 'flex:1;padding:8px 12px;background:#0086FF;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;';
-      exportAllBtn.onclick = function() { _exportAllCogRecords(); };
-      var importBtn = document.createElement('button');
-      importBtn.textContent = '⬆️ 导入记录文件';
-      importBtn.style.cssText = 'flex:1;padding:8px 12px;background:#00D9A5;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;';
-      importBtn.onclick = function() { _importCogRecords(overlay, listWrap); };
-      toolbar.appendChild(exportAllBtn);
-      toolbar.appendChild(importBtn);
-      wrap.appendChild(toolbar);
-
       if (!cloudRecs || cloudRecs.length === 0) {
         var empty = document.createElement('div');
-        empty.style.cssText = 'text-align:center;padding:20px 20px 10px;color:#999;';
-        empty.innerHTML = '<div style="font-size:36px;margin-bottom:8px;">📁</div>'
-          + '<div style="font-size:14px;color:#666;margin-bottom:4px;">尚未导入云端/跨设备记录</div>'
-          + '<div style="font-size:11px;color:#bbb;">点击"导入记录文件"选择患者发来的 JSON 报告文件</div>';
-        wrap.appendChild(empty);
-        return;
+        empty.style.cssText = 'text-align:center;padding:40px 20px;color:#999;';
+        var tid = _getTherapistId() || _ensureTherapistId();
+        empty.innerHTML = '<div style="font-size:48px;margin-bottom:12px;">☁️</div>'
+          + '<div style="font-size:15px;color:#999;">云端暂无记录</div>'
+          + '<div style="font-size:12px;margin-top:6px;color:#bbb;">完成认知测试后,患者报告会自动同步到云端</div>'
+          + '<div style="font-size:11px;margin-top:12px;color:#aaa;">治疗师 ID: ' + tid + '</div>';
+        wrap.appendChild(empty); return;
       }
       cloudRecs.forEach(function(rec, i) {
         var row = document.createElement('div');
@@ -3135,73 +3115,9 @@
       currentView = 'cloud';
       cloudTab.style.background = '#1a1a2e'; cloudTab.style.color = '#fff';
       localTab.style.background = '#f5f5f5'; localTab.style.color = '#999';
-      listWrap.innerHTML = '';
-      _renderCloudRows(listWrap, _getImportedRecords());
+      listWrap.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#999;">⏳ 加载中...</div>';
+      fetchCloudReports(function(cloudRecords) { _renderCloudRows(listWrap, cloudRecords); });
     });
-
-    // ========== 导出全部记录为 JSON 文件 ==========
-    function _exportAllCogRecords() {
-      try {
-        var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
-        if (records.length === 0) { alert('本机暂无记录可导出'); return; }
-        var payload = {
-          app: 'BrainMend 脑优化',
-          exportTime: new Date().toISOString(),
-          version: 1,
-          records: records
-        };
-        var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = 'cog-records-' + new Date().toISOString().slice(0,10) + '.json';
-        document.body.appendChild(a); a.click();
-        setTimeout(function() { URL.revokeObjectURL(url); a.remove(); }, 100);
-      } catch(e) { alert('导出失败: ' + e.message); }
-    }
-
-    // ========== 导入 JSON 报告文件 ==========
-    function _importCogRecords(overlay, listWrap) {
-      var input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.json,application/json';
-      input.onchange = function() {
-        var file = input.files && input.files[0];
-        if (!file) return;
-        var reader = new FileReader();
-        reader.onload = function() {
-          try {
-            var data = JSON.parse(reader.result);
-            var incoming = Array.isArray(data) ? data : (data.records || []);
-            if (!incoming.length) { alert('文件中无有效记录'); return; }
-            var existing = JSON.parse(localStorage.getItem('cog_records') || '[]');
-            var existingIds = {};
-            existing.forEach(function(r) { existingIds[r.id] = true; });
-            var added = 0;
-            incoming.forEach(function(r) {
-              if (!r.id || !existingIds[r.id]) { existing.push(r); added++; existingIds[r.id] = true; }
-            });
-            existing.sort(function(a, b) {
-              var ka = (a.date||'') + (a.time||''); var kb = (b.date||'') + (b.time||'');
-              return kb.localeCompare(ka);
-            });
-            localStorage.setItem('cog_records', JSON.stringify(existing));
-            alert('导入完成:新增 ' + added + ' 条记录');
-            _renderCloudRows(listWrap, _getImportedRecords());
-          } catch(e) { alert('导入失败: ' + e.message); }
-        };
-        reader.readAsText(file);
-      };
-      input.click();
-    }
-
-    function _getImportedRecords() {
-      try {
-        var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
-        var tags = JSON.parse(localStorage.getItem('cog_imported_tags') || '{}');
-        return records.filter(function(r) { return tags[r.id]; });
-      } catch(e) { return []; }
-    }
 
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
