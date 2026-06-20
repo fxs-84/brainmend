@@ -6,7 +6,7 @@ var GAME_SEC=60;
 function randInt(a,b){return a+Math.floor(Math.random()*(b-a+1));}
 function shuffle(a){for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;}return a;}
 
-// 生成凸多边形顶点 (4-7边, 无内角>180°)
+// 生成凸多边形顶点 (4-8边, 无内角>180°) — 边数由pickSides控制
 function genPolygon(sides){
 	// 生成严格凸多边形: 随机点→凸包→选取sides个顶点
 	var verts, step=Math.PI*2/sides, margin=step*0.25;
@@ -76,7 +76,7 @@ var ob=window.__observation={
 	animating:false, animProgress:0,
 	feedbackText:'', feedbackT:0, feedbackDur:1500,
 	tutStep:0, tutCorrect:0,
-	score:0, trials:0, gameEndTime:0
+	score:0, trials:0, gameEndTime:0, consecutiveCorrect:0
 };
 
 function playCoin(){try{var a=new(window.AudioContext||window.webkitAudioContext)(),t=a.currentTime,o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);o.type='sine';o.frequency.setValueAtTime(1200,t);o.frequency.setValueAtTime(1600,t+.06);o.frequency.setValueAtTime(2000,t+.12);g.gain.setValueAtTime(.1,t);g.gain.exponentialRampToValueAtTime(.01,t+.25);o.start(t);o.stop(t+.3);}catch(e){}}
@@ -107,10 +107,19 @@ function drawPolygon(ctx,verts,cx,cy,sz,alpha){
 
 function genTrial(){
 	ob.answerGiven=false;ob.animating=false;ob.animProgress=0;ob.feedbackText='';
+	// 自适应难度: 连续答对越多, 越容易出现高边数 (4-8边)
+	// 连续2+ → 6-8边; 5+ → 7-8边; 8+ → 只出8边
+	var streak=ob.consecutiveCorrect||0;
+	function pickSides(){
+		if(streak>=8)return 8;
+		if(streak>=5)return Math.random()<0.5?7:8;
+		if(streak>=2)return randInt(6,8);
+		return randInt(4,8);
+	}
 	// 左侧两个多边形: 边数相近, 最多差2条
-	var sides1=randInt(4,7);
+	var sides1=pickSides();
 	var sides2=sides1+randInt(-2,2);
-	sides2=Math.max(4,Math.min(7,sides2));
+	sides2=Math.max(4,Math.min(8,sides2));
 	var p1=genPolygon(sides1);
 	var p2=genPolygon(sides2);
 	ob.leftPoly1=p1;
@@ -148,14 +157,14 @@ ob.startTutorial=function(){ob.phase='tutorial_text';ob.tutStep=0;updateUI();};
 function startTutGame(){ob.phase='tutorial';ob.tutStep=1;ob.tutCorrect=0;genTrial();updateUI();}
 ob.showReadyGame=function(){ob.phase='ready_game';updateUI();};
 	ob.showReadyStart=function(){ob.phase='ready_start';updateUI();};
-function startPlaying(){ob.phase='playing';ob.score=0;ob.trials=0;ob.gameEndTime=Date.now()+GAME_SEC*1000;genTrial();updateUI();}
+function startPlaying(){ob.phase='playing';ob.score=0;ob.trials=0;ob.consecutiveCorrect=0;ob.gameEndTime=Date.now()+GAME_SEC*1000;genTrial();updateUI();}
 
 	function handleAnswer(same){
 		if(ob.answerGiven||ob.animating)return;
 		ob.answerGiven=true;
 		var correct=(same===ob.isSame);
-		if(correct){playCoin();if(ob.phase==='playing'){ob.score++;ob.trials++;}}
-		else{if(ob.phase==='tutorial')playError();if(ob.phase==='playing')ob.trials++;}
+		if(correct){playCoin();if(ob.phase==='playing'){ob.score++;ob.trials++;ob.consecutiveCorrect++;}}
+		else{if(ob.phase==='tutorial')playError();if(ob.phase==='playing'){ob.trials++;ob.consecutiveCorrect=0};}
 	
 		if(ob.phase==='tutorial'){
 			ob.tutFeedbackOk=correct;
