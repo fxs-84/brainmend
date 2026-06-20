@@ -55,36 +55,40 @@ function genTrial(){
 		var pos=shuffle([0,1,2,3,4,5,6,7,8]);
 		var i;
 
-		var numGroups=randInt(2,5);
+		var numGroups=randInt(2,3);
 		var groupShapes=pick([0,1,2,3,4,5],numGroups);
 		var groupCols=pick(COLORS,numGroups);
-		var cntVals=shuffle([1,2,3,4,5,6,7,8,9]).slice(0,randInt(2,3));
-		var minSz=numGroups<=4?2:1;var ds=[],rem=8;for(i=0;i<numGroups-1;i++){var sz=randInt(minSz,rem-(numGroups-i-1)*minSz);ds.push(sz);rem-=sz;}ds.push(rem);
+		var ds=[],rem=8;for(i=0;i<numGroups-1;i++){var sz=randInt(2,rem-(numGroups-i-1)*2);ds.push(sz);rem-=sz;}ds.push(rem);
+		var colRand=pick(COLORS,randInt(2,3));
+		var cntRand=shuffle([1,2,3,4,5,6,7,8,9]).slice(0,randInt(2,3));
 
 		if(type==='color'){
-				// 颜色推理: 每组同形状同颜色, odd格同形状但颜色与所有组都不同
-				for(i=0;i<numGroups;i++){for(var j=0;j<ds[i];j++){var ci=ds.slice(0,i).reduce(function(a,b){return a+b;},0)+j;
-					grid[pos[ci]]={shape:groupShapes[i],color:groupCols[i],count:cntVals[randInt(0,cntVals.length-1)],rot:randInt(0,3)*90};}}
-				var oddG=randInt(0,numGroups-1),oddS=groupShapes[oddG];
-				var oddCol;for(i=0;i<COLORS.length;i++){if(groupCols.indexOf(COLORS[i])<0){oddCol=COLORS[i];break;}}
-				grid[pos[8]]={shape:oddS,color:oddCol,count:cntVals[randInt(0,cntVals.length-1)],rot:randInt(0,3)*90};
-				rn.oddIdx=pos[8];
+			// 颜色推理: 每组同形状同颜色, odd格同形状+颜色唯一, count从同组取不异常
+			for(i=0;i<numGroups;i++){for(var j=0;j<ds[i];j++){var ci=ds.slice(0,i).reduce(function(a,b){return a+b;},0)+j;
+				grid[pos[ci]]={shape:groupShapes[i],color:groupCols[i],count:cntRand[randInt(0,cntRand.length-1)],rot:randInt(0,3)*90};}}
+			var oddG=randInt(0,numGroups-1),oddS=groupShapes[oddG];
+			var oddCol;for(i=0;i<COLORS.length;i++){if(groupCols.indexOf(COLORS[i])<0){oddCol=COLORS[i];break;}}
+			var gCnts=[];for(var k=0;k<8;k++){if(grid[pos[k]].shape===oddS)gCnts.push(grid[pos[k]].count);}
+			grid[pos[8]]={shape:oddS,color:oddCol,count:gCnts[randInt(0,gCnts.length-1)],rot:randInt(0,3)*90};
+			rn.oddIdx=pos[8];
 		}else if(type==='shape'){
-			// 形状推理: 8格用2-4种形状, odd格形状与所有组都不同
+			// 形状推理: 每组同形状, odd格形状唯一, 颜色count从8格已有值取不异常
 			var allShapes=[0,1,2,3,4,5];
 			var usedShapes={};for(i=0;i<groupShapes.length;i++)usedShapes[groupShapes[i]]=true;
 			var oddS;for(i=0;i<allShapes.length;i++){if(!usedShapes[allShapes[i]]){oddS=allShapes[i];break;}}
 			for(i=0;i<numGroups;i++){for(var j=0;j<ds[i];j++){var ci=ds.slice(0,i).reduce(function(a,b){return a+b;},0)+j;
-				grid[pos[ci]]={shape:groupShapes[i],color:groupCols[randInt(0,groupCols.length-1)],count:cntVals[randInt(0,cntVals.length-1)],rot:randInt(0,3)*90};}}
-			grid[pos[8]]={shape:oddS,color:groupCols[randInt(0,groupCols.length-1)],count:cntVals[randInt(0,cntVals.length-1)],rot:randInt(0,3)*90};
+				grid[pos[ci]]={shape:groupShapes[i],color:colRand[randInt(0,colRand.length-1)],count:cntRand[randInt(0,cntRand.length-1)],rot:randInt(0,3)*90};}}
+			var usedCols=[],usedCnts=[];for(var k=0;k<8;k++){var c=grid[pos[k]];if(usedCols.indexOf(c.color)<0)usedCols.push(c.color);if(usedCnts.indexOf(c.count)<0)usedCnts.push(c.count);}
+			grid[pos[8]]={shape:oddS,color:usedCols[randInt(0,usedCols.length-1)],count:usedCnts[randInt(0,usedCnts.length-1)],rot:randInt(0,3)*90};
 			rn.oddIdx=pos[8];
 		}else{
-			// 数量推理: 每组同形状同数量, odd格同形状但数量与所有组都不同
+			// 数量推理: 每组同形状同数量, odd格同形状+数量唯一, 颜色从同组取不异常
 			var gc=shuffle([1,2,3,4,5,6,7,8,9]).slice(0,numGroups);
 			for(i=0;i<numGroups;i++){for(var j=0;j<ds[i];j++){var ci=ds.slice(0,i).reduce(function(a,b){return a+b;},0)+j;
-				grid[pos[ci]]={shape:groupShapes[i],color:groupCols[randInt(0,groupCols.length-1)],count:gc[i],rot:randInt(0,3)*90};}}
+				grid[pos[ci]]={shape:groupShapes[i],color:colRand[randInt(0,colRand.length-1)],count:gc[i],rot:randInt(0,3)*90};}}
 			var oddG=randInt(0,numGroups-1),oddS=groupShapes[oddG],oddC;do{oddC=randInt(1,9);}while(gc.indexOf(oddC)>=0);
-			grid[pos[8]]={shape:oddS,color:groupCols[randInt(0,groupCols.length-1)],count:oddC,rot:randInt(0,3)*90};
+			var gCols=[];for(var k=0;k<8;k++){if(grid[pos[k]].shape===oddS)gCols.push(grid[pos[k]].color);}
+			grid[pos[8]]={shape:oddS,color:gCols[randInt(0,gCols.length-1)],count:oddC,rot:randInt(0,3)*90};
 			rn.oddIdx=pos[8];
 		}
 		rn.grid=grid;
