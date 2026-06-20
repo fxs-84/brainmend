@@ -91,7 +91,7 @@ function genTrial(){
 		// count: 同组同数量颜色自由, 1格混入某组数量不同
 		var cShapes=pick([0,1,2,3,4,5],3);
 		var ds=[],rem=8;for(var g=0;g<cShapes.length-1;g++){var sz=randInt(2,rem-(cShapes.length-g-1)*2);ds.push(sz);rem-=sz;}ds.push(rem);
-		var cBase=randInt(4,8);var nC1=cBase+randInt(-1,1);if(nC1<1)nC1=1;if(nC1>9)nC1=9;var nC2=cBase+randInt(-2,2);if(Math.abs(nC2-nC1)<2)nC2=cBase+3;if(nC2<1)nC2=1;if(nC2>9)nC2=9;var nC3=cBase+randInt(-3,3);if(nC3<1)nC3=1;if(nC3>9)nC3=9;while(Math.abs(nC3-nC1)<2){nC3=cBase+randInt(-3,4);if(nC3<1)nC3=1;if(nC3>9)nC3=9;};var nCs=[nC1,nC2,nC3],oddC=cBase+randInt(3,5);if(oddC>9)oddC=9;if(Math.abs(oddC-nC1)<2)oddC=Math.min(9,nC1+3);
+		var cBase=randInt(4,7);var nC1=cBase+randInt(-1,1);if(nC1<1)nC1=1;if(nC1>9)nC1=9;var nC2=cBase+randInt(-2,2);if(Math.abs(nC2-nC1)<2)nC2=cBase+3;if(nC2<1)nC2=1;if(nC2>9)nC2=9;var nC3=cBase+randInt(-3,3);if(nC3<1)nC3=1;if(nC3>9)nC3=9;while(Math.abs(nC3-nC1)<2||Math.abs(nC3-nC2)<2){nC3=cBase+randInt(-4,4);if(nC3<1)nC3=1;if(nC3>9)nC3=9;}var nCs=[nC1,nC2,nC3];var oddC=cBase+randInt(3,5);if(oddC>9)oddC=9;while(nCs.indexOf(oddC)>=0||Math.abs(oddC-nC1)<2){oddC++;if(oddC>9)oddC=cBase-3;if(oddC<1)oddC=1;};
 		var oddG=randInt(0,cShapes.length-1),oddS=cShapes[oddG];
 		var cl8c=balanced8(colPool);var cntAll=[];for(var g=0;g<cShapes.length;g++){for(var j=0;j<ds[g];j++){cntAll.push(nCs[g%nCs.length]);}}cntAll=shuffle(cntAll);var ci=0;for(var g=0;g<cShapes.length;g++){for(var j=0;j<ds[g];j++){grid[pos[ci]]={shape:cShapes[g],color:cl8c[ci],count:cntAll[ci],rot:randInt(0,3)*90};ci++;}}
 		grid[pos[8]]={shape:oddS,color:leastFreq(cl8c),count:oddC,rot:randInt(0,3)*90};
