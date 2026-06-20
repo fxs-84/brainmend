@@ -55,11 +55,11 @@ function genTrial(){
 		var pos=shuffle([0,1,2,3,4,5,6,7,8]);
 		var i;
 
-		var numGroups=randInt(2,4);
+		var numGroups=randInt(2,5);
 		var groupShapes=pick([0,1,2,3,4,5],numGroups);
 		var groupCols=pick(COLORS,numGroups);
 		var cntVals=shuffle([1,2,3,4,5,6,7,8,9]).slice(0,randInt(2,3));
-		var ds=[],rem=8;for(i=0;i<numGroups-1;i++){var sz=randInt(2,rem-(numGroups-i-1)*2);ds.push(sz);rem-=sz;}ds.push(rem);
+		var minSz=numGroups<=4?2:1;var ds=[],rem=8;for(i=0;i<numGroups-1;i++){var sz=randInt(minSz,rem-(numGroups-i-1)*minSz);ds.push(sz);rem-=sz;}ds.push(rem);
 
 		if(type==='color'){
 				// 颜色推理: 每组同形状同颜色, odd格同形状但颜色与所有组都不同
