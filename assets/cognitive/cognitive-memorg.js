@@ -150,7 +150,7 @@ function renderMemOrg(){
 
 	function renderTutText(ctx,W,H){
 		var lines=["每轮找出新增小猴子","记住已翻的牌和旧小猴子位置","翻错或点错即扣除生命值","全部卡牌变成小猴子后进入下一回合"];
-		var bwBox=520,bhBox=130,bxBox=W/2-bwBox/2,byBox=H/2-100;
+		var bwBox=520,bhBox=170,bxBox=W/2-bwBox/2,byBox=H/2-115;
 		drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
 		ctx.fillStyle='#fff';ctx.font='bold 20px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
 		for(var i=0;i<lines.length;i++)ctx.fillText(lines[i],W/2,byBox+40+i*38);
