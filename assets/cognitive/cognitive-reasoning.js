@@ -88,14 +88,15 @@ function genTrial(){
 		grid[pos[8]]={shape:oddS,color:leastFreq(cl8),count:leastFreq(cn8),rot:randInt(0,3)*90};
 		rn.oddIdx=pos[8];
 		}else{
-		// count: 8格count在cBase~cBase+2区间(不全同), odd格明显离群
+		// count: 同组同数量,1格混入某组数量不同
 	var cShapes=pick([0,1,2,3,4,5],3);
 	var ds=[],rem=8;for(var g=0;g<cShapes.length-1;g++){var sz=randInt(2,rem-(cShapes.length-g-1)*2);ds.push(sz);rem-=sz;}ds.push(rem);
-	var cBase=randInt(3,6);var oddC=cBase>=5?1:cBase+5;var cntVals=[cBase,cBase+1,cBase+2];var cntAll=[];for(var g=0;g<cShapes.length;g++){for(var j=0;j<ds[g];j++)cntAll.push(cntVals[g%cntVals.length]);}cntAll=shuffle(cntAll);
-	var groupG=randInt(0,cShapes.length-1),oddS=cShapes[groupG];var oddCol=colPool[randInt(0,colPool.length-1)];
-	var cl8c=balanced8(colPool);var ci=0;for(var g=0;g<cShapes.length;g++){for(var j=0;j<ds[g];j++){grid[pos[ci]]={shape:cShapes[g],color:cl8c[ci],count:cntAll[ci],rot:randInt(0,3)*90};ci++;}}
-	grid[pos[8]]={shape:oddS,color:oddCol,count:oddC,rot:randInt(0,3)*90};
-	rn.oddIdx=pos[8];		}
+	var nC=randInt(3,9),oddC=randInt(1,4);
+	if(Math.abs(oddC-nC)<2)oddC=nC>=7?1:nC+2;if(oddC>9)oddC=9;
+	var oddG=randInt(0,cShapes.length-1),oddS=cShapes[oddG];
+	var cl8c=balanced8(colPool);var ci=0;for(var g=0;g<cShapes.length;g++){for(var j=0;j<ds[g];j++){grid[pos[ci]]={shape:cShapes[g],color:cl8c[ci],count:nC,rot:randInt(0,3)*90};ci++;}}
+	grid[pos[8]]={shape:oddS,color:cl8c[randInt(0,cl8c.length-1)],count:oddC,rot:randInt(0,3)*90};
+	rn.oddIdx=pos[8];
 	rn.grid=grid;
 }
 
