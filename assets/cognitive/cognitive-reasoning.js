@@ -62,15 +62,15 @@ function genTrial(){
 		var ds=[],rem=8;for(i=0;i<numGroups-1;i++){var sz=randInt(2,rem-(numGroups-i-1)*2);ds.push(sz);rem-=sz;}ds.push(rem);
 
 		if(type==='color'){
-			// 颜色推理: 每组同形状同颜色, odd格同形状但借用另一组的颜色
-			for(i=0;i<numGroups;i++){for(var j=0;j<ds[i];j++){var ci=ds.slice(0,i).reduce(function(a,b){return a+b;},0)+j;
-				grid[pos[ci]]={shape:groupShapes[i],color:groupCols[i],count:cntVals[randInt(0,cntVals.length-1)],rot:randInt(0,3)*90};}}
-			var oddG=randInt(0,numGroups-1),oddS=groupShapes[oddG];
-			var otherG;do{otherG=randInt(0,numGroups-1);}while(otherG===oddG);
-			grid[pos[8]]={shape:oddS,color:groupCols[otherG],count:cntVals[randInt(0,cntVals.length-1)],rot:randInt(0,3)*90};
-			rn.oddIdx=pos[8];
+				// 颜色推理: 每组同形状同颜色, odd格同形状但颜色与所有组都不同
+				for(i=0;i<numGroups;i++){for(var j=0;j<ds[i];j++){var ci=ds.slice(0,i).reduce(function(a,b){return a+b;},0)+j;
+					grid[pos[ci]]={shape:groupShapes[i],color:groupCols[i],count:cntVals[randInt(0,cntVals.length-1)],rot:randInt(0,3)*90};}}
+				var oddG=randInt(0,numGroups-1),oddS=groupShapes[oddG];
+				var oddCol;for(i=0;i<COLORS.length;i++){if(groupCols.indexOf(COLORS[i])<0){oddCol=COLORS[i];break;}}
+				grid[pos[8]]={shape:oddS,color:oddCol,count:cntVals[randInt(0,cntVals.length-1)],rot:randInt(0,3)*90};
+				rn.oddIdx=pos[8];
 		}else if(type==='shape'){
-			// 形状推理: 8格用2-3种形状, odd格形状不在任何组中
+			// 形状推理: 8格用2-4种形状, odd格形状与所有组都不同
 			var allShapes=[0,1,2,3,4,5];
 			var usedShapes={};for(i=0;i<groupShapes.length;i++)usedShapes[groupShapes[i]]=true;
 			var oddS;for(i=0;i<allShapes.length;i++){if(!usedShapes[allShapes[i]]){oddS=allShapes[i];break;}}
@@ -79,7 +79,7 @@ function genTrial(){
 			grid[pos[8]]={shape:oddS,color:groupCols[randInt(0,groupCols.length-1)],count:cntVals[randInt(0,cntVals.length-1)],rot:randInt(0,3)*90};
 			rn.oddIdx=pos[8];
 		}else{
-			// 数量推理: 每组同形状同数量, odd格同形状但数量不同
+			// 数量推理: 每组同形状同数量, odd格同形状但数量与所有组都不同
 			var gc=shuffle([1,2,3,4,5,6,7,8,9]).slice(0,numGroups);
 			for(i=0;i<numGroups;i++){for(var j=0;j<ds[i];j++){var ci=ds.slice(0,i).reduce(function(a,b){return a+b;},0)+j;
 				grid[pos[ci]]={shape:groupShapes[i],color:groupCols[randInt(0,groupCols.length-1)],count:gc[i],rot:randInt(0,3)*90};}}
