@@ -1,7 +1,7 @@
 // 模块7: 变通能力 — 心理旋转
 (function(){
 var GOLD='#C9A84C',TIME_LIMIT=60,GRID=6,CELL=36,GAP=2;
-var fl=window.__flex={phase:'idle',blocks:0,leftGrid:[],rightGrid:[],isSame:true,rotated:0,userAnswer:'',answerChecked:false,showOverlay:false,overlayT:0,tutRound:0,tutCorrect:0,timer:TIME_LIMIT,t0:0,correct:0,trials:0};
+var fl=window.__flex={phase:'idle',blocks:0,leftGrid:[],rightGrid:[],isSame:true,rotated:0,userAnswer:'',answerChecked:false,showOverlay:false,overlayT:0,tutRound:0,tutCorrect:0,timer:TIME_LIMIT,t0:0,correct:0,trials:0,consecutiveCorrect:0};
 
 function playCoin(){try{var a=new(window.AudioContext||window.webkitAudioContext)(),t=a.currentTime,o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);o.type='sine';o.frequency.setValueAtTime(1200,t);o.frequency.setValueAtTime(1600,t+.05);o.frequency.setValueAtTime(2000,t+.1);g.gain.setValueAtTime(.1,t);g.gain.setValueAtTime(.1,t+.1);g.gain.exponentialRampToValueAtTime(.01,t+.2);o.start(t);o.stop(t+.3);}catch(e){}}
 function playError(){try{var a2=new(window.AudioContext||window.webkitAudioContext)(),t2=a2.currentTime,o2=a2.createOscillator(),g2=a2.createGain();o2.connect(g2);g2.connect(a2.destination);o2.type='square';o2.frequency.setValueAtTime(200,t2);o2.frequency.linearRampToValueAtTime(100,t2+.25);g2.gain.setValueAtTime(.15,t2);g2.gain.exponentialRampToValueAtTime(.001,t2+.3);o2.start(t2);o2.stop(t2+.3);}catch(e){}}
@@ -51,7 +51,7 @@ function startTut1(){fl.phase='tutorial_1';fl.tutRound=1;fl.tutCorrect=0;genTria
 function startTut2(){fl.phase='tutorial_2';fl.tutRound=2;fl.tutCorrect=0;genTrial(5);updateUI();}
 fl.showReadyGame=function(){fl.phase='ready_game';updateUI();};
 fl.showReadyStart=function(){fl.phase='ready_start';updateUI();};
-function randBlocks(){return 4+Math.floor(Math.random()*7);}function startPlaying(){fl.phase='playing';fl.trials=0;fl.correct=0;fl.timer=TIME_LIMIT;fl.t0=performance.now();fl.blocks=randBlocks();fl.answerChecked=false;genTrial(fl.blocks);updateUI();}
+function randBlocks(){var streak=fl.consecutiveCorrect||0;if(streak>=7)return 12+Math.floor(Math.random()*3);if(streak>=4)return 9+Math.floor(Math.random()*3);if(streak>=2)return 7+Math.floor(Math.random()*3);return 5+Math.floor(Math.random()*4);}function startPlaying(){fl.phase='playing';fl.trials=0;fl.correct=0;fl.timer=TIME_LIMIT;fl.t0=performance.now();fl.consecutiveCorrect=0;fl.blocks=randBlocks();fl.answerChecked=false;genTrial(fl.blocks);updateUI();}
 
 fl.answer=function(a){
     if(fl.phase!=='tutorial_1'&&fl.phase!=='tutorial_2'&&fl.phase!=='playing')return;
@@ -59,7 +59,7 @@ fl.answer=function(a){
     var correctAnswer=fl.isSame?'相同':'不同';
     var ok=(a===correctAnswer);
     fl.userAnswer=a;fl.answerChecked=true;fl._answerT=performance.now();
-    if(ok){playCoin();if(fl.phase!=='tutorial_1'&&fl.phase!=='tutorial_2'){fl.correct++;}}
+    if(ok){playCoin();if(fl.phase!=='tutorial_1'&&fl.phase!=='tutorial_2'){fl.correct++;fl.consecutiveCorrect++;}}else{if(fl.phase!=='tutorial_1'&&fl.phase!=='tutorial_2')fl.consecutiveCorrect=0;}
     fl.trials++;
     // Tutorial: feedback page
     if(fl.phase==='tutorial_1'||fl.phase==='tutorial_2'){
