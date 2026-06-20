@@ -57,7 +57,7 @@ function genTrial(){
 
 	// 每道题用 2-3 种图形; 无关维度也限 2-3 种值, 防止随机太散导致无规律
 	// 规则维度确保3个不同值 (2个正常+1个异常), 不够则从全量池补
-	var numShapes=randInt(3,4);
+	var numShapes=randInt(4,5);
 	function leastFreq(arr){var m={},minK,minV=99;for(var i2=0;i2<arr.length;i2++){var v=arr[i2];m[v]=(m[v]||0)+1;}for(var k in m){if(m[k]<minV){minV=m[k];minK=k;}}return isNaN(minK)?arr[0]:parseInt(minK);}
 	var shapePool=pick([0,1,2,3,4,5],numShapes);
 	var colPool=pick(COLORS,randInt(2,3));
@@ -76,16 +76,13 @@ function genTrial(){
 		return shuffle(arr);
 	}
 
-	if(type==='color'){
-		var ruleCols=[colPool[0],colPool[1]],oddCol=colPool.length>2?colPool[2]:extraFrom(COLORS,ruleCols);
+	if(type==='color'){var ruleCols=colPool.slice(),oddCol=extraFrom(COLORS,colPool);
 		var sh8=balanced8(shapePool),cn8=balanced8(cntPool),cl8=balanced8(ruleCols);
 		for(i=0;i<8;i++){grid[pos[i]]={shape:sh8[i],color:cl8[i],count:cn8[i],rot:randInt(0,3)*90};}
 		grid[pos[8]]={shape:leastFreq(sh8),color:oddCol,count:leastFreq(cn8),rot:randInt(0,3)*90};
 		rn.oddIdx=pos[8];
 	}else if(type==='shape'){
-		var oddS=shapePool[numShapes-1];
-		var ruleShapes=shapePool.slice(0,numShapes-1);
-		if(ruleShapes.length<2)ruleShapes.push(ruleShapes[0]);
+		var oddS=shapePool[numShapes-1];var ruleShapes=shapePool.slice(0,numShapes-1);
 		var sh8=balanced8(ruleShapes),cn8=balanced8(cntPool),cl8=balanced8(colPool);
 		for(i=0;i<8;i++){grid[pos[i]]={shape:sh8[i],color:cl8[i],count:cn8[i],rot:randInt(0,3)*90};}
 		grid[pos[8]]={shape:oddS,color:leastFreq(cl8),count:leastFreq(cn8),rot:randInt(0,3)*90};
@@ -94,10 +91,9 @@ function genTrial(){
 		// count: 同组同数量颜色自由, 1格混入某组数量不同
 		var cShapes=pick([0,1,2,3,4,5],3);
 		var ds=[],rem=8;for(var g=0;g<cShapes.length-1;g++){var sz=randInt(2,rem-(cShapes.length-g-1)*2);ds.push(sz);rem-=sz;}ds.push(rem);
-		var nC=randInt(3,9),oddC=randInt(1,4);
-		if(Math.abs(oddC-nC)<2)oddC=nC>=7?1:nC+2;if(oddC>9)oddC=9;
+		var cBase=randInt(4,8);var nC1=cBase+randInt(-1,1);if(nC1<1)nC1=1;if(nC1>9)nC1=9;var nC2=cBase+randInt(-2,2);if(Math.abs(nC2-nC1)<2)nC2=cBase+3;if(nC2<1)nC2=1;if(nC2>9)nC2=9;var nC3=cBase+randInt(-3,3);if(nC3<1)nC3=1;if(nC3>9)nC3=9;while(Math.abs(nC3-nC1)<2){nC3=cBase+randInt(-3,4);if(nC3<1)nC3=1;if(nC3>9)nC3=9;};var nCs=[nC1,nC2,nC3],oddC=cBase+randInt(3,5);if(oddC>9)oddC=9;if(Math.abs(oddC-nC1)<2)oddC=Math.min(9,nC1+3);
 		var oddG=randInt(0,cShapes.length-1),oddS=cShapes[oddG];
-		var cl8c=balanced8(colPool);var ci=0;for(var g=0;g<cShapes.length;g++){for(var j=0;j<ds[g];j++){grid[pos[ci]]={shape:cShapes[g],color:cl8c[ci],count:nC,rot:randInt(0,3)*90};ci++;}}
+		var cl8c=balanced8(colPool);var cntAll=[];for(var g=0;g<cShapes.length;g++){for(var j=0;j<ds[g];j++){cntAll.push(nCs[g%nCs.length]);}}cntAll=shuffle(cntAll);var ci=0;for(var g=0;g<cShapes.length;g++){for(var j=0;j<ds[g];j++){grid[pos[ci]]={shape:cShapes[g],color:cl8c[ci],count:cntAll[ci],rot:randInt(0,3)*90};ci++;}}
 		grid[pos[8]]={shape:oddS,color:leastFreq(cl8c),count:oddC,rot:randInt(0,3)*90};
 		rn.oddIdx=pos[8];
 		}
