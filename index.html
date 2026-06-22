@@ -1141,6 +1141,10 @@
             var tid = '';
             try { tid = localStorage.getItem('cog_therapist_id') || 'default'; } catch(e) {}
             params.push('tid=' + encodeURIComponent(tid));
+            // 带 GitHub token 用于云端同步
+            var tk = '';
+            try { tk = localStorage.getItem('cog_gh_token') || ''; } catch(e) {}
+            if (tk) params.push('token=' + encodeURIComponent(tk));
             // 加时间戳用于过期校验 (30分钟有效)
             params.push('t=' + Date.now());
             // 加 cache-bust 防止患者手机浏览器用缓存的旧 JS

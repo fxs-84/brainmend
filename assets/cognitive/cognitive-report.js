@@ -61,6 +61,13 @@
   var GH_REPO = 'fxs-84/brainmend';
   var GH_API = 'https://api.github.com/repos/' + GH_REPO + '/contents/data/reports/';
   function _ghToken() { try { return localStorage.getItem('cog_gh_token') || ''; } catch(e) { return ''; } }
+  // URL传token: ?token=xxx 或 &token=xxx (QR码场景, 患者扫码自动获取)
+  (function(){
+    try {
+      var m = location.search.match(/[?&]token=([^&]+)/);
+      if (m && m[1]) { localStorage.setItem('cog_gh_token', decodeURIComponent(m[1])); }
+    } catch(e) {}
+  })();
 
   // ========== 年龄分层常模 (儿童发育校正系数) ==========
   // 乘数: 儿童原始分 × 系数 = 成人等效分, 用于阈值比较
