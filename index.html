@@ -1151,7 +1151,7 @@
             return baseUrl + '?' + params.join('&');
         }
 
-        // 显示 QR 码弹窗
+        // 显示 QR 码弹窗 (用 qrcode-generator 生成 SVG, 不依赖 canvas)
         function _showQRForTest(testType) {
             // 延迟 300ms 确保 bundle 完成 clientInfo 写入
             var url = _buildQRUrl(testType);
@@ -1159,29 +1159,39 @@
             overlay.style.display = 'flex';
             document.getElementById('cog-qr-url').textContent = url;
             var canvasDiv = document.getElementById('cog-qr-canvas');
-            if (typeof QRCode !== 'undefined') {
-                canvasDiv.innerHTML = '';
-                new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
-            } else {
-                canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载中，请稍候...<br><a href="' + url + '" style="color:#0086FF;">直接打开链接</a></div>';
-                var script = document.createElement('script');
-                var loadQR = function(src) {
-                    script.src = src;
-                    document.head.appendChild(script);
-                    script.onload = function() {
-                        canvasDiv.innerHTML = '';
-                        new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
-                    };
-                    script.onerror = function() {
-                        if (src.indexOf('bootcdn') < 0) {
-                            loadQR('https://cdn.bootcdn.net/ajax/libs/qrcodejs/1.0.0/qrcode.min.js');
-                        } else {
-                            canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载失败<br>请复制以下链接发送给患者：<br><a href="' + url + '" style="color:#0086FF;">' + url + '</a></div>';
-                        }
-                    };
-                };
-                loadQR('https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js');
+            function renderSvg() {
+                try {
+                    var qr = qrcode(0, 'M');
+                    qr.addData(url);
+                    qr.make();
+                    canvasDiv.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+                    return true;
+                } catch (e) {
+                    return false;
+                }
             }
+            if (typeof qrcode !== 'undefined' && renderSvg()) {
+                return;
+            }
+            canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载中，请稍候...<br><a href="' + url + '" style="color:#0086FF;">直接打开链接</a></div>';
+            var script = document.createElement('script');
+            var loadQR = function(src) {
+                script.src = src;
+                document.head.appendChild(script);
+                script.onload = function() {
+                    if (!renderSvg()) {
+                        canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR生成失败<br>请复制以下链接发送给患者：<br><a href="' + url + '" style="color:#0086FF;">' + url + '</a></div>';
+                    }
+                };
+                script.onerror = function() {
+                    if (src.indexOf('bootcdn') < 0) {
+                        loadQR('https://cdn.bootcdn.net/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js');
+                    } else {
+                        canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载失败<br>请复制以下链接发送给患者：<br><a href="' + url + '" style="color:#0086FF;">' + url + '</a></div>';
+                    }
+                };
+            };
+            loadQR('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js');
         }
 
         // 🔒 患者沙盒 (认知/追踪共用)
@@ -1381,19 +1391,30 @@
                 overlay.style.display = 'flex';
                 document.getElementById('trk-qr-url').textContent = url;
                 var canvasDiv = document.getElementById('trk-qr-canvas');
-                if (typeof QRCode !== 'undefined') {
-                    canvasDiv.innerHTML = '';
-                    new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
-                } else {
-                    canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载中...</div>';
-                    var script = document.createElement('script');
-                    script.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
-                    script.onload = function() {
-                        canvasDiv.innerHTML = '';
-                        new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
-                    };
-                    document.head.appendChild(script);
+                function renderSvg() {
+                    try {
+                        var qr = qrcode(0, 'M');
+                        qr.addData(url);
+                        qr.make();
+                        canvasDiv.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+                        return true;
+                    } catch (e) { return false; }
                 }
+                if (typeof qrcode !== 'undefined' && renderSvg()) {
+                    return;
+                }
+                canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载中...</div>';
+                var script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js';
+                script.onload = function() {
+                    if (!renderSvg()) {
+                        canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR生成失败<br><a href="' + url + '" style="color:#0086FF;">' + url + '</a></div>';
+                    }
+                };
+                script.onerror = function() {
+                    canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载失败<br><a href="' + url + '" style="color:#0086FF;">' + url + '</a></div>';
+                };
+                document.head.appendChild(script);
             }
             // TTL 下拉: 自定义 → 显示输入框
             var trkTtlSel = document.getElementById('trk-qr-ttl');
