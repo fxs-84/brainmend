@@ -46,7 +46,31 @@ function copyGrid(g){var n=[];for(var r=0;r<GRID;r++){n[r]=[];for(var c=0;c<GRID
 		}
 		return g;
 	}
-	function genTrial(n){
+	function copyGrid(g){var n=[];for(var r=0;r<GRID;r++){n[r]=[];for(var c=0;c<GRID;c++)n[r][c]=g[r][c];}return n;}
+	function emptyNeighbors(grid,r,c){var nb=[];if(r>0&&!grid[r-1][c])nb.push({r:r-1,c:c});if(r<GRID-1&&!grid[r+1][c])nb.push({r:r+1,c:c});if(c>0&&!grid[r][c-1])nb.push({r:r,c:c-1});if(c<GRID-1&&!grid[r][c+1])nb.push({r:r,c:c+1});return nb;}
+	// 只移位不换色, 每次重新扫描已占格, 避免移到已移走的空位
+	function genSimilar(rotated,nChanges){
+		var g=copyGrid(rotated);
+		for(var i=0;i<nChanges;i++){
+			var occ=[];for(var r=0;r<GRID;r++)for(var c=0;c<GRID;c++)if(g[r][c])occ.push({r:r,c:c});
+			if(occ.length<2)break;
+			// 随机选一个已占格, 尝试移到邻格
+			var shuffled=occ;for(var s=shuffled.length-1;s>0;s--){var j=Math.floor(Math.random()*(s+1));var t=shuffled[s];shuffled[s]=shuffled[j];shuffled[j]=t;}
+			var moved=false;
+			for(var s=0;s<shuffled.length&&!moved;s++){
+				var cell=shuffled[s],nb=emptyNeighbors(g,cell.r,cell.c);
+				if(nb.length>0){
+					var np=nb[Math.floor(Math.random()*nb.length)];
+					g[np.r][np.c]=g[cell.r][cell.c];
+					g[cell.r][cell.c]=0;
+					moved=true;
+				}
+			}
+			if(!moved)break; // 无处可移
+		}
+		return g;
+	}
+function genTrial(n){
 		fl.blocks=n;fl.leftGrid=genPattern(n);fl.rotated=Math.random()<0.5?1:-1;
 		var rotated=rotateGrid(fl.leftGrid,fl.rotated);
 		if(Math.random()<0.5){fl.isSame=true;fl.rightGrid=rotated;}
