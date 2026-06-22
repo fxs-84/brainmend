@@ -896,8 +896,8 @@
 <script src="./assets/cognitive/cognitive-language.js"></script>
 <script src="./assets/cognitive/cognitive-reasoning.js"></script>
 <script src="./assets/cognitive/cognitive-observation.js"></script>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="./assets/cognitive/cognitive-report.js?v=20260620b"></script>
 <script>
     // 全局点击分发 (认知模块)
@@ -1141,7 +1141,6 @@
             var tid = '';
             try { tid = localStorage.getItem('cog_therapist_id') || 'default'; } catch(e) {}
             params.push('tid=' + encodeURIComponent(tid));
-            // 带 GitHub token 用于云端同步
             var tk = '';
             try { tk = localStorage.getItem('cog_gh_token') || ''; } catch(e) {}
             if (tk) params.push('token=' + encodeURIComponent(tk));
@@ -1166,9 +1165,9 @@
             } else {
                 canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载中，请稍候...<br><a href="' + url + '" style="color:#0086FF;">直接打开链接</a></div>';
                 var script = document.createElement('script');
-                var script = document.createElement('script');
                 var loadQR = function(src) {
                     script.src = src;
+                    document.head.appendChild(script);
                     script.onload = function() {
                         canvasDiv.innerHTML = '';
                         new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
@@ -1182,8 +1181,7 @@
                     };
                 };
                 loadQR('https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js');
-                };
-                document.head.appendChild(script);
+            }
             }
         }
 
@@ -1389,19 +1387,14 @@
                     new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
                 } else {
                     canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载中...</div>';
-                    var script2 = document.createElement('script');
-                    var loadQR2 = function(src) {
-                        script2.src = src;
-                        script2.onload = function() {
-                            canvasDiv.innerHTML = '';
-                            new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
-                        };
-                        script2.onerror = function() {
-                            if (src.indexOf('bootcdn') < 0) loadQR2('https://cdn.bootcdn.net/ajax/libs/qrcodejs/1.0.0/qrcode.min.js');
-                            else canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载失败</div>';
-                        };
+                    var script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
+                    script.onload = function() {
+                        canvasDiv.innerHTML = '';
+                        new QRCode(canvasDiv, { text: url, width: 200, height: 200, colorDark: '#1a1a2e', colorLight: '#ffffff' });
                     };
-                    loadQR2('https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js');
+                    document.head.appendChild(script);
+                }
             }
             // TTL 下拉: 自定义 → 显示输入框
             var trkTtlSel = document.getElementById('trk-qr-ttl');
