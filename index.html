@@ -1164,7 +1164,7 @@
                     var qr = qrcode(0, 'M');
                     qr.addData(url);
                     qr.make();
-                    canvasDiv.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+                    canvasDiv.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4 });
                     return true;
                 } catch (e) {
                     return false;
@@ -1396,7 +1396,7 @@
                         var qr = qrcode(0, 'M');
                         qr.addData(url);
                         qr.make();
-                        canvasDiv.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+                        canvasDiv.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4 });
                         return true;
                     } catch (e) { return false; }
                 }
