@@ -27,19 +27,39 @@ function rotateGrid(grid,dir){
 // 是否相等
 function gridsEqual(a,b){for(var r=0;r<GRID;r++)for(var c=0;c<GRID;c++)if(a[r][c]!==b[r][c])return false;return true;}
 
-function genShuffled(grid){
-		var n=0;
-		for(var r=0;r<GRID;r++)for(var c=0;c<GRID;c++)if(grid[r][c])n++;
-		return genPattern(n);
+function copyGrid(g){var n=[];for(var r=0;r<GRID;r++){n[r]=[];for(var c=0;c<GRID;c++)n[r][c]=g[r][c];}return n;}
+	function emptyNeighbors(grid,r,c){var nb=[];if(r>0&&!grid[r-1][c])nb.push({r:r-1,c:c});if(r<GRID-1&&!grid[r+1][c])nb.push({r:r+1,c:c});if(c>0&&!grid[r][c-1])nb.push({r:r,c:c-1});if(c<GRID-1&&!grid[r][c+1])nb.push({r:r,c:c+1});return nb;}
+	// 从rotated出发做微小改动: 换色或移1格
+	function genSimilar(rotated,nChanges){
+		var g=copyGrid(rotated);
+		var occ=[];for(var r=0;r<GRID;r++)for(var c=0;c<GRID;c++)if(g[r][c])occ.push({r:r,c:c});
+		if(occ.length===0)return g;
+		for(var i=0;i<nChanges&&i<occ.length;i++){
+			var idx=Math.floor(Math.random()*occ.length),cell=occ[idx];
+			if(Math.random()<0.5){
+				g[cell.r][cell.c]=g[cell.r][cell.c]===1?2:1;
+			}else{
+				var nb=emptyNeighbors(g,cell.r,cell.c);
+				if(nb.length>0){var np=nb[Math.floor(Math.random()*nb.length)];g[np.r][np.c]=g[cell.r][cell.c];g[cell.r][cell.c]=0;occ[idx]=np;}
+				else{g[cell.r][cell.c]=g[cell.r][cell.c]===1?2:1;}
+			}
+		}
+		return g;
 	}
-function genTrial(n){
-    fl.blocks=n;fl.leftGrid=genPattern(n);fl.rotated=Math.random()<0.5?1:-1;
-    var rotated=rotateGrid(fl.leftGrid,fl.rotated);
-    if(Math.random()<0.5){fl.isSame=true;fl.rightGrid=rotated;}
-    else{fl.isSame=false;var diff=genShuffled(fl.leftGrid);while(gridsEqual(diff,rotated)||gridsEqual(diff,fl.leftGrid))diff=genShuffled(fl.leftGrid);fl.rightGrid=diff;}
-    fl.userAnswer='';fl.answerChecked=false;fl.showOverlay=false;fl._btn1=null;fl._btn2=null;
-}
-
+	function genTrial(n){
+		fl.blocks=n;fl.leftGrid=genPattern(n);fl.rotated=Math.random()<0.5?1:-1;
+		var rotated=rotateGrid(fl.leftGrid,fl.rotated);
+		if(Math.random()<0.5){fl.isSame=true;fl.rightGrid=rotated;}
+		else{
+			fl.isSame=false;
+			var streak=fl.consecutiveCorrect||0;
+			var nChanges=streak>=7?1:(streak>=4?(Math.random()<0.5?1:2):(streak>=2?2:3));
+			var diff=genSimilar(rotated,nChanges);
+			while(gridsEqual(diff,rotated)||gridsEqual(diff,fl.leftGrid))diff=genSimilar(rotated,nChanges);
+			fl.rightGrid=diff;
+		}
+		fl.userAnswer='';fl.answerChecked=false;fl.showOverlay=false;fl._btn1=null;fl._btn2=null;
+	}
 function updateUI(){
     var st=document.getElementById('stroop-status'),sc=document.getElementById('stroop-score');
     if(st){if(fl.phase==='ready')st.textContent='变通能力测试';else if(fl.phase==='tutorial_text')st.textContent='游戏规则';else if(fl.phase==='tutorial_1'||fl.phase==='tutorial_2')st.textContent='教程 ('+(fl.phase==='tutorial_1'?'4格':'5格')+')';else if(fl.phase==='ready_game')st.textContent='准备开始';else if(fl.phase==='playing')st.textContent='';else if(fl.phase==='done')st.textContent='';}
