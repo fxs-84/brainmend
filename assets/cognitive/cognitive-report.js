@@ -56,13 +56,11 @@
     observation:  [   0,    0,0.15,0.25,0.24,0.32,    0,    0,0.02,0.02]
   };
 
-  // ========== CLOUD CONFIG (restful-api.dev — CORS-friendly 替代 jsonblob) ==========
-  // jsonblob.com POST 响应缺 Access-Control-Allow-Origin, 浏览器拦截 → blobId 永远拿不到。
-  // restful-api.dev 已实测: POST/GET/PUT 都返回 Access-Control-Allow-Origin: *, 浏览器正常
-  var CLOUD_API = 'https://api.restful-api.dev/objects';
+  // ========== CLOUD CONFIG (GitHub API — 报告存仓库 data/reports/) ==========
   var CLOUD_ENABLED = true;
-  // 每条报告 = 一个 object: {name: 'brainmend-cog-report', data: {tid: therapistId, report: {...}}}
-  // therapistId (tid) 用于多治疗师隔离, 通过 QR 码传给患者
+  var GH_REPO = 'fxs-84/brainmend';
+  var GH_API = 'https://api.github.com/repos/' + GH_REPO + '/contents/data/reports/';
+  function _ghToken() { try { return localStorage.getItem('cog_gh_token') || ''; } catch(e) { return ''; } }
 
   // ========== 年龄分层常模 (儿童发育校正系数) ==========
   // 乘数: 儿童原始分 × 系数 = 成人等效分, 用于阈值比较
@@ -2142,7 +2140,7 @@
     return record;
   }
 
-  // ========== CLOUD UPLOAD (restful-api.dev) ==========
+  // ========== CLOUD (GitHub API — 报告存仓库 data/reports/) ==========
   function _getTherapistId() {
     try { return localStorage.getItem('cog_therapist_id') || ''; } catch(e) { return ''; }
   }
@@ -2154,88 +2152,72 @@
     }
     return tid;
   }
+  function _ghHeaders() { var t = _ghToken(); if (!t) return null; return { 'Authorization': 'token ' + t, 'Content-Type': 'application/json' }; }
 
   function uploadToCloud(record) {
-    if (!CLOUD_ENABLED) return;
+    if (!CLOUD_ENABLED || !_ghToken()) return;
     var tid = _getTherapistId() || _ensureTherapistId();
     var trimmedRaw = {};
     try {
       Object.keys(record.rawScores || {}).forEach(function(modId) {
         var r = record.rawScores[modId] || {};
-        trimmedRaw[modId] = {
-          score: r.score, correct: r.correct, trials: r.trials,
-          completionRate: r.completionRate, digitCount: r.digitCount,
-          totalIcons: r.totalIcons, totalCards: r.totalCards,
-          rtTotal: r.rtTotal, rtAvg: r.rtAvg, level: r.level
-        };
+        trimmedRaw[modId] = { score: r.score, correct: r.correct, trials: r.trials, completionRate: r.completionRate, digitCount: r.digitCount, totalIcons: r.totalIcons, totalCards: r.totalCards, rtTotal: r.rtTotal, rtAvg: r.rtAvg, level: r.level };
       });
     } catch(e) { trimmedRaw = {}; }
     var cloudRecord = {
-      id: record.id,
-      date: record.date, time: record.time,
-      patientInfo: record.patientInfo,
-      normalizedScores: record.normalizedScores,
-      rawScores: trimmedRaw,
-      brainRegions: record.brainRegions,
-      riskIndex: record.riskIndex,
-      overallScore: record.overallScore,
-      isQuick6: record.isQuick6,
+      id: record.id, date: record.date, time: record.time,
+      patientInfo: record.patientInfo, normalizedScores: record.normalizedScores, rawScores: trimmedRaw,
+      brainRegions: record.brainRegions, riskIndex: record.riskIndex, overallScore: record.overallScore, isQuick6: record.isQuick6,
       createdAt: new Date().toISOString()
     };
+    var json = JSON.stringify(cloudRecord);
+    var b64 = btoa(unescape(encodeURIComponent(json)));
+    var fileName = (record.date || 'unknown') + '_' + (record.id || Date.now()) + '.json';
+    var path = GH_API + encodeURIComponent(tid) + '/' + encodeURIComponent(fileName);
 
-    fetch(CLOUD_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: 'brainmend-cog-report',
-        data: { tid: tid, report: cloudRecord, createdAt: Date.now() }
-      })
-    }).then(function(res) {
-      if (res.ok) {
-        return res.json();
+    fetch(path, { method: 'PUT', headers: _ghHeaders(), body: JSON.stringify({ message: 'upload report: ' + (record.patientInfo && record.patientInfo.name || ''), content: b64 }) })
+    .then(function(res) { return res.ok ? res.json() : null; })
+    .then(function(obj) {
+      if (obj && obj.content && obj.content.sha) {
+        try {
+          var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
+          for (var i = 0; i < records.length; i++) { if (records[i].id === record.id) { records[i]._cloudId = obj.content.sha; break; } }
+          localStorage.setItem('cog_records', JSON.stringify(records));
+        } catch(e2) {}
       }
-      throw new Error('HTTP ' + res.status);
-    }).then(function(obj) {
-      try {
-        var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
-        for (var i = 0; i < records.length; i++) {
-          if (records[i].id === record.id) { records[i]._cloudId = obj.id; break; }
-        }
-        localStorage.setItem('cog_records', JSON.stringify(records));
-      } catch(e2) {}
     }).catch(function(err) {});
   }
 
-  // ========== CLOUD FETCH (restful-api.dev) ==========
   function fetchCloudReports(callback) {
     if (!CLOUD_ENABLED) { callback([]); return; }
     var tid = _getTherapistId();
     if (!tid) { callback([]); return; }
-    fetch(CLOUD_API)
+    var dirUrl = GH_API + encodeURIComponent(tid);
+    fetch(dirUrl, { headers: _ghHeaders() })
       .then(function(res) { return res.ok ? res.json() : null; })
       .then(function(data) {
         if (!Array.isArray(data)) { callback([]); return; }
-        var records = data
-          .filter(function(o) { return o.name === 'brainmend-cog-report' && o.data && o.data.tid === tid; })
-          .map(function(o) {
-            var r = o.data.report || {};
-            return {
-              id: 'cloud_' + (r.id || o.id),
-              date: r.date, time: r.time,
-              patientInfo: r.patientInfo || {},
-              normalizedScores: r.normalizedScores || {},
-              rawScores: r.rawScores || {},
-              brainRegions: r.brainRegions || {},
-              riskIndex: r.riskIndex, overallScore: r.overallScore,
-              isQuick6: !!r.isQuick6,
-              _isCloud: true, _cloudId: o.id,
-              _cloudCreatedAt: o.data.createdAt || 0
-            };
-          })
-          .sort(function(a, b) { return (b._cloudCreatedAt || 0) - (a._cloudCreatedAt || 0); });
-        callback(records);
-      })
-      .catch(function(err) { callback([]); });
+        var files = data.filter(function(f) { return f.type === 'file' && f.name.endsWith('.json'); });
+        if (files.length === 0) { callback([]); return; }
+        var results = []; var loaded = 0;
+        files.forEach(function(f) {
+          fetch(f.url, { headers: _ghHeaders() })
+            .then(function(res) { return res.ok ? res.json() : null; })
+            .then(function(fileData) {
+              loaded++;
+              if (fileData && fileData.content) {
+                try {
+                  var r = JSON.parse(decodeURIComponent(escape(atob(fileData.content))));
+                  results.push({ id: 'cloud_' + (r.id || f.sha), date: r.date, time: r.time, patientInfo: r.patientInfo || {}, normalizedScores: r.normalizedScores || {}, rawScores: r.rawScores || {}, brainRegions: r.brainRegions || {}, riskIndex: r.riskIndex, overallScore: r.overallScore, isQuick6: !!r.isQuick6, _isCloud: true, _cloudId: f.sha, _cloudCreatedAt: new Date(r.createdAt || 0).getTime() });
+                } catch(e2) {}
+              }
+              if (loaded >= files.length) {
+                results.sort(function(a, b) { return (b._cloudCreatedAt || 0) - (a._cloudCreatedAt || 0); });
+                callback(results);
+              }
+            }).catch(function() { loaded++; if (loaded >= files.length) callback(results); });
+        });
+      }).catch(function(err) { callback([]); });
   }
 
   function loadHistory() {
@@ -2992,8 +2974,31 @@
     tabRow.appendChild(localTab); tabRow.appendChild(cloudTab);
     panel.appendChild(tabRow);
 
+    // Token input for cloud
+    var tokenWrap = document.createElement('div');
+    tokenWrap.style.cssText = 'display:none;padding:8px 12px;background:#fffbe6;border-radius:8px;margin-bottom:10px;font-size:12px;';
+    tokenWrap.innerHTML = '<div style="color:#b8860b;margin-bottom:6px;">需要 GitHub Token 才能访问云端记录</div>'
+      + '<div style="display:flex;gap:6px;"><input id="cog-gh-token-input" type="password" placeholder="ghp_..." style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">'
+      + '<button id="cog-gh-token-save" style="padding:6px 14px;background:#1a1a2e;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">保存</button></div>'
+      + '<div style="color:#999;margin-top:4px;font-size:11px;">创建 token: GitHub Settings → Developer settings → Personal access tokens → Fine-grained tokens → 仅选此仓库 + Contents: Read and Write</div>';
+    panel.appendChild(tokenWrap);
+
     var listWrap = document.createElement('div');
     listWrap.style.cssText = 'overflow-y:auto;flex:1;';
+
+    // Token save button
+    setTimeout(function() {
+      var input = document.getElementById('cog-gh-token-input');
+      var saveBtn = document.getElementById('cog-gh-token-save');
+      if (input && saveBtn) {
+        // Pre-fill if saved
+        try { var saved = localStorage.getItem('cog_gh_token'); if (saved) input.value = saved; } catch(e) {}
+        saveBtn.addEventListener('click', function() {
+          var val = input.value.trim();
+          if (val) { try { localStorage.setItem('cog_gh_token', val); } catch(e) {} tokenWrap.style.display = 'none'; currentView = null; cloudTab.click(); }
+        });
+      }
+    }, 100);
 
     // Render helper: local records
     function _renderLocalRows(wrap, recs) {
@@ -3108,13 +3113,18 @@
       currentView = 'local';
       localTab.style.background = '#1a1a2e'; localTab.style.color = '#fff';
       cloudTab.style.background = '#f5f5f5'; cloudTab.style.color = '#999';
+      tokenWrap.style.display = 'none';
       _renderLocalRows(listWrap, records);
     });
     cloudTab.addEventListener('click', function() {
       if (currentView === 'cloud') return;
+      var hasToken = false;
+      try { hasToken = !!(localStorage.getItem('cog_gh_token')); } catch(e) {}
+      if (!hasToken) { tokenWrap.style.display = 'block'; listWrap.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#999;">请先设置 GitHub Token</div>'; return; }
       currentView = 'cloud';
       cloudTab.style.background = '#1a1a2e'; cloudTab.style.color = '#fff';
       localTab.style.background = '#f5f5f5'; localTab.style.color = '#999';
+      tokenWrap.style.display = 'none';
       listWrap.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#999;">⏳ 加载中...</div>';
       fetchCloudReports(function(cloudRecords) { _renderCloudRows(listWrap, cloudRecords); });
     });
