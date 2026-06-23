@@ -78,15 +78,14 @@ function handleCardClick(idx){
 	if(mo.feedbackText)return false;
 	var isTut=mo.phase==='tutorial_1'||mo.phase==='tutorial_2'||mo.phase==='tutorial_3';
 
-	// Locked card (already had monkey) → show red !, end trial
-	if(card.locked){
+	// Locked or already-clicked card → show red !, end trial (二次点击扣命)
+	if(card.locked||card.clicked){
 		mo.lockedErrorCard={r:card.r,c:card.c,t:performance.now()};
 		playError();
 		if(isTut){setTimeout(function(){genTrial(mo.totalCards);updateUI();},1500);}
 		else{mo.lives--;mo.trials++;setTimeout(function(){if(mo.lives<=0){mo.phase='done';}else{genTrial(mo.totalCards);}updateUI();},1500);}
 		updateUI();return false;
 	}
-	if(card.clicked)return false;
 
 	card.clicked=true;playClick();
 	if(card.hasMonkey){
@@ -195,7 +194,7 @@ function renderGame(ctx,W,H){
 	// Instructional text below grid
 	ctx.font='bold 15px sans-serif';ctx.fillStyle='#aaa';ctx.textAlign='center';
 	ctx.fillText('点击盒子搜索小猴子，找到小猴子前，每个盒子只能点击一次',W/2,oy+gh+25);
-	ctx.fillText('有过小猴子的盒子，不要点击',W/2,oy+gh+48);
+	ctx.fillText('重复点击同一盒子会扣除生命值',W/2,oy+gh+48);
 	ctx.textAlign='start';
 
 	// Draw cells
@@ -236,7 +235,7 @@ function renderGame(ctx,W,H){
 
 	// Hitboxes
 	mo._cardHitboxes=[];
-	for(var i=0;i<mo.cards.length;i++){var cd=mo.cards[i];if(cd.clicked)continue;var cx=ox+cd.c*(CELL+GAP),cy=oy+cd.r*(CELL+GAP);mo._cardHitboxes.push({idx:i,x:cx,y:cy,w:CELL,h:CELL});}
+	for(var i=0;i<mo.cards.length;i++){var cd=mo.cards[i];if(cd.locked)continue;var cx=ox+cd.c*(CELL+GAP),cy=oy+cd.r*(CELL+GAP);mo._cardHitboxes.push({idx:i,x:cx,y:cy,w:CELL,h:CELL});}
 }
 
 function handleClick(ex,ey){
