@@ -56,6 +56,25 @@
     observation:  [   0,    0,0.15,0.25,0.24,0.32,    0,    0,0.02,0.02]
   };
 
+  // ========== HEMISPHERE WEIGHTS (独立权重, 不复用 BRAIN_WEIGHTS) ==========
+  // 12 模块 → 直接 → 左/右半球 (不经过 10 脑区中转)
+  // 主侧 70-80%, 对侧 20-30%, 双侧 50/50
+  // 依据神经科学共识 (Broca/Wernicke 左, 视觉空间右, 注意网络右额)
+  var HEMISPHERE_WEIGHTS = {
+    attention:    { left: 0.30, right: 0.70 },  // 主右 (注意网络偏右额)
+    shortmem:     { left: 0.50, right: 0.50 },  // 双侧 (视觉工作记忆)
+    memory:       { left: 0.75, right: 0.25 },  // 主左 (词汇记忆左颞)
+    flex:         { left: 0.30, right: 0.70 },  // 主右 (发散思维偏右额)
+    language:     { left: 0.80, right: 0.20 },  // 主左 (Broca/Wernicke 左)
+    reasoning:    { left: 0.55, right: 0.45 },  // 双额
+    planning:     { left: 0.70, right: 0.30 },  // 主左 (前额叶计划)
+    scenerecall:  { left: 0.25, right: 0.75 },  // 主右 (情景记忆右颞枕)
+    memorg:       { left: 0.75, right: 0.25 },  // 主左 (语义组织左颞)
+    inhibition:   { left: 0.25, right: 0.75 },  // 主右 (抑制控制右额)
+    visual:       { left: 0.20, right: 0.80 },  // 主右 (视觉空间右枕)
+    observation:  { left: 0.30, right: 0.70 }   // 主右 (整体观察偏右枕)
+  };
+
   // ========== CLOUD CONFIG (GitHub API — 报告存仓库 data/reports/) ==========
   var CLOUD_ENABLED = true;
   var GH_REPO = 'fxs-84/brainmend';
@@ -255,6 +274,24 @@
     });
     svg += '</svg>';
     return svg;
+  }
+
+  // ========== HEMISPHERE COMPUTATION (独立权重, 12模块 → 直接 → 左右脑) ==========
+  function computeHemisphereScores(scores, age) {
+    var leftSum=0, rightSum=0, leftW=0, rightW=0;
+    Object.keys(HEMISPHERE_WEIGHTS).forEach(function(modId){
+      if (scores[modId] == null) return;
+      var adj = Math.min(getScoreCap(age), scores[modId] * (age ? ageFactor(age, modId) : 1.0));
+      var hw = HEMISPHERE_WEIGHTS[modId];
+      leftSum  += adj * hw.left;
+      leftW    += hw.left;
+      rightSum += adj * hw.right;
+      rightW   += hw.right;
+    });
+    return {
+      left:  leftW  > 0 ? Math.min(getScoreCap(age), Math.round(leftSum  / leftW))  : 50,
+      right: rightW > 0 ? Math.min(getScoreCap(age), Math.round(rightSum / rightW)) : 50
+    };
   }
 
   // ========== BRAIN REGION COMPUTATION ==========
@@ -651,8 +688,10 @@
     html += '</div>'; // close cog-ov-top
 
     // ========== 脑型分析 (左右平衡 × 内外向) ==========
-    var leftBrain = (regions['左额叶']+regions['左顶叶']+regions['左枕叶']+regions['左颞叶']+regions['左小脑'])/5;
-    var rightBrain = (regions['右额叶']+regions['右顶叶']+regions['右枕叶']+regions['右颞叶']+regions['右小脑'])/5;
+    // 左右脑: 独立权重表 HEMISPHERE_WEIGHTS 直接计算 (不走 10 脑区中转)
+    var hemi = computeHemisphereScores(scores, age);
+    var leftBrain = hemi.left;
+    var rightBrain = hemi.right;
     var allAvg = (leftBrain + rightBrain) / 2;
 
     // ===== 年龄自适应期望分 + 脑力年龄 =====
@@ -697,7 +736,7 @@
       fam = { cn: '', en: '', desc: '' };
       btd = null;
     } else {
-      if (Math.abs(brainDiff) <= 8) {
+      if (Math.abs(brainDiff) <= 5) {
         balancePart = '双脑平衡'; brainTypeIcon = '⚖️';
       } else if (brainDiff > 0) {
         balancePart = '左脑'; brainTypeIcon = '🧮';
