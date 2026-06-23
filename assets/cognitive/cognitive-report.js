@@ -294,6 +294,34 @@
     };
   }
 
+  // ========== EXTROVERSION SCORE (多维度融合: 完成率 + 反应速度 + 总体活跃度) ==========
+  // 行为证据驱动, 替代单维度 allAvg 判断
+  //   - 完成率: 实际题数/基准题数 (0.5=中性, 1.0=满分外向)
+  //   - 反应速度: inhibition 模块平均反应时间 (越快越外向)
+  //   - 总体活跃度: 左右脑均分 (70=中性, 越高越外向)
+  // 输出: 综合分 (约 [-40, +70]), 阈值按年龄分层
+  function computeExtroScore(rawLog, allAvg) {
+    var crSum=0, crCount=0;
+    Object.keys(rawLog).forEach(function(mid){
+      var r = rawLog[mid];
+      if (r && r.completionRate != null) { crSum += r.completionRate; crCount++; }
+    });
+    var avgCR = crCount > 0 ? crSum / crCount : 0.5;
+    var crScore = (avgCR - 0.5) * 80;  // -40 ~ +40
+
+    var speedScore = 0;
+    if (rawLog.inhibition && rawLog.inhibition.rtTotal && rawLog.inhibition.trials) {
+      var avgRT = rawLog.inhibition.rtTotal / rawLog.inhibition.trials;
+      speedScore = Math.max(0, 1 - avgRT / 3000) * 60;  // 0 ~ +60
+    }
+
+    var actScore = (allAvg - 70) / 30 * 30;  // 70 中性, 100 → +30, 40 → -30
+
+    return crScore + speedScore + actScore;
+  }
+  // 年龄分层阈值: 6-8 / 9-12 / 13-17 / 18+
+  var EXTRO_THRESHOLDS = [20, 15, 10, 5];
+
   // ========== BRAIN REGION COMPUTATION ==========
   function computeBrainRegions(scores, age, isQuick6) {
     var regions = {};
@@ -639,7 +667,7 @@
     return html;
   }
 
-  function genOverviewHTML(scores, regions, riskIndex, patientInfo, age, isQuick6, reportTime) {
+  function genOverviewHTML(scores, regions, riskIndex, patientInfo, age, isQuick6, reportTime, extroScore) {
     // reportTime 形如 "2026-06-17 09:47" — 来自 record, 报告时间应跟着 record 走, 不跟着点击时间走
     var dateStr, timeStr;
     if (reportTime && /\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(reportTime)) {
@@ -743,15 +771,33 @@
       } else {
         balancePart = '右脑'; brainTypeIcon = '🎨';
       }
-      var extroThresh = AGE_EXTRO_THRESHOLD[getAgeGroupIdx(age)] || 65;
-      if (allAvg >= extroThresh) {
+      // 多维度 extroScore 替代单维度 allAvg 判定 (完成率 + 反应速度 + 总体活跃度)
+      var extThresh = EXTRO_THRESHOLDS[getAgeGroupIdx(age)] != null ? EXTRO_THRESHOLDS[getAgeGroupIdx(age)] : 10;
+      var extScore = (typeof extroScore === 'number') ? extroScore : 0;
+      if (extScore >= extThresh) {
         extroPart = '外向型';
-      } else {
+      } else if (extScore <= -extThresh) {
         extroPart = '内向型';
+      } else {
+        extroPart = '平衡型';
       }
       brainType = balancePart + extroPart;
-      brainTypeDesc = brainDiff > 8 ? '您更依赖逻辑和分析' : brainDiff < -8 ? '您更依赖直觉和创造力' : '您同时依赖逻辑和直觉';
-      brainTypeDesc += allAvg >= 65 ? '，脑活跃度高，倾向外向表达。' : '，脑活跃度适中，倾向内向思考。';
+      // 脑型描述: 左右脑部分用阈值5 (与脑区判定一致), 内外向部分用5档强度
+      brainTypeDesc = Math.abs(brainDiff) <= 5
+        ? '您同时运用逻辑与直觉'
+        : (brainDiff > 0 ? '您更依赖逻辑和分析' : '您更依赖直觉和创造力');
+      if (extScore >= extThresh + 15) {
+        brainTypeDesc += '，反应迅速、参与度高，整体明显偏外向表达';
+      } else if (extScore >= extThresh) {
+        brainTypeDesc += '，反应较快、参与度较高，倾向外向';
+      } else if (extScore <= -extThresh - 15) {
+        brainTypeDesc += '，反应缓慢、参与度低，整体明显偏内向思考';
+      } else if (extScore <= -extThresh) {
+        brainTypeDesc += '，反应较慢、参与度一般，倾向内向';
+      } else {
+        brainTypeDesc += '，反应与参与度居中，社交取向中性';
+      }
+      brainTypeDesc += '。';
       if (isSubhealth) {
         brainTypeDesc += '（注：当前脑活跃度为同龄正常的 ' + Math.round(ratio*100) + '%，处于低下区间 (70-85%)，建议关注作息、运动和睡眠，必要时复测。）';
       }
@@ -759,10 +805,13 @@
     var FAMOUS = {
       '双脑平衡外向型': { cn: '苏轼', en: '达·芬奇', desc: '文理兼通、豪放洒脱' },
       '双脑平衡内向型': { cn: '王阳明', en: '爱因斯坦', desc: '内省深刻、逻辑与想象力并重' },
+      '双脑平衡平衡型': { cn: '孔子', en: '达尔文', desc: '中庸平衡、观察入微' },
       '左脑外向型':     { cn: '张衡',   en: '比尔·盖茨',     desc: '科学发明、积极入世' },
       '左脑内向型':     { cn: '诸葛亮', en: '牛顿',          desc: '缜密分析、深度思考' },
+      '左脑平衡型':     { cn: '钱学森', en: '图灵',          desc: '理性严谨、内外兼修' },
       '右脑外向型':     { cn: '李白',   en: '乔布斯',        desc: '创意奔放、感染力强' },
-      '右脑内向型':     { cn: '陶渊明', en: '梵高',          desc: '感性极致、内省孤独' }
+      '右脑内向型':     { cn: '陶渊明', en: '梵高',          desc: '感性极致、内省孤独' },
+      '右脑平衡型':     { cn: '李清照', en: '香奈儿',        desc: '艺术天赋、收放自如' }
     };
     var fam = FAMOUS[brainType] || { cn: '', en: '', desc: '' };
     // 脑型特征描述 (基于左右脑+内外向双轴, 每型含优势+短板)
@@ -802,6 +851,24 @@
         work: '不显山露水的艺术家。不需要站在聚光灯下，但作品或提案带有强烈个人风格和独特感染力。喜欢独自打磨细节直到"对味"为止。一次只专注一件事，但做到极致。',
         social: '不是话最多的人，但共情力和非语言交流能力极强。朋友们愿意向你倾诉心事，因为知道你会真正地听、真正地感受。',
         weakness: '过于沉浸在自己的世界里，现实世界的规则和截止日期容易被忽略。逻辑和数字能力偏弱，需要刻意锻炼左脑来平衡。社交上容易被人误解为"不合群"。'
+      },
+      '双脑平衡平衡型': {
+        study: '左右脑协同运作，社交风格中性——既能逻辑拆解又能量化感知。学习风格"情境自适应"：环境安静时深度阅读，环境热闹时讨论实践，都能进入状态。',
+        work: '沉稳的中坚力量。不会最先发言但发言往往深思熟虑；既能独立完成精密分析，也能在团队协作中顺畅配合。决策时偏好折中方案，但绝不"和稀泥"——因为你的折中建立在充分理解双方立场之上。',
+        social: '社交场中的"稳定锚"。不抢话也不冷场，能在不同性格的朋友之间自然切换话题和沟通方式。朋友愿意找你商量——因为你的建议不带情绪偏向。',
+        weakness: '平衡的另一面是"没有强烈标签"——容易被误解为"什么都行但什么都不突出"。在需要快速决断的场景下可能因权衡过多而显得犹豫。需要刻意培养"先判断再权衡"的决策习惯。'
+      },
+      '左脑平衡型': {
+        study: '左脑主导带来强逻辑与文字能力，但社交反应不极端。学习风格"理性稳健"：擅长拆解复杂问题，但需要适度社交讨论来激发灵感。',
+        work: '可靠的方案制定者。既能独立深度分析，又能在团队中清晰表达观点、听取反馈。不走极端，但产出始终扎实。',
+        social: '交流克制有礼。讲事实但不失温度，能接受不同意见而不急于反驳。朋友圈中常扮演"理性调解人"角色。',
+        weakness: '情绪表达依旧偏弱，需要刻意练习共情和情感流露。在需要快速决断的场合可能因等待更多信息而显得优柔寡断。'
+      },
+      '右脑平衡型': {
+        study: '右脑主导带来图像化思维和创造力，但社交表达不极端。学习风格"意象化+适度输出"：通过图像、比喻、案例来建构知识，但也愿意主动讨论检验想法。',
+        work: '兼具创意与执行。既能用视觉化表达让方案生动，又能稳健推进落地。决策时直觉与理性兼顾，提案常让人眼前一亮又不失可行性。',
+        social: '表达有画面感又不失分寸。朋友觉得你"有意思但不难懂"，是聊天时既能活跃气氛也能安静倾听的对象。',
+        weakness: '结构性任务（数字、流程、表格）仍需刻意训练。面对高压截止日期可能因追求完美而拖沓。'
       }
     };
     var btd = BRAIN_TYPE_DETAIL[brainType] || null;
@@ -2054,6 +2121,9 @@
       ? QUICK6_ORDER.map(function(id) { return MODULES.find(function(m) { return m.id === id; }); }).filter(Boolean)
       : MODULES;
 
+    // 多维度 extroScore (完成率 + 反应速度 + 总体活跃度), 用于总览脑型描述
+    var extroScore = computeExtroScore(rawLog, avgScore);
+
     // Build nav tabs
     var nav = document.getElementById('cog-report-nav');
     var tabHtml = '<button class="cog-report-tab active" data-section="overview" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0;">总览</button>';
@@ -2065,7 +2135,7 @@
     // Build body
     var body = document.getElementById('cog-report-body');
     var html = '';
-    html += '<div id="cog-section-overview">' + genOverviewHTML(scores, regions, riskIndex, patientInfo, patientInfo.age, isQuick6, reportTime) + '</div>';
+    html += '<div id="cog-section-overview">' + genOverviewHTML(scores, regions, riskIndex, patientInfo, patientInfo.age, isQuick6, reportTime, extroScore) + '</div>';
 
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">';
     moduleList.forEach(function(m) {
@@ -2451,7 +2521,7 @@
     nav.innerHTML = tabHtml;
 
     var body = document.getElementById('cog-report-body');
-    var html = '<div id="cog-section-overview">' + genOverviewHTML(demoScores, demoRegions, riskIndex, patientInfo, patientInfo.age) + '</div>';
+    var html = '<div id="cog-section-overview">' + genOverviewHTML(demoScores, demoRegions, riskIndex, patientInfo, patientInfo.age, false, null, 15) + '</div>';
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">';
     MODULES.forEach(function(m) {
       var raw = {correct: Math.round(demoScores[m.id]/150*20), trials: 20};
