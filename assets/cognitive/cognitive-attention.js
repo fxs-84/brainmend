@@ -4,11 +4,11 @@
 var GOLD='#C9A84C';
 var GRID=6, BOX_W=224, BOX_H=224, CELL=Math.floor(BOX_W/GRID), ICON_SIZE=Math.floor(CELL*0.78);
 var ICON_PAD=(CELL-ICON_SIZE)/2;
-var START_N=8, MIN_N=7, MAX_N=11;
+var START_N=9, MIN_N=8, MAX_N=13;
 var ICON_FILES=[
   'gou.svg','bangou.svg','fangkuang.svg','gantanhao.svg','chahao.svg',
   'yonghutouxiang2.svg','wuxianwangluo.svg','zhibo2.svg','lunkuo.svg',
-  'liujiaoxing.svg','taiyang.svg'
+  'liujiaoxing.svg','taiyang.svg','yuanquan.svg'
 ];
 
 function randInt(a,b){return a+Math.floor(Math.random()*(b-a+1));}
@@ -19,8 +19,8 @@ function pickCells(n){
   return shuffle(all).slice(0,n);
 }
 function pickIcons(n){
-  // 最多 5 种类,不足 n 则从已有种类里重复填充
-  var MAX_TYPES=5;
+  // 最多 6 种类,不足 n 则从已有种类里重复填充
+  var MAX_TYPES=6;
   var k=Math.min(n,MAX_TYPES);
   var uniq=shuffle(ICON_FILES.map(function(_,i){return i;})).slice(0,k);
   var pool=uniq.slice();while(pool.length<n)pool.push(uniq[randInt(0,k-1)]);
