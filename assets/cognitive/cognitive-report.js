@@ -716,11 +716,13 @@
     html += '</div>'; // close cog-ov-top
 
     // ========== 脑型分析 (左右平衡 × 内外向) ==========
-    // 左右脑: 独立权重表 HEMISPHERE_WEIGHTS 直接计算 (不走 10 脑区中转)
+    // 左右平衡: 独立权重表 HEMISPHERE_WEIGHTS 直接计算 (12 模块 → 左/右半球)
     var hemi = computeHemisphereScores(scores, age);
     var leftBrain = hemi.left;
     var rightBrain = hemi.right;
-    var allAvg = (leftBrain + rightBrain) / 2;
+    // 脑力年龄/健康门控用 regions (BRAIN_WEIGHTS) 平均 — 与脑图同一数据源
+    var regionVals = BRAIN_REGIONS.map(function(name) { return regions[name]; });
+    var allAvg = regionVals.reduce(function(a, b) { return a + b; }, 0) / regionVals.length;
 
     // ===== 年龄自适应期望分 + 脑力年龄 =====
     var chronologicalAge = Number(age) || 35;
@@ -760,7 +762,7 @@
     if (isDysfunction) {
       brainType = '全面脑区功能偏低';
       brainTypeIcon = '⚠️';
-      brainTypeDesc = '⚠️ 检测到 5 大脑区平均分仅 ' + Math.round(allAvg) + ' 分, 为同龄正常值 ' + Math.round(expectedScore) + ' 的 ' + Math.round(ratio*100) + '% (障碍线为 70%)。强烈建议尽快到正规医院神经内科/康复科进一步评估。常见可能原因: 脑供血不足、长期睡眠剥夺、抑郁焦虑、注意力缺陷、神经发育迟缓等。完成首次评估后建议 4 周内复测, 观察趋势变化。';
+      brainTypeDesc = '⚠️ 检测到脑区平均分仅 ' + Math.round(allAvg) + ' 分, 为同龄正常值 ' + Math.round(expectedScore) + ' 的 ' + Math.round(ratio*100) + '% (障碍线为 70%)。强烈建议尽快到正规医院神经内科/康复科进一步评估。常见可能原因: 脑供血不足、长期睡眠剥夺、抑郁焦虑、注意力缺陷、神经发育迟缓等。完成首次评估后建议 4 周内复测, 观察趋势变化。';
       fam = { cn: '', en: '', desc: '' };
       btd = null;
     } else {
