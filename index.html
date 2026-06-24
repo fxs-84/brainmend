@@ -158,31 +158,28 @@
     <!-- 首页 -->
     <div id="page2" style="position:fixed;inset:0;z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#e0f7ff 0%,#f5f5f5 50%,#fff5e6 100%);text-align:center;">
         <button id="page2-fullscreen" title="全屏" style="position:absolute;top:20px;right:24px;background:rgba(0,0,0,0.06);border:1px solid rgba(0,0,0,0.15);color:#5a7a9a;font-size:22px;width:44px;height:44px;border-radius:10px;cursor:pointer;transition:background 0.2s;" onmouseover="this.style.background='rgba(0,0,0,0.12)'" onmouseout="this.style.background='rgba(0,0,0,0.06)'">⛶</button>
-        <img src="assets/brainmend-home.png" alt="BrainMend Logo" style="max-width:280px;height:auto;margin-bottom:24px;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.08));">
-        <h2 style="font-size:36px;margin:0 0 60px 0;color:#1a3a5c;font-weight:700;">BrainMend 脑优化</h2>
-        <div style="display:flex;gap:48px;flex-wrap:wrap;justify-content:center;">
-            <button id="page2-cog-report" style="padding:60px 80px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:24px;cursor:pointer;font-size:24px;font-weight:600;box-shadow:0 12px 40px rgba(102,126,234,0.3);min-width:280px;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'" onclick="window._showCogRecordList()">
-                <div style="font-size:72px;margin-bottom:16px;">🧠</div>
+        <img src="assets/brainmend-home.png" alt="BrainMend Logo" style="max-width:200px;height:auto;margin-bottom:16px;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.08));">
+        <h2 style="font-size:28px;margin:0 0 32px 0;color:#1a3a5c;font-weight:700;">BrainMend 脑优化</h2>
+        <div style="display:flex;gap:14px;flex-wrap:nowrap;justify-content:center;max-width:1100px;padding:0 16px;">
+            <button id="page2-cog-report" style="flex:1;min-width:0;padding:28px 16px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:16px;cursor:pointer;font-size:16px;font-weight:600;box-shadow:0 8px 24px rgba(102,126,234,0.25);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'" onclick="window._showCogRecordList()">
+                <div style="font-size:40px;margin-bottom:8px;">🧠</div>
                 认知报告
-                <div style="font-size:13px;font-weight:400;opacity:0.85;margin-top:6px;">查看历次认知评估报告</div>
+                <div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:4px;">历次评估报告</div>
             </button>
-            <button id="page2-cognitive" style="padding:60px 80px;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:24px;cursor:pointer;font-size:24px;font-weight:600;box-shadow:0 12px 40px rgba(0,134,255,0.3);min-width:280px;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-                <div style="font-size:72px;margin-bottom:16px;">🧠</div>
-
-                认知评估系统
-                <div style="font-size:13px;font-weight:400;opacity:0.85;margin-top:6px;">多维认知能力测评与训练</div>
+            <button id="page2-cognitive" style="flex:1;min-width:0;padding:28px 16px;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:16px;cursor:pointer;font-size:16px;font-weight:600;box-shadow:0 8px 24px rgba(0,134,255,0.25);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size:40px;margin-bottom:8px;">🧩</div>
+                认知评估
+                <div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:4px;">多维认知测评训练</div>
             </button>
-            <button id="page2-tracking" style="padding:60px 80px;background:linear-gradient(135deg,#FF6B6B,#FF8E53);color:#fff;border:none;border-radius:24px;cursor:pointer;font-size:24px;font-weight:600;box-shadow:0 12px 40px rgba(255,107,107,0.3);min-width:280px;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-                <div style="font-size:72px;margin-bottom:16px;">🎯</div>
-                头动追踪系统
-                <div style="font-size:13px;font-weight:400;opacity:0.85;margin-top:6px;">基于头部运动传感的颈椎康复训练</div>
-                <div style="font-size:11px;font-weight:400;opacity:0.65;margin-top:4px;">建议在坐姿 / 站立下使用 · 保持身体稳定</div>
+            <button id="page2-tracking" style="flex:1;min-width:0;padding:28px 16px;background:linear-gradient(135deg,#FF6B6B,#FF8E53);color:#fff;border:none;border-radius:16px;cursor:pointer;font-size:16px;font-weight:600;box-shadow:0 8px 24px rgba(255,107,107,0.25);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size:40px;margin-bottom:8px;">🎯</div>
+                头动追踪
+                <div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:4px;">颈椎康复训练</div>
             </button>
-            <button id="page2-gait" style="padding:60px 80px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:24px;cursor:pointer;font-size:24px;font-weight:600;box-shadow:0 12px 40px rgba(67,233,123,0.3);min-width:280px;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-                <div style="font-size:72px;margin-bottom:16px;">🚶</div>
-                步态分析系统
-                <div style="font-size:13px;font-weight:400;opacity:0.85;margin-top:6px;">基于AI姿势识别的步态参数评估</div>
-                <div style="font-size:11px;font-weight:400;opacity:0.65;margin-top:4px;">视频录制/上传 · 自动参数提取 · 临床报告</div>
+            <button id="page2-gait" style="flex:1;min-width:0;padding:28px 16px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:16px;cursor:pointer;font-size:16px;font-weight:600;box-shadow:0 8px 24px rgba(67,233,123,0.25);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size:40px;margin-bottom:8px;">🚶</div>
+                步态分析
+                <div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:4px;">AI步态参数评估</div>
             </button>
         </div>
     </div>
@@ -1006,6 +1003,19 @@
             document.getElementById("cog-modal-overlay").classList.add("show");
         });
 
+        // 2.5 步态分析系统
+        var gaitBtn = document.getElementById('page2-gait');
+        if (gaitBtn) gaitBtn.addEventListener('click', function() {
+            page2.style.display = 'none';
+            if (window._hideCognitive) window._hideCognitive();
+            if (typeof window.__gaitAnalysis === 'object' && window.__gaitAnalysis.open) {
+                window.__gaitAnalysis.open();
+            } else {
+                console.error('[gait] __gaitAnalysis not ready');
+                page2.style.display = 'flex';
+            }
+        });
+
         // 3. 头动追踪系统
         var trkBtn = document.getElementById('page2-tracking');
         if (trkBtn) trkBtn.addEventListener('click', function() {
@@ -1017,19 +1027,6 @@
             if (vc) vc.style.display = 'none';
             if (vm) vm.style.display = '';
             if (sp) { sp.style.setProperty("display","flex","important"); sp.style.setProperty("width","210px","important"); sp.style.setProperty("min-width","210px","important"); }
-        });
-
-        // 3.5 步态分析系统
-        var gaitBtn = document.getElementById('page2-gait');
-        if (gaitBtn) gaitBtn.addEventListener('click', function() {
-            page2.style.display = 'none';
-            if (window._hideCognitive) window._hideCognitive();
-            if (typeof window.__gaitAnalysis === 'object' && window.__gaitAnalysis.open) {
-                window.__gaitAnalysis.open();
-            } else {
-                console.error('[gait] __gaitAnalysis not ready');
-                page2.style.display = 'flex';
-            }
         });
 
         // 4. 侧边栏返回首页按钮
@@ -1652,6 +1649,7 @@
                     return;
                 }
                 page2.style.display = 'none';
+                // 等待 __gaitAnalysis 就绪
                 var retries = 0;
                 var readyTimer = setInterval(function() {
                     retries++;
