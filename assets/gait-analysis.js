@@ -1106,7 +1106,8 @@
   function renderResults() {
     if (!state.results) { setPhase(PHASE.INTRO); return; }
     var r = state.results;
-    var c = r.classification;
+    var c = r.classification || { primary: 'unknown', primaryLabel: '—', confidence: 0 };
+    if (!c.primaryLabel) c.primaryLabel = c.primary || '—';
     var colorMap = { normal: '#10b981', mild: '#f59e0b', moderate: '#f97316', severe: '#dc2626' };
     var statusText = { normal: '正常', mild: '轻度', moderate: '中度', severe: '重度' };
     var clsColor = colorMap[c.primary === 'normal' ? 'normal' : 'severe'];
@@ -1388,7 +1389,7 @@
   }
 
   function renderHistory() {
-    var list = loadHistory().reverse();
+    var list = loadHistory();
     var html = '';
     if (list.length === 0) {
       html = '<p style="color:#888;text-align:center;padding:20px;">暂无历史记录</p>';
@@ -1396,9 +1397,9 @@
       html = list.map(function (r, idx) {
         var p = r.parameters || {};
         var c = r.classification || {};
-        return '<div class="gait-hist-item" data-idx="' + (list.length - 1 - idx) + '" style="padding:12px;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:8px;cursor:pointer;background:#fafafa;">' +
+        return '<div class="gait-hist-item" data-idx="' + idx + '" style="padding:12px;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:8px;cursor:pointer;background:#fafafa;user-select:none;">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-            '<div>' +
+            '<div style="flex:1;">' +
               '<div style="font-weight:600;color:#0f7b6c;">' + (c.primaryLabel || '—') + '</div>' +
               '<div style="font-size:12px;color:#888;margin-top:2px;">' + new Date(r.timestamp).toLocaleString('zh-CN') + ' · 步速 ' + fmtNum(p.gaitSpeed && p.gaitSpeed.value, 2) + ' m/s</div>' +
             '</div>' +
@@ -1408,14 +1409,19 @@
       }).join('');
     }
     $('#gait-history-list').innerHTML = html;
-    document.querySelectorAll('.gait-hist-item').forEach(function (item) {
-      item.addEventListener('click', function () {
+    var items = document.querySelectorAll('.gait-hist-item');
+    items.forEach(function (item) {
+      var clickHandler = function () {
         var idx = parseInt(item.dataset.idx);
         var all = loadHistory();
+        if (!all[idx]) { alert('记录加载失败'); return; }
         state.results = all[idx];
         $('#gait-history-overlay').style.display = 'none';
+        var overlay = $('#gait-overlay');
+        if (overlay) overlay.style.display = 'block';
         setPhase(PHASE.RESULTS);
-      });
+      };
+      item.addEventListener('click', clickHandler);
     });
     $('#gait-history-overlay').style.display = 'flex';
   }
@@ -1470,11 +1476,26 @@
     });
     var exportBtn = document.getElementById('gait-export-pdf');
     if (exportBtn) exportBtn.addEventListener('click', function () {
-      if (typeof window.__gaitReport !== 'undefined' && window.__gaitReport.exportPDF) {
-        window.__gaitReport.exportPDF(state.results);
-      } else {
-        alert('报告模块未就绪');
+      if (typeof window.__gaitReport === 'undefined' || !window.__gaitReport.exportPDF) {
+        alert('报告模块未就绪, 请稍后重试');
+        return;
       }
+      // 优先用当前结果, 否则用最新一条历史记录
+      var dataToExport = state.results;
+      if (!dataToExport) {
+        var hist = loadHistory();
+        if (hist.length === 0) {
+          alert('暂无报告数据 — 请先完成一次步态分析');
+          return;
+        }
+        dataToExport = hist[hist.length - 1];
+        state.results = dataToExport;
+        // 显示对应报告
+        var overlay = $('#gait-overlay');
+        if (overlay) overlay.style.display = 'block';
+        setPhase(PHASE.RESULTS);
+      }
+      window.__gaitReport.exportPDF(dataToExport);
     });
   }
 
