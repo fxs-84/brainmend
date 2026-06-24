@@ -677,6 +677,27 @@
   // ============================================================
   function renderPhase() {
     if (!document.getElementById('gait-overlay')) return;
+    var body = $('#gait-body');
+    var footer = $('#gait-footer');
+    // 标定和录制阶段使用固定视口布局 (不滚动, 视频填满)
+    var isFixedLayout = (state.phase === PHASE.CALIBRATION || state.phase === PHASE.CAPTURE);
+    if (isFixedLayout) {
+      body.style.display = 'flex';
+      body.style.flexDirection = 'column';
+      body.style.height = 'calc(100vh - 56px)';
+      body.style.overflow = 'hidden';
+      body.style.maxWidth = '100%';
+      body.style.padding = '8px 12px';
+      if (footer) footer.style.display = 'none';
+    } else {
+      body.style.display = '';
+      body.style.flexDirection = '';
+      body.style.height = '';
+      body.style.overflow = '';
+      body.style.maxWidth = '960px';
+      body.style.padding = '20px';
+      if (footer) footer.style.display = '';
+    }
     if (state.phase === PHASE.INTRO) renderIntro();
     else if (state.phase === PHASE.CALIBRATION) renderCalibration();
     else if (state.phase === PHASE.CAPTURE) renderCapture();
@@ -747,26 +768,29 @@
     clearError();
     setBody(
       renderError() +
-      renderCameraSelector() +
-      renderCameraSideSelector() +
-      '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;">' +
-        '<h3 style="margin:0 0 8px 0;">&#x1f4cf; 身高自动标定</h3>' +
-        '<p style="color:#666;font-size:13px;margin:0 0 12px 0;">输入患者<b>身高 (cm)</b>, 系统将自动从视频画面中识别头顶和踝关节像素距离, 计算比例尺。无需 1 米标尺, 适用于实际临床录制场景。</p>' +
-        '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;justify-content:center;">' +
-          '<label style="font-size:14px;color:#333;">身高 (cm):</label>' +
+      // 紧凑顶部控制栏
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">' +
+        renderCameraSelector() +
+        renderCameraSideSelector() +
+        '<div style="display:flex;gap:6px;align-items:center;background:#fff;padding:6px 10px;border-radius:8px;">' +
+          '<label style="font-size:12px;color:#666;white-space:nowrap;">身高(cm):</label>' +
           '<input id="gait-cal-height" type="number" min="100" max="220" step="1" value="' + (state.calibration.heightCm || 170) + '" ' +
-          'style="width:90px;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:16px;text-align:center;">' +
-          '<button id="gait-cal-auto" style="padding:8px 18px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">&#x1f3af; 自动标定</button>' +
+          'style="width:65px;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:14px;text-align:center;">' +
+          '<button id="gait-cal-auto" style="padding:5px 12px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600;font-size:12px;white-space:nowrap;">&#x1f3af; 自动标定</button>' +
         '</div>' +
-        '<div style="position:relative;background:#000;border-radius:8px;overflow:hidden;max-width:640px;margin:0 auto;">' +
-          '<video id="gait-camera-video" autoplay muted playsinline style="display:block;width:100%;height:auto;"></video>' +
-          '<canvas id="gait-calibration-canvas" style="position:absolute;inset:0;cursor:crosshair;"></canvas>' +
-          '<div id="gait-portrait-warn" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.82);color:#fff;padding:16px 28px;border-radius:12px;font-size:16px;font-weight:700;text-align:center;pointer-events:none;white-space:nowrap;border:2px solid #fbbf24;">&#x1f4f1;&#x21c4; 请将手机横置<br><span style="font-size:12px;font-weight:400;opacity:0.85;">侧方横屏拍摄可获得最佳步态分析精度</span></div>' +
-        '</div>' +
-        '<div id="gait-calibration-status" style="margin-top:12px;padding:10px;background:#f0f2f5;border-radius:6px;font-size:13px;text-align:center;">点击「自动标定」按钮, 系统从视频中检测头顶-踝关节像素距离</div>' +
-        '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">' +
-          '<button id="gait-cal-confirm" style="flex:2;padding:10px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;opacity:0.5;" disabled>&#x2713; 确认标定 &#x2192;</button>' +
-          '<button id="gait-cal-skip" style="flex:1;padding:10px;background:rgba(0,0,0,0.08);border:none;border-radius:6px;cursor:pointer;">跳过 &#x2192;</button>' +
+      '</div>' +
+      // 视频区域填满
+      '<div style="position:relative;background:#000;border-radius:8px;overflow:hidden;flex:1;min-height:200px;">' +
+        '<video id="gait-camera-video" autoplay muted playsinline style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;"></video>' +
+        '<canvas id="gait-calibration-canvas" style="position:absolute;inset:0;cursor:crosshair;"></canvas>' +
+        '<div id="gait-portrait-warn" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.82);color:#fff;padding:16px 28px;border-radius:12px;font-size:16px;font-weight:700;text-align:center;pointer-events:none;white-space:nowrap;border:2px solid #fbbf24;">&#x1f4f1;&#x21c4; 请将手机横置<br><span style="font-size:12px;font-weight:400;opacity:0.85;">侧方横屏拍摄可获得最佳步态分析精度</span></div>' +
+      '</div>' +
+      // 底部状态和按钮
+      '<div style="margin-top:8px;">' +
+        '<div id="gait-calibration-status" style="padding:8px;background:#f0f2f5;border-radius:6px;font-size:12px;text-align:center;margin-bottom:6px;">点击「自动标定」按钮, 系统检测头顶-踝关节像素距离</div>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button id="gait-cal-confirm" style="flex:2;padding:12px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;opacity:0.5;font-size:15px;" disabled>&#x2713; 确认标定 &#x2192;</button>' +
+          '<button id="gait-cal-skip" style="flex:1;padding:12px;background:rgba(0,0,0,0.06);border:none;border-radius:8px;cursor:pointer;font-size:13px;">跳过 &#x2192;</button>' +
         '</div>' +
       '</div>'
     );
@@ -953,44 +977,42 @@
     clearError();
     setBody(
       renderError() +
-      renderCameraSelector() +
-      renderCameraSideSelector() +
-      '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;">' +
-        '<h3 style="margin:0 0 8px 0;">📹 视频采集</h3>' +
-        '<p style="color:#666;font-size:13px;margin:0 0 12px 0;">录制或上传 5-15 秒自然行走的视频 (侧方视角最佳)</p>' +
-        '<div style="display:flex;gap:6px;margin-bottom:12px;">' +
-          '<button class="gait-capture-tab active" data-mode="record" style="flex:1;padding:10px;background:#43E97B;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">🎥 录制</button>' +
-          '<button class="gait-capture-tab" data-mode="upload" style="flex:1;padding:10px;background:rgba(0,0,0,0.08);border:none;border-radius:6px;cursor:pointer;">📁 上传</button>' +
+      // 紧凑顶部控制栏
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">' +
+        renderCameraSelector() +
+        renderCameraSideSelector() +
+        '<div style="display:flex;gap:4px;background:#fff;padding:4px;border-radius:8px;">' +
+          '<button class="gait-capture-tab active" data-mode="record" style="padding:6px 14px;background:#43E97B;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px;">&#x1f3a5; 录制</button>' +
+          '<button class="gait-capture-tab" data-mode="upload" style="padding:6px 14px;background:rgba(0,0,0,0.06);border:none;border-radius:6px;cursor:pointer;font-size:12px;">&#x1f4c1; 上传</button>' +
         '</div>' +
-        '<div id="gait-capture-area">' +
-          '<div id="gait-record-panel">' +
-            '<div style="position:relative;background:#000;border-radius:8px;overflow:hidden;max-width:640px;margin:0 auto;">' +
-              '<video id="gait-camera-video" autoplay muted playsinline style="display:block;width:100%;height:auto;"></video>' +
-              '<div id="gait-portrait-warn" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.82);color:#fff;padding:16px 28px;border-radius:12px;font-size:16px;font-weight:700;text-align:center;pointer-events:none;white-space:nowrap;border:2px solid #fbbf24;">&#x1f4f1;&#x21c4; 请将手机横置<br><span style="font-size:12px;font-weight:400;opacity:0.85;">侧方横屏拍摄可获得最佳步态分析精度</span></div>' +
-            '</div>' +
-            '<div style="display:flex;gap:8px;margin-top:10px;align-items:center;justify-content:center;">' +
-              '<span id="gait-record-timer" style="font-size:24px;font-weight:700;color:#dc2626;font-family:monospace;">00:00</span>' +
-              '<button id="gait-record-start" style="padding:12px 28px;background:#dc2626;color:#fff;border:none;border-radius:30px;cursor:pointer;font-size:16px;font-weight:600;">⏺ 开始录制</button>' +
-              '<button id="gait-record-stop" style="padding:12px 28px;background:rgba(0,0,0,0.7);color:#fff;border:none;border-radius:30px;cursor:pointer;font-size:16px;display:none;">⏹ 停止</button>' +
-            '</div>' +
-            '<p style="text-align:center;color:#888;font-size:12px;margin:8px 0 0 0;">建议录制 10 秒, 含至少 5-6 个完整步态周期</p>' +
+      '</div>' +
+      // 视频/文件区域填满
+      '<div id="gait-capture-area" style="flex:1;min-height:200px;">' +
+        '<div id="gait-record-panel" style="height:100%;display:flex;flex-direction:column;">' +
+          '<div style="position:relative;background:#000;border-radius:8px;overflow:hidden;flex:1;min-height:160px;">' +
+            '<video id="gait-camera-video" autoplay muted playsinline style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;"></video>' +
+            '<div id="gait-portrait-warn" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.82);color:#fff;padding:16px 28px;border-radius:12px;font-size:16px;font-weight:700;text-align:center;pointer-events:none;white-space:nowrap;border:2px solid #fbbf24;">&#x1f4f1;&#x21c4; 请将手机横置<br><span style="font-size:12px;font-weight:400;opacity:0.85;">侧方横屏拍摄可获得最佳步态分析精度</span></div>' +
           '</div>' +
-          '<div id="gait-upload-panel" style="display:none;text-align:center;padding:30px 20px;">' +
-            '<input type="file" id="gait-file-input" accept="video/*" style="display:none;">' +
-            '<button id="gait-file-btn" style="padding:16px 40px;background:linear-gradient(135deg,#636e72,#2d3436);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:16px;">📁 选择视频文件</button>' +
-            '<p style="color:#888;font-size:12px;margin-top:12px;">支持 mp4 / webm / mov, 最大 100MB</p>' +
-          '</div>' +
-          '<div id="gait-preview-panel" style="display:none;margin-top:14px;text-align:center;">' +
-            '<video id="gait-preview-video" controls muted playsinline style="max-width:100%;max-height:300px;background:#000;border-radius:8px;"></video>' +
-            '<div style="display:flex;gap:8px;margin-top:12px;justify-content:center;">' +
-              '<button id="gait-process-btn" style="padding:14px 40px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:30px;cursor:pointer;font-size:18px;font-weight:600;">🔍 开始分析</button>' +
-              '<button id="gait-retry-btn" style="padding:14px 30px;background:rgba(0,0,0,0.08);border:none;border-radius:30px;cursor:pointer;font-size:14px;">🔄 重新录制</button>' +
-            '</div>' +
+        '</div>' +
+        '<div id="gait-upload-panel" style="display:none;height:100%;align-items:center;justify-content:center;flex-direction:column;">' +
+          '<input type="file" id="gait-file-input" accept="video/*" style="display:none;">' +
+          '<button id="gait-file-btn" style="padding:24px 48px;background:linear-gradient(135deg,#636e72,#2d3436);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:16px;">&#x1f4c1; 选择视频文件</button>' +
+          '<p style="color:#888;font-size:12px;margin-top:12px;">支持 mp4 / webm / mov, 最大 100MB</p>' +
+        '</div>' +
+        '<div id="gait-preview-panel" style="display:none;height:100%;flex-direction:column;align-items:center;justify-content:center;">' +
+          '<video id="gait-preview-video" controls muted playsinline style="max-width:100%;max-height:calc(100% - 60px);background:#000;border-radius:8px;"></video>' +
+          '<div style="display:flex;gap:8px;margin-top:12px;">' +
+            '<button id="gait-process-btn" style="padding:14px 40px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:30px;cursor:pointer;font-size:18px;font-weight:600;">&#x1f50d; 开始分析</button>' +
+            '<button id="gait-retry-btn" style="padding:14px 30px;background:rgba(0,0,0,0.08);border:none;border-radius:30px;cursor:pointer;font-size:14px;">&#x1f504; 重新录制</button>' +
           '</div>' +
         '</div>' +
       '</div>' +
-      '<div style="text-align:center;margin-top:14px;">' +
-        '<button id="gait-back-intro" style="padding:8px 18px;background:transparent;border:1px solid #ccc;border-radius:6px;cursor:pointer;color:#666;font-size:13px;">← 返回上一步</button>' +
+      // 底部录制控制
+      '<div id="gait-record-controls" style="margin-top:8px;display:flex;gap:8px;align-items:center;justify-content:center;">' +
+        '<span id="gait-record-timer" style="font-size:22px;font-weight:700;color:#dc2626;font-family:monospace;min-width:60px;text-align:center;">00:00</span>' +
+        '<button id="gait-record-start" style="padding:10px 32px;background:#dc2626;color:#fff;border:none;border-radius:30px;cursor:pointer;font-size:15px;font-weight:600;">&#x23fa; 开始录制</button>' +
+        '<button id="gait-record-stop" style="padding:10px 32px;background:rgba(0,0,0,0.7);color:#fff;border:none;border-radius:30px;cursor:pointer;font-size:15px;display:none;">&#x23f9; 停止</button>' +
+        '<button id="gait-back-intro" style="padding:6px 14px;background:transparent;border:1px solid #ccc;border-radius:6px;cursor:pointer;color:#666;font-size:12px;">&#x2190; 返回</button>' +
       '</div>'
     );
     // Bind tabs
@@ -1006,12 +1028,16 @@
         btn.style.fontWeight = '600';
         var mode = btn.dataset.mode;
         if (mode === 'record') {
-          $('#gait-record-panel').style.display = '';
+          $('#gait-record-panel').style.display = 'flex';
           $('#gait-upload-panel').style.display = 'none';
+          $('#gait-preview-panel').style.display = 'none';
+          $('#gait-record-controls').style.display = 'flex';
           startCamera().then(function (ok) { if (ok) { attachCameraSelectorHandlers(); checkOrientation(); } });
         } else {
           $('#gait-record-panel').style.display = 'none';
-          $('#gait-upload-panel').style.display = '';
+          $('#gait-upload-panel').style.display = 'flex';
+          $('#gait-preview-panel').style.display = 'none';
+          $('#gait-record-controls').style.display = 'none';
           stopCamera();
         }
       });
@@ -1058,18 +1084,16 @@
   function renderCaptureComplete() {
     $('#gait-record-panel').style.display = 'none';
     $('#gait-upload-panel').style.display = 'none';
-    $('#gait-preview-panel').style.display = 'block';
-    if ($('#gait-record-start')) $('#gait-record-start').style.display = '';
-    if ($('#gait-record-stop')) $('#gait-record-stop').style.display = 'none';
-    if ($('#gait-record-timer')) $('#gait-record-timer').textContent = '00:00';
+    $('#gait-preview-panel').style.display = 'flex';
+    $('#gait-record-controls').style.display = 'none';
     $('#gait-process-btn').addEventListener('click', processVideo);
     $('#gait-retry-btn').addEventListener('click', function () {
       state.recordedBlob = null;
-      state.recordedURL = null;
       if (state.recordedURL) URL.revokeObjectURL(state.recordedURL);
+      state.recordedURL = null;
       $('#gait-preview-panel').style.display = 'none';
-      $('#gait-record-panel').style.display = '';
-      $('#gait-upload-panel').style.display = 'none';
+      $('#gait-record-panel').style.display = 'flex';
+      $('#gait-record-controls').style.display = 'flex';
       setPhase(PHASE.CAPTURE);
     });
   }
