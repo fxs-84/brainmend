@@ -371,6 +371,281 @@
   }
 
   // ============================================================
+  // 手肘摆动分析 — ANRM 脑优化 §3.2 手肘摆动
+  // 手肘摆动反映小脑功能 (睡眠差、易焦虑 → 手肘摆动多)
+  // ============================================================
+  function computeElbowSwing(frames, scale) {
+    if (!frames || frames.length < 10) return { error: 'insufficient_frames' };
+    var leftElbowX = [], rightElbowX = [];
+    var leftShoulderRef = [], rightShoulderRef = [];
+    for (var i = 0; i < frames.length; i++) {
+      var le = getKp(frames[i], 'left_elbow');
+      var re = getKp(frames[i], 'right_elbow');
+      var ls = getKp(frames[i], 'left_shoulder');
+      var rs = getKp(frames[i], 'right_shoulder');
+      if (le && ls && le.score >= 0.25 && ls.score >= 0.3) {
+        leftElbowX.push({ t: frames[i].t, x: le.x - ls.x });
+        leftShoulderRef.push(ls.x);
+      }
+      if (re && rs && re.score >= 0.25 && rs.score >= 0.3) {
+        rightElbowX.push({ t: frames[i].t, x: re.x - rs.x });
+        rightShoulderRef.push(rs.x);
+      }
+    }
+    function p2p(sig) {
+      if (sig.length < 5) return 0;
+      var v = sig.map(function (s) { return s.x; });
+      return Math.abs(Math.max.apply(null, v) - Math.min.apply(null, v));
+    }
+    function rms(sig) {
+      if (sig.length < 5) return 0;
+      var m = sig.reduce(function (s, v) { return s + v.x; }, 0) / sig.length;
+      return Math.sqrt(sig.reduce(function (s, v) { return s + (v.x - m) * (v.x - m); }, 0) / sig.length);
+    }
+    var convert = scale && scale > 0 ? scale * 100 : 1;
+    var unit = scale && scale > 0 ? 'cm' : 'px';
+    var leP2P = p2p(leftElbowX) * convert;
+    var reP2P = p2p(rightElbowX) * convert;
+    var leRMS = rms(leftElbowX) * convert;
+    var reRMS = rms(rightElbowX) * convert;
+    var avgElbow = (leP2P + reP2P) / 2;
+    var elbowAsym = (leP2P + reP2P) > 0 ? Math.abs(leP2P - reP2P) / ((leP2P + reP2P) / 2) : 0;
+    // 手肘摆动过多/过少判定 (相对肩摆动的比例)
+    var flags = [];
+    if (avgElbow < 2) flags.push('手肘摆动过少 — ANRM: 小脑功能低下或基底节僵直');
+    else if (avgElbow > 15) flags.push('手肘摆动过多(' + avgElbow.toFixed(1) + unit + ') — ANRM: 小脑调节不良 (常见睡眠差/易焦虑)');
+    if (elbowAsym > 0.30) flags.push('手肘不对称(' + (elbowAsym * 100).toFixed(0) + '%) — ANRM: 单侧小脑/锥体束病变');
+    return {
+      leftAmplitude: leP2P,
+      rightAmplitude: reP2P,
+      avgAmplitude: avgElbow,
+      leftRMS: leRMS,
+      rightRMS: reRMS,
+      asymmetry: elbowAsym,
+      unit: unit,
+      flags: flags
+    };
+  }
+
+  // ============================================================
+  // 膝关节刹车能力 — ANRM 脑优化 §3.2 膝关节刹车能力
+  // 反映性格和情绪: 刹车能力差 → 性格/情绪问题
+  // 正常: 支撑相中期膝关节接近完全伸直 (稳定支撑)
+  // 异常: 支撑相膝屈曲过大 / 伸膝控制不稳 (膝过伸)
+  // ============================================================
+  function computeKneeBraking(frames, heelStrikes, side) {
+    if (!frames || frames.length < 10) return { error: 'insufficient_frames' };
+    var kneeName = side + '_knee';
+    var hipName  = side + '_hip';
+    var ankleName = side + '_ankle';
+    // 在每个 HS 后的支撑相窗口 (0-50% 周期) 中检测膝角度和控制
+    var kneeAngles = [];       // [{t, angle}] 支撑相膝角度
+    var kneeStability = [];    // [{t, var}] 局部膝角度变异 (3帧滑动窗口)
+    for (var h = 0; h < heelStrikes.length - 1; h++) {
+      var hsT = heelStrikes[h].time;
+      var nextHsT = heelStrikes[h + 1].time;
+      var cycle = nextHsT - hsT;
+      if (cycle <= 0.2 || cycle >= 3.0) continue;
+      // 支撑相: HS → HS + 0.5*cycle
+      for (var i = 0; i < frames.length; i++) {
+        var t = frames[i].t;
+        if (t < hsT) continue;
+        if (t > hsT + 0.5 * cycle) break;
+        var knee = getKp(frames[i], kneeName);
+        var hip  = getKp(frames[i], hipName);
+        var ankle = getKp(frames[i], ankleName);
+        if (!knee || !hip || !ankle || knee.score < 0.25 || hip.score < 0.3 || ankle.score < 0.3) continue;
+        // 膝角度: hip-knee-ankle 三点夹角 (180° = 完全伸直)
+        var v1 = { x: hip.x - knee.x, y: hip.y - knee.y };
+        var v2 = { x: ankle.x - knee.x, y: ankle.y - knee.y };
+        var dot = v1.x * v2.x + v1.y * v2.y;
+        var mag = Math.sqrt(v1.x * v1.x + v1.y * v1.y) * Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+        if (mag === 0) continue;
+        var angleDeg = Math.acos(Math.max(-1, Math.min(1, dot / mag))) * 180 / Math.PI;
+        kneeAngles.push({ t: t, angle: angleDeg, score: knee.score });
+      }
+    }
+    if (kneeAngles.length < 5) return { error: 'insufficient_knee_data' };
+    // 支撑相膝角度统计
+    var angles = kneeAngles.map(function (k) { return k.angle; });
+    var avgAngle = angles.reduce(function (s, v) { return s + v; }, 0) / angles.length;
+    var minAngle = Math.min.apply(null, angles);  // 最屈曲
+    var maxAngle = Math.max.apply(null, angles);  // 最伸直
+    // 膝控制稳定性: 角速度标准差 (反映刹车是否平滑)
+    var velocities = [];
+    for (var v = 1; v < kneeAngles.length; v++) {
+      var dt = kneeAngles[v].t - kneeAngles[v - 1].t;
+      if (dt <= 0) continue;
+      velocities.push(Math.abs(kneeAngles[v].angle - kneeAngles[v - 1].angle) / dt);
+    }
+    var avgVel = velocities.length > 0 ? velocities.reduce(function (s, x) { return s + x; }, 0) / velocities.length : 0;
+    var velSD = velocities.length > 1 ?
+      Math.sqrt(velocities.reduce(function (s, x) { return s + (x - avgVel) * (x - avgVel); }, 0) / velocities.length) : 0;
+    // 临床判定
+    var flags = [];
+    var quality = 'normal';
+    if (avgAngle < 160) { quality = 'flexed'; flags.push('支撑相膝屈曲(' + avgAngle.toFixed(0) + '°) — ANRM: 刹车能力差, 提示性格/情绪调节问题'); }
+    else if (avgAngle > 175) { quality = 'hyperextended'; flags.push('支撑相膝过伸(' + avgAngle.toFixed(0) + '°) — ANRM: 膝控制过度僵硬'); }
+    if (velSD > 30) { quality = 'unstable'; flags.push('膝控制不稳定(角速度SD=' + velSD.toFixed(0) + '°/s) — ANRM: 情绪波动/冲动控制差'); }
+    return {
+      side: side,
+      avgStanceAngle: avgAngle,
+      minAngle: minAngle,
+      maxAngle: maxAngle,
+      angleRange: maxAngle - minAngle,
+      velocityAvg: avgVel,
+      velocitySD: velSD,
+      quality: quality,
+      sampleCount: kneeAngles.length,
+      flags: flags
+    };
+  }
+
+  // ============================================================
+  // ANRM 脑功能步态画像 — 将步态指标映射到脑功能域
+  //
+  // 4 项核心映射 (ANRM 脑优化 §3.2):
+  //   肩膀甩动 → 对侧脑功能
+  //   手肘摆动 → 小脑功能 (睡眠/焦虑)
+  //   宽深角度 → 同侧脑功能
+  //   膝关节刹车 → 性格与情绪
+  //
+  // 输出: 脑功能域评分 + 侧向化提示 + 亚健康标记
+  // ============================================================
+  function computeBrainGaitProfile(armSwing, elbowSwing, kneeLeft, kneeRight, params) {
+    var profile = {
+      domains: {},
+      lateralization: { leftBrain: 0, rightBrain: 0 },
+      subhealthFlags: [],
+      overallBrainScore: 50  // 50 = 正常基线
+    };
+    var p = params && params.parameters ? params.parameters : {};
+
+    // ---- 域1: 对侧脑功能 (肩膀甩动) ----
+    if (armSwing && armSwing.shoulder) {
+      var sh = armSwing.shoulder;
+      // 左肩由右脑控制, 右肩由左脑控制
+      var leftBrainShoulder = sh.rightNormalized || 0;  // 右肩 → 左脑
+      var rightBrainShoulder = sh.leftNormalized || 0;   // 左肩 → 右脑
+      // 正常肩摆归一化值 ~0.20, 低于 0.12 为减少
+      var leftBrainScore = Math.min(100, Math.max(0, leftBrainShoulder / 0.25 * 50));
+      var rightBrainScore = Math.min(100, Math.max(0, rightBrainShoulder / 0.25 * 50));
+      profile.domains.contralateral = {
+        label: '对侧脑功能 (肩膀甩动)',
+        leftBrainScore: leftBrainScore,   // 左脑 (右肩)
+        rightBrainScore: rightBrainScore, // 右脑 (左肩)
+        detail: {
+          leftShoulderNorm: sh.leftNormalized,
+          rightShoulderNorm: sh.rightNormalized,
+          asymmetry: sh.asymmetry
+        },
+        flags: []
+      };
+      if (leftBrainScore < 40) profile.domains.contralateral.flags.push('右肩摆动减少 → 左脑功能轻度下降');
+      if (rightBrainScore < 40) profile.domains.contralateral.flags.push('左肩摆动减少 → 右脑功能轻度下降');
+      if (sh.asymmetry > 0.20) profile.domains.contralateral.flags.push('肩摆不对称 → 两侧脑功能不平衡');
+      profile.lateralization.leftBrain  += leftBrainScore;
+      profile.lateralization.rightBrain += rightBrainScore;
+    }
+
+    // ---- 域2: 小脑功能 (手肘摆动) ----
+    if (elbowSwing && !elbowSwing.error) {
+      // 手肘摆动: 正常 ~5-12cm, 过多→小脑调节不良, 过少→基底节僵直
+      var elbowScore;
+      if (elbowSwing.avgAmplitude < 2) elbowScore = 25;
+      else if (elbowSwing.avgAmplitude < 5) elbowScore = 40;
+      else if (elbowSwing.avgAmplitude <= 12) elbowScore = 60;
+      else if (elbowSwing.avgAmplitude <= 18) elbowScore = 45;
+      else elbowScore = 30;
+      profile.domains.cerebellum = {
+        label: '小脑功能 (手肘摆动)',
+        score: elbowScore,
+        avgElbowAmplitude: elbowSwing.avgAmplitude,
+        asymmetry: elbowSwing.asymmetry,
+        flags: []
+      };
+      if (elbowScore < 40) profile.domains.cerebellum.flags.push('手肘摆动少 → 小脑/基底节功能低下');
+      if (elbowScore >= 45 && elbowScore < 55) profile.domains.cerebellum.flags.push('手肘摆动偏多 → 小脑调节不良, 可能伴随睡眠差/易焦虑');
+      if (elbowSwing.asymmetry > 0.25) profile.domains.cerebellum.flags.push('手肘不对称 → 单侧小脑功能差异');
+      profile.overallBrainScore += (elbowScore - 50) * 0.25;
+    }
+
+    // ---- 域3: 同侧脑功能 (宽深角度) ----
+    var stepWidthOk = p.stepWidth && p.stepWidth.value >= 0.06 && p.stepWidth.value <= 0.16;
+    var stepLengthSym = params && params.asymmetries ? (1 - Math.min(params.asymmetries.stepLength || 0, 1)) : 0.8;
+    var ipsiScore = 50;
+    if (stepWidthOk) ipsiScore += 15;
+    else ipsiScore -= 10;
+    ipsiScore += (stepLengthSym - 0.8) * 50;
+    ipsiScore = Math.min(100, Math.max(0, ipsiScore));
+    profile.domains.ipsilateral = {
+      label: '同侧脑功能 (宽深角度)',
+      score: ipsiScore,
+      stepWidth: p.stepWidth ? p.stepWidth.value : null,
+      stepLengthSymmetry: stepLengthSym,
+      flags: []
+    };
+    if (!stepWidthOk) profile.domains.ipsilateral.flags.push('步宽异常 → 同侧脑功能需关注');
+    if (stepLengthSym < 0.85) profile.domains.ipsilateral.flags.push('步长不对称 → 两侧脑功能不平衡');
+    profile.lateralization.leftBrain  += ipsiScore * 0.5;
+    profile.lateralization.rightBrain += ipsiScore * 0.5;
+
+    // ---- 域4: 性格与情绪 (膝关节刹车) ----
+    var kneeAvg = 50;
+    var kneeFlags = [];
+    var kneeQ = [];
+    [kneeLeft, kneeRight].forEach(function (k) {
+      if (k && !k.error) {
+        if (k.quality === 'normal') { kneeAvg += 10; kneeQ.push(k.side + ':正常'); }
+        else if (k.quality === 'flexed') { kneeAvg -= 10; kneeQ.push(k.side + ':屈曲'); kneeFlags.push(k.side + '膝刹车弱'); }
+        else if (k.quality === 'hyperextended') { kneeAvg -= 5; kneeQ.push(k.side + ':过伸'); }
+        else if (k.quality === 'unstable') { kneeAvg -= 15; kneeQ.push(k.side + ':不稳'); kneeFlags.push(k.side + '膝控制不稳→情绪波动'); }
+      }
+    });
+    kneeAvg = Math.min(100, Math.max(0, kneeAvg));
+    profile.domains.emotion = {
+      label: '性格与情绪 (膝关节刹车)',
+      score: kneeAvg,
+      quality: kneeQ.join(', '),
+      flags: kneeFlags
+    };
+    profile.overallBrainScore += (kneeAvg - 50) * 0.25;
+
+    // ---- 子域: 步态自动化 (双任务成本代理) ----
+    // 节奏变异性高 → 步态需要更多皮层控制 → 脑自动化下降
+    if (params && params.extras) {
+      var cv = params.extras.rhythmCV || 0;
+      var autoScore = Math.max(0, 80 - cv * 80);
+      profile.domains.automaticity = {
+        label: '步态自动化 (皮层依赖)',
+        score: autoScore,
+        rhythmCV: cv,
+        flags: []
+      };
+      if (cv > 0.15) profile.domains.automaticity.flags.push('步态变异性高 → 脑自动化下降, 皮层控制代偿');
+      if (cv > 0.25) profile.domains.automaticity.flags.push('步态自动化显著下降 → 提示基底节/脑干CPG功能减弱');
+      profile.overallBrainScore += (autoScore - 50) * 0.25;
+    }
+
+    // ---- 汇总 ----
+    profile.overallBrainScore = Math.round(Math.min(100, Math.max(0, profile.overallBrainScore)));
+    profile.lateralization.leftBrain  = Math.round(profile.lateralization.leftBrain / 2);
+    profile.lateralization.rightBrain = Math.round(profile.lateralization.rightBrain / 2);
+    // 亚健康标记收集
+    Object.keys(profile.domains).forEach(function (d) {
+      var dom = profile.domains[d];
+      if (dom.flags) profile.subhealthFlags.push.apply(profile.subhealthFlags, dom.flags);
+    });
+    // 脑功能等级
+    if (profile.overallBrainScore >= 70) profile.brainGrade = '脑功能良好';
+    else if (profile.overallBrainScore >= 55) profile.brainGrade = '脑功能轻度下降 (亚健康)';
+    else if (profile.overallBrainScore >= 40) profile.brainGrade = '脑功能中度下降 (需关注)';
+    else profile.brainGrade = '脑功能显著下降 (建议进一步评估)';
+
+    return profile;
+  }
+
+  // ============================================================
   // 足跟着地检测 (Heel-Strike Detection)
   //
   // 算法: 踝关节 y 坐标在每步周期内有最低点 (离地最近, 图像 y 最小)
@@ -1027,7 +1302,10 @@
         rhythmCV:     rhythmCV,
         stepCount:    allHS.length
       },
-      armSwing: computeArmSwing(frames, scale)
+      armSwing: computeArmSwing(frames, scale),
+      elbowSwing: computeElbowSwing(frames, scale),
+      kneeLeft: computeKneeBraking(frames, leftHS, 'left'),
+      kneeRight: computeKneeBraking(frames, rightHS, 'right')
     };
   }
 
@@ -1283,6 +1561,9 @@
     extractFootKeypoints: extractFootKeypoints,
     extractTrunkAngle: extractTrunkAngle,
     computeArmSwing: computeArmSwing,
+    computeElbowSwing: computeElbowSwing,
+    computeKneeBraking: computeKneeBraking,
+    computeBrainGaitProfile: computeBrainGaitProfile,
     detectHeelStrikes: detectHeelStrikes,
     detectToeOffs: detectToeOffs,
     computeGaitCyclePhases: computeGaitCyclePhases,

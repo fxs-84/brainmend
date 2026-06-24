@@ -550,6 +550,11 @@
         asymmetries: params.asymmetries,
         extras: params.extras,
         armSwing: params.armSwing,
+        elbowSwing: params.elbowSwing,
+        kneeBraking: { left: params.kneeLeft, right: params.kneeRight },
+        brainProfile: window.__gaitParams.computeBrainGaitProfile(
+          params.armSwing, params.elbowSwing, params.kneeLeft, params.kneeRight, params
+        ),
         events: {
           leftHeelStrikes: leftHS,
           rightHeelStrikes: rightHS,
@@ -1142,6 +1147,72 @@
           (r.armSwing.flags && r.armSwing.flags.length > 0 ?
             '<div style="margin-top:10px;padding:8px 12px;background:#fef3c7;border-radius:6px;border-left:3px solid #f59e0b;">' +
               r.armSwing.flags.map(function (f) { return '<div style="font-size:12px;color:#92400e;line-height:1.6;">⚠ ' + f + '</div>'; }).join('') +
+            '</div>' : '') +
+        '</div>'
+      : '') +
+      // 脑功能步态画像 (ANRM 脑优化 §3.2)
+      (r.brainProfile && !r.brainProfile.error ?
+        '<h3 style="margin:20px 0 10px 0;font-size:16px;color:#1a1a2e;">🧠 脑功能步态画像</h3>' +
+        '<div style="background:#fff;padding:16px;border-radius:10px;margin-bottom:14px;">' +
+          // 总评
+          '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:12px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:8px;">' +
+            '<div style="font-size:36px;">🧠</div>' +
+            '<div style="flex:1;">' +
+              '<div style="font-size:16px;font-weight:700;">' + (r.brainProfile.brainGrade || '—') + '</div>' +
+              '<div style="font-size:12px;opacity:0.85;">脑功能综合评分: ' + (r.brainProfile.overallBrainScore || 50) + '/100</div>' +
+            '</div>' +
+            '<div style="text-align:center;">' +
+              '<div style="font-size:11px;opacity:0.8;">左脑</div>' +
+              '<div style="font-size:18px;font-weight:700;">' + (r.brainProfile.lateralization ? r.brainProfile.lateralization.leftBrain : '—') + '</div>' +
+            '</div>' +
+            '<div style="text-align:center;">' +
+              '<div style="font-size:11px;opacity:0.8;">右脑</div>' +
+              '<div style="font-size:18px;font-weight:700;">' + (r.brainProfile.lateralization ? r.brainProfile.lateralization.rightBrain : '—') + '</div>' +
+            '</div>' +
+          '</div>' +
+          // 4 个脑功能域
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;">' +
+            (r.brainProfile.domains.contralateral ?
+              '<div style="padding:10px;background:#f8f9fa;border-radius:6px;border-left:3px solid #667eea;">' +
+                '<div style="font-size:12px;font-weight:600;color:#333;">↔ 对侧脑功能</div>' +
+                '<div style="font-size:11px;color:#888;margin:2px 0;">肩膀甩动 → 对侧脑</div>' +
+                '<div style="font-size:10px;">左脑(右肩): <b>' + r.brainProfile.domains.contralateral.leftBrainScore + '</b> | 右脑(左肩): <b>' + r.brainProfile.domains.contralateral.rightBrainScore + '</b></div>' +
+                (r.brainProfile.domains.contralateral.flags || []).map(function(f){return '<div style="font-size:10px;color:#92400e;margin-top:2px;">⚠ '+f+'</div>';}).join('') +
+              '</div>' : '') +
+            (r.brainProfile.domains.cerebellum ?
+              '<div style="padding:10px;background:#f8f9fa;border-radius:6px;border-left:3px solid #f59e0b;">' +
+                '<div style="font-size:12px;font-weight:600;color:#333;">🎯 小脑功能</div>' +
+                '<div style="font-size:11px;color:#888;margin:2px 0;">手肘摆动 → 小脑</div>' +
+                '<div style="font-size:10px;">评分: <b>' + r.brainProfile.domains.cerebellum.score + '</b> | 肘摆: ' + (r.brainProfile.domains.cerebellum.avgElbowAmplitude || 0).toFixed(1) + 'cm</div>' +
+                (r.brainProfile.domains.cerebellum.flags || []).map(function(f){return '<div style="font-size:10px;color:#92400e;margin-top:2px;">⚠ '+f+'</div>';}).join('') +
+              '</div>' : '') +
+            (r.brainProfile.domains.ipsilateral ?
+              '<div style="padding:10px;background:#f8f9fa;border-radius:6px;border-left:3px solid #10b981;">' +
+                '<div style="font-size:12px;font-weight:600;color:#333;">📏 同侧脑功能</div>' +
+                '<div style="font-size:11px;color:#888;margin:2px 0;">宽深角度 → 同侧脑</div>' +
+                '<div style="font-size:10px;">步宽: ' + (r.brainProfile.domains.ipsilateral.stepWidth || 0).toFixed(2) + 'm | 对称: ' + ((r.brainProfile.domains.ipsilateral.stepLengthSymmetry || 0)*100).toFixed(0) + '%</div>' +
+                (r.brainProfile.domains.ipsilateral.flags || []).map(function(f){return '<div style="font-size:10px;color:#92400e;margin-top:2px;">⚠ '+f+'</div>';}).join('') +
+              '</div>' : '') +
+            (r.brainProfile.domains.emotion ?
+              '<div style="padding:10px;background:#f8f9fa;border-radius:6px;border-left:3px solid #ec4899;">' +
+                '<div style="font-size:12px;font-weight:600;color:#333;">💭 性格与情绪</div>' +
+                '<div style="font-size:11px;color:#888;margin:2px 0;">膝关节刹车 → 情绪</div>' +
+                '<div style="font-size:10px;">评分: <b>' + r.brainProfile.domains.emotion.score + '</b> | ' + (r.brainProfile.domains.emotion.quality || '') + '</div>' +
+                (r.brainProfile.domains.emotion.flags || []).map(function(f){return '<div style="font-size:10px;color:#dc2626;margin-top:2px;">⚠ '+f+'</div>';}).join('') +
+              '</div>' : '') +
+            (r.brainProfile.domains.automaticity ?
+              '<div style="padding:10px;background:#f8f9fa;border-radius:6px;border-left:3px solid #8b5cf6;">' +
+                '<div style="font-size:12px;font-weight:600;color:#333;">🔄 步态自动化</div>' +
+                '<div style="font-size:11px;color:#888;margin:2px 0;">节律变异 → 皮层依赖</div>' +
+                '<div style="font-size:10px;">评分: <b>' + r.brainProfile.domains.automaticity.score + '</b> | CV: ' + ((r.brainProfile.domains.automaticity.rhythmCV || 0)*100).toFixed(1) + '%</div>' +
+                (r.brainProfile.domains.automaticity.flags || []).map(function(f){return '<div style="font-size:10px;color:#92400e;margin-top:2px;">⚠ '+f+'</div>';}).join('') +
+              '</div>' : '') +
+          '</div>' +
+          // 亚健康标记汇总
+          (r.brainProfile.subhealthFlags && r.brainProfile.subhealthFlags.length > 0 ?
+            '<div style="margin-top:12px;padding:10px 14px;background:#fef3c7;border-radius:6px;border-left:3px solid #f59e0b;">' +
+              '<div style="font-size:12px;font-weight:600;color:#92400e;margin-bottom:6px;">🔍 亚健康步态标记 (' + r.brainProfile.subhealthFlags.length + '项)</div>' +
+              r.brainProfile.subhealthFlags.map(function(f){return '<div style="font-size:11px;color:#92400e;line-height:1.7;">• '+f+'</div>';}).join('') +
             '</div>' : '') +
         '</div>'
       : '') +
