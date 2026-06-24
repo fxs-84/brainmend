@@ -178,6 +178,12 @@
                 <div style="font-size:13px;font-weight:400;opacity:0.85;margin-top:6px;">基于头部运动传感的颈椎康复训练</div>
                 <div style="font-size:11px;font-weight:400;opacity:0.65;margin-top:4px;">建议在坐姿 / 站立下使用 · 保持身体稳定</div>
             </button>
+            <button id="page2-gait" style="padding:60px 80px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:24px;cursor:pointer;font-size:24px;font-weight:600;box-shadow:0 12px 40px rgba(67,233,123,0.3);min-width:280px;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size:72px;margin-bottom:16px;">🚶</div>
+                步态分析系统
+                <div style="font-size:13px;font-weight:400;opacity:0.85;margin-top:6px;">基于AI姿势识别的步态参数评估</div>
+                <div style="font-size:11px;font-weight:400;opacity:0.65;margin-top:4px;">视频录制/上传 · 自动参数提取 · 临床报告</div>
+            </button>
         </div>
     </div>
 
@@ -256,6 +262,48 @@
         </div>
         <button onclick="window._exportCogPDF()" style="padding:10px 30px;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">📄 导出 PDF</button>
         <button onclick="window._closeCogReport()" style="padding:10px 30px;background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">返回首页</button>
+      </div>
+    </div>
+
+    <!-- 步态分析覆盖层 (基于 ANRM 步态评估手册) -->
+    <div id="gait-overlay" style="display:none;position:fixed;inset:0;z-index:31000;background:#f0f2f5;overflow-y:auto;font-family:'Microsoft YaHei','PingFang SC',sans-serif;">
+      <div id="gait-nav" style="position:sticky;top:0;z-index:10;background:linear-gradient(135deg,#0f7b6c,#43E97B);padding:8px 12px;display:flex;gap:4px;overflow-x:auto;white-space:nowrap;flex-wrap:nowrap;align-items:center;">
+        <span style="color:#fff;font-weight:700;font-size:14px;margin-right:8px;flex-shrink:0;">🚶 步态分析</span>
+        <!-- tabs 动态注入 by gait-analysis.js -->
+      </div>
+      <div id="gait-body" style="max-width:960px;margin:0 auto;padding:20px;">
+        <!-- 阶段化内容动态渲染 -->
+      </div>
+      <div id="gait-footer" style="text-align:center;padding:20px;background:#fff;border-top:1px solid #e0e0e0;margin-top:20px;">
+        <button id="gait-export-pdf" style="padding:10px 30px;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">📄 导出 PDF</button>
+        <button id="gait-qr-btn" style="padding:10px 30px;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">📱 分享</button>
+        <button id="gait-history-btn" style="padding:10px 30px;background:linear-gradient(135deg,#636e72,#2d3436);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">📋 历史记录</button>
+        <button id="gait-close-btn" style="padding:10px 30px;background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">返回首页</button>
+      </div>
+    </div>
+
+    <!-- 步态分析 QR 分享弹窗 -->
+    <div id="gait-qr-overlay" style="display:none;position:fixed;inset:0;z-index:32000;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
+      <div style="background:#fff;border-radius:16px;padding:30px;text-align:center;max-width:360px;width:90%;">
+        <h3 style="color:#1a1a2e;margin:0 0 6px;">📱 扫码进入步态分析</h3>
+        <p style="color:#666;font-size:12px;margin:0 0 16px;">患者扫码后开始评估</p>
+        <div id="gait-qr-canvas" style="display:inline-block;"></div>
+        <p id="gait-qr-url" style="color:#999;font-size:11px;margin:12px 0 0;word-break:break-all;"></p>
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;">
+          <button id="gait-qr-share" style="padding:8px 24px;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;">📤 分享</button>
+          <button id="gait-qr-close" style="padding:8px 24px;background:#1a1a2e;color:#fff;border:none;border-radius:8px;cursor:pointer;">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 步态历史记录弹窗 -->
+    <div id="gait-history-overlay" style="display:none;position:fixed;inset:0;z-index:31500;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;">
+      <div style="background:#fff;border-radius:16px;padding:24px;max-width:520px;width:90%;max-height:80vh;overflow-y:auto;">
+        <h3 style="color:#1a1a2e;margin:0 0 12px;">📋 步态分析历史记录</h3>
+        <div id="gait-history-list"></div>
+        <div style="text-align:center;margin-top:16px;">
+          <button id="gait-history-close" style="padding:8px 24px;background:#1a1a2e;color:#fff;border:none;border-radius:8px;cursor:pointer;">关闭</button>
+        </div>
       </div>
     </div>
 
@@ -899,6 +947,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="./assets/cognitive/cognitive-report.js?v=20260620b"></script>
+<!-- 步态分析模块 (基于 ANRM 步态分析手册) -->
+<script src="./assets/gait-params.js"></script>
+<script src="./assets/gait-analysis.js"></script>
+<script src="./assets/gait-report.js"></script>
 <script>
     // 全局点击分发 (认知模块)
     document.addEventListener('click', function(e) {
@@ -965,6 +1017,19 @@
             if (vc) vc.style.display = 'none';
             if (vm) vm.style.display = '';
             if (sp) { sp.style.setProperty("display","flex","important"); sp.style.setProperty("width","210px","important"); sp.style.setProperty("min-width","210px","important"); }
+        });
+
+        // 3.5 步态分析系统
+        var gaitBtn = document.getElementById('page2-gait');
+        if (gaitBtn) gaitBtn.addEventListener('click', function() {
+            page2.style.display = 'none';
+            if (window._hideCognitive) window._hideCognitive();
+            if (typeof window.__gaitAnalysis === 'object' && window.__gaitAnalysis.open) {
+                window.__gaitAnalysis.open();
+            } else {
+                console.error('[gait] __gaitAnalysis not ready');
+                page2.style.display = 'flex';
+            }
         });
 
         // 4. 侧边栏返回首页按钮
@@ -1238,6 +1303,7 @@
               style.id = 'patient-sandbox-css';
               var cssRules = 'body[data-patient-sandbox="1"] #page2-tracking, ' +
                 'body[data-patient-sandbox="1"] #page2-cog-report, ' +
+                'body[data-patient-sandbox="1"] #page2-gait, ' +
                 'body[data-patient-sandbox="1"] [data-feature="head-tracking"], ' +
                 'body[data-patient-sandbox="1"] [data-feature="records"] { display:none!important; }';
               if (!hideSidePanel) {
@@ -1565,6 +1631,39 @@
                 }
                 // 治疗师进入: 显示模块选择弹窗
                 document.getElementById('cog-modal-overlay').classList.add('show');
+            })();
+
+            // Deep-link: ?mode=gait 自动进入步态分析
+            (function() {
+                var params = new URLSearchParams(window.location.search);
+                if (params.get('mode') !== 'gait') return;
+                if (params.get('tid')) {
+                    try { localStorage.setItem('gait_therapist_id', params.get('tid')); } catch(e) {}
+                }
+                // QR 码过期校验 (24 小时)
+                var qrTime = params.get('t');
+                var QR_TTL = 24 * 60 * 60 * 1000;
+                if (qrTime && (Date.now() - parseInt(qrTime) > QR_TTL)) {
+                    page2.style.display = 'none';
+                    var expiredDiv = document.createElement('div');
+                    expiredDiv.style.cssText = 'position:fixed;inset:0;z-index:30000;background:#0f7b6c;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#fff;text-align:center;padding:20px;';
+                    expiredDiv.innerHTML = '<div style="font-size:64px;margin-bottom:20px;">⏰</div><h2 style="font-size:22px;margin:0 0 12px;">二维码已过期</h2><p style="color:#bdc3c7;font-size:14px;margin:0 0 8px;">此二维码仅 24 小时内有效</p><p style="color:#888;font-size:13px;">请联系治疗师重新生成二维码</p>';
+                    document.body.appendChild(expiredDiv);
+                    return;
+                }
+                page2.style.display = 'none';
+                var retries = 0;
+                var readyTimer = setInterval(function() {
+                    retries++;
+                    if (window.__gaitAnalysis && window.__gaitAnalysis.open) {
+                        clearInterval(readyTimer);
+                        window.__gaitAnalysis.open();
+                    } else if (retries > 50) {
+                        clearInterval(readyTimer);
+                        page2.style.display = 'flex';
+                        console.error('[gait] __gaitAnalysis load timeout');
+                    }
+                }, 100);
             })();
         })();
     })();
