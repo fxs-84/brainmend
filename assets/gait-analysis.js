@@ -1397,7 +1397,7 @@
       html = list.map(function (r, idx) {
         var p = r.parameters || {};
         var c = r.classification || {};
-        return '<div class="gait-hist-item" data-idx="' + idx + '" style="padding:12px;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:8px;cursor:pointer;background:#fafafa;user-select:none;">' +
+        return '<div class="gait-hist-item" data-idx="' + idx + '" style="padding:12px;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:8px;cursor:pointer;background:#fafafa;user-select:none;transition:background 0.15s;" onmouseover="this.style.background=\'#f0f9f4\'" onmouseout="this.style.background=\'#fafafa\'">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;">' +
             '<div style="flex:1;">' +
               '<div style="font-weight:600;color:#0f7b6c;">' + (c.primaryLabel || '—') + '</div>' +
@@ -1411,15 +1411,33 @@
     $('#gait-history-list').innerHTML = html;
     var items = document.querySelectorAll('.gait-hist-item');
     items.forEach(function (item) {
-      var clickHandler = function () {
-        var idx = parseInt(item.dataset.idx);
+      var clickHandler = function (e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        var idx = parseInt(item.dataset.idx, 10);
         var all = loadHistory();
-        if (!all[idx]) { alert('记录加载失败'); return; }
+        if (!all[idx]) { alert('记录加载失败: 索引 ' + idx + ' 不存在'); return; }
         state.results = all[idx];
         $('#gait-history-overlay').style.display = 'none';
         var overlay = $('#gait-overlay');
         if (overlay) overlay.style.display = 'block';
-        setPhase(PHASE.RESULTS);
+        // 直接渲染报告 (绕过 setPhase, 确保显示)
+        var body = $('#gait-body');
+        if (body) body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">加载报告中...</div>';
+        if (typeof window.__gaitReport !== 'undefined' && window.__gaitReport.renderReport) {
+          // 用 gait-report.js 的 renderReport 直接渲染 (已包含图表)
+          window.__gaitReport.renderReport(all[idx], body);
+        } else {
+          setPhase(PHASE.RESULTS);
+        }
+        // 添加返回按钮
+        var backBtn = document.createElement('div');
+        backBtn.style.cssText = 'text-align:center;margin-top:16px;';
+        backBtn.innerHTML = '<button id="gait-back-to-history" style="padding:10px 24px;background:rgba(0,0,0,0.06);border:1px solid #ccc;border-radius:8px;cursor:pointer;color:#666;font-size:14px;">← 返回历史记录</button>';
+        body.appendChild(backBtn);
+        var backToHist = document.getElementById('gait-back-to-history');
+        if (backToHist) backToHist.addEventListener('click', function () {
+          renderHistory();
+        });
       };
       item.addEventListener('click', clickHandler);
     });
