@@ -1241,71 +1241,129 @@
     if (!frames || frames.length < 10) return { error: 'insufficient_frames' };
     var kpAnkle = side + '_ankle';
     var kpKnee  = side + '_knee';
-    var kpHip   = side + '_hip';
 
-    // 逐帧计算胫骨角
-    var shankAngles = [];  // [{t, angle}] 角度(°), 正值=前倾
+    // 逐帧采集: 胫骨角 + 踝坐标
+    var records = [];  // [{t, shankAngle, ankleX, ankleY}]
     for (var i = 0; i < frames.length; i++) {
       var ankle = getKp(frames[i], kpAnkle);
       var knee  = getKp(frames[i], kpKnee);
       if (!ankle || !knee || ankle.score < 0.25 || knee.score < 0.25) continue;
-      var dx = ankle.x - knee.x;  // 水平偏移
-      var dy = ankle.y - knee.y;  // 垂直偏移 (y向下, 踝通常低于膝->dy>0)
-      var angle = Math.atan2(dx, dy) * 180 / Math.PI;  // 0°=垂直, +前倾
-      shankAngles.push({ t: frames[i].t, angle: angle, score: Math.min(ankle.score, knee.score) });
+      var dx = ankle.x - knee.x;
+      var dy = ankle.y - knee.y;
+      records.push({
+        t: frames[i].t,
+        shankAngle: Math.atan2(dx, dy) * 180 / Math.PI,  // 0°=垂直, +前倾
+        ankleX: ankle.x,
+        ankleY: ankle.y
+      });
     }
-    if (shankAngles.length < 20) return { error: 'insufficient_ankle_data' };
+    if (records.length < 20) return { error: 'insufficient_ankle_data' };
 
-    // 按步态阶段分组
-    var stanceAngles = [];  // HS→TO 支撑相
-    var swingAngles  = [];  // TO→HS 摆动相
+    // ---- 地面平面估计 ----
+    // 支撑相足底贴地, 踝 Y 最低点的连线 ≈ 地面方向
+    // 拟合: 收集每个 HS 周期中踝 Y 接近最小值的帧 (支撑相), 线性回归
+    var groundPoints = [];
     if (heelStrikes && heelStrikes.length >= 2) {
       for (var h = 0; h < heelStrikes.length - 1; h++) {
         var hsT = heelStrikes[h].time;
-        var midT = hsT + (heelStrikes[h+1].time - hsT) * 0.5;  // 中摆动 (简易分界)
-        shankAngles.forEach(function (s) {
-          if (s.t >= hsT && s.t < midT) stanceAngles.push(s.angle);
-          else if (s.t >= midT && s.t < heelStrikes[h+1].time) swingAngles.push(s.angle);
-        });
+        var nextT = heelStrikes[h + 1].time;
+        // 收集 HS 后 0-55% 周期 (支撑相) 的踝坐标
+        var stanceWindow = hsT + (nextT - hsT) * 0.55;
+        var minY = Infinity, minFrame = null;
+        for (var j = 0; j < records.length; j++) {
+          if (records[j].t >= hsT && records[j].t <= stanceWindow) {
+            if (records[j].ankleY < minY) {
+              minY = records[j].ankleY;
+              minFrame = records[j];
+            }
+          }
+        }
+        if (minFrame) groundPoints.push(minFrame);
       }
-    } else {
-      // 无 HS 时按中值分割
-      var mid = shankAngles.map(function(s){return s.angle;}).sort(function(a,b){return a-b;})[Math.floor(shankAngles.length/2)];
-      shankAngles.forEach(function (s) {
-        if (s.angle >= mid) stanceAngles.push(s.angle);  // 前倾=支撑相
-        else swingAngles.push(s.angle);  // 后倾=摆动相
-      });
+    }
+    // 如果收集到的地面点 ≥ 3, 线性回归估计地面斜率
+    var groundAngleDeg = 0;  // 地面与水平线夹角 (°)
+    var groundReliable = false;
+    if (groundPoints.length >= 3) {
+      var n = groundPoints.length, sx = 0, sy = 0, sxy = 0, sx2 = 0;
+      for (var g = 0; g < n; g++) {
+        sx += groundPoints[g].ankleX; sy += groundPoints[g].ankleY;
+        sxy += groundPoints[g].ankleX * groundPoints[g].ankleY;
+        sx2 += groundPoints[g].ankleX * groundPoints[g].ankleX;
+      }
+      var denom = n * sx2 - sx * sx;
+      if (Math.abs(denom) > 0.01) {
+        var slope = (n * sxy - sx * sy) / denom;  // dy/dx
+        groundAngleDeg = Math.atan(slope) * 180 / Math.PI;
+        groundReliable = groundPoints.length >= 5;
+      }
     }
 
-    function arrMean(arr) { return arr.length > 0 ? arr.reduce(function(a,b){return a+b;},0)/arr.length : 0; }
-    function arrMin(arr)  { return arr.length > 0 ? Math.min.apply(null, arr) : 0; }
-    function arrMax(arr)  { return arr.length > 0 ? Math.max.apply(null, arr) : 0; }
+    // ---- 计算踝关节角 (胫骨 vs 地面) ----
+    // 踝角 = 胫骨角 - 地面角 (支撑相 足≈地面)
+    // 正值 = 背屈 (胫骨前倾 > 地面), 负值 = 跖屈
+    var ankleAngles = [];  // [{t, angle}] 踝关节角
+    var stanceAnkleAngles = [];
+    var swingAnkleAngles = [];
+    for (var k = 0; k < records.length; k++) {
+      var ankleAngle = records[k].shankAngle - groundAngleDeg;
+      ankleAngles.push({ t: records[k].t, angle: ankleAngle });
+    }
 
-    var stanceMean = arrMean(stanceAngles);
-    var swingMean  = arrMean(swingAngles);
-    var maxDF = arrMax(shankAngles.map(function(s){return s.angle;}));  // 最大背屈
-    var maxPF = arrMin(shankAngles.map(function(s){return s.angle;}));  // 最大跖屈 (最负)
-    var range   = maxDF - maxPF;  // 总活动范围
+    // 按 HS 分组
+    if (heelStrikes && heelStrikes.length >= 2) {
+      for (var m = 0; m < heelStrikes.length - 1; m++) {
+        var hsT2 = heelStrikes[m].time;
+        var midT2 = hsT2 + (heelStrikes[m+1].time - hsT2) * 0.5;
+        ankleAngles.forEach(function (a) {
+          if (a.t >= hsT2 && a.t < midT2) stanceAnkleAngles.push(a.angle);
+          else if (a.t >= midT2 && a.t < heelStrikes[m+1].time) swingAnkleAngles.push(a.angle);
+        });
+      }
+    }
 
-    // 临床标记
+    function arrMean(arr) { return arr.length>0?arr.reduce(function(a,b){return a+b;},0)/arr.length:0; }
+    function arrMin(arr)  { return arr.length>0?Math.min.apply(null,arr):0; }
+    function arrMax(arr)  { return arr.length>0?Math.max.apply(null,arr):0; }
+    function arrSD(arr)   { var m=arrMean(arr); return arr.length>1?Math.sqrt(arr.reduce(function(s,v){return s+(v-m)*(v-m);},0)/arr.length):0; }
+
+    var allAngles = ankleAngles.map(function(a){return a.angle;});
+    var stanceMean = arrMean(stanceAnkleAngles);
+    var swingMean  = arrMean(swingAnkleAngles);
+    var maxDF = arrMax(allAngles);   // 最大背屈
+    var maxPF = arrMin(allAngles);   // 最大跖屈
+    var rom  = maxDF - maxPF;        // 活动范围
+    var stanceSD = arrSD(stanceAnkleAngles);
+
+    // ---- 临床标记 ----
     var flags = [];
-    // 足下垂: 摆动相无法背屈 (胫骨角 < 5°)
-    if (swingMean < 5) flags.push('摆动相背屈不足(' + swingMean.toFixed(0) + '°) — ANRM: 腓总神经/胫前肌功能障碍');
-    // 推离无力: 跖屈不够 (maxPF > -10°)
-    if (maxPF > -10 && range < 30) flags.push('跖屈幅度不足(最大' + maxPF.toFixed(0) + '°) — ANRM: 小腿三头肌无力');
-    // 僵硬踝: 总活动范围 < 15°
-    if (range < 15) flags.push('踝活动范围过小(' + range.toFixed(0) + '°) — ANRM: 踝关节僵硬/痉挛');
-    // 过度活动: > 50°
-    if (range > 50) flags.push('踝活动范围过大(' + range.toFixed(0) + '°) — ANRM: 共济失调/肌张力低下');
+    var quality = 'normal';
+    if (rom > 0 && rom < 15) { quality = 'stiff'; flags.push('踝僵硬: 活动范围仅 ' + rom.toFixed(0) + '° — 可能踝关节病变/痉挛'); }
+    else if (rom > 45) { quality = 'hypermobile'; flags.push('踝过度活动: ' + rom.toFixed(0) + '° — 共济失调/肌张力低下'); }
+
+    if (stanceMean < -5) flags.push('支撑相跖屈: 平均 ' + stanceMean.toFixed(0) + '° — 可能马蹄足/跟腱挛缩');
+    else if (stanceMean > 15) flags.push('支撑相过度背屈: ' + stanceMean.toFixed(0) + '° — 可能跟腱无力/扁平足');
+
+    if (swingMean < 0) flags.push('摆动相背屈不足: ' + swingMean.toFixed(0) + '° — 足下垂风险 (胫前肌/腓深神经)');
+    else if (swingMean > 20) flags.push('摆动相过度背屈: ' + swingMean.toFixed(0) + '°');
+
+    if (maxDF < 5) flags.push('最大背屈 < 5° — 踝关节背屈严重受限 (距骨/跟骨撞击?)');
+
+    if (stanceSD > 15 && groundReliable) flags.push('支撑相踝角不稳定 (SD=' + stanceSD.toFixed(0) + '°) — 本体感觉/平衡问题');
+
+    if (flags.length === 0 && rom >= 15) flags.push('✓ 踝背屈/跖屈范围正常 (' + rom.toFixed(0) + '°)');
 
     return {
       side: side,
-      shankAngles: shankAngles,
+      ankleAngles: ankleAngles,
       stanceAvg: stanceMean,
       swingAvg: swingMean,
       maxDorsiflexion: maxDF,
       maxPlantarflexion: maxPF,
-      rangeOfMotion: range,
+      rangeOfMotion: rom,
+      groundAngle: groundAngleDeg,
+      groundReliable: groundReliable,
+      quality: quality,
       flags: flags
     };
   }
