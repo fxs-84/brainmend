@@ -265,7 +265,7 @@
   // ============================================================
   function renderReport(data, containerEl) {
     if (!data || !data.parameters) {
-      containerEl.innerHTML = '<p style="color:#888;text-align:center;padding:40px;">暂无报告数据</p>';
+      containerEl.innerHTML = '<p style="color:#888;text-align:center;padding:40px;">暂无报告数据 (此记录无参数)</p>';
       return;
     }
     var r = data;
@@ -273,6 +273,11 @@
     var n = r.neuro || {};
     var p = r.parameters;
     var asym = r.asymmetries || {};
+    // 防御性: 确保 p 中关键字段存在
+    ['gaitSpeed', 'cadence', 'stepLength', 'stepWidth', 'strideLength', 'footAngle', 'stancePct', 'swingPct', 'doubleSupport'].forEach(function (k) {
+      if (!p[k]) p[k] = { value: 0, status: 'normal', unit: '' };
+    });
+    if (!c.primaryLabel) c.primaryLabel = c.primary || '—';
 
     var html = '';
     html += '<div style="background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;padding:24px;border-radius:12px;margin-bottom:16px;">' +
@@ -284,9 +289,9 @@
     html += '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;">' +
       '<h3 style="margin:0 0 12px 0;font-size:16px;">📋 概览</h3>' +
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;">' +
-        summaryCard('步速', fmtNum(p.gaitSpeed.value, 2), 'm/s', colorMap[p.gaitSpeed.status]) +
-        summaryCard('步频', fmtNum(p.cadence.value, 0), '步/分', colorMap[p.cadence.status]) +
-        summaryCard('步长', fmtNum(p.stepLength.value, 2), 'm', colorMap[p.stepLength.status]) +
+        summaryCard('步速', fmtNum((p.gaitSpeed && p.gaitSpeed.value) || 0, 2), 'm/s', (p.gaitSpeed && colorMap[p.gaitSpeed.status]) || '#9ca3af') +
+        summaryCard('步频', fmtNum((p.cadence && p.cadence.value) || 0, 0), '步/分', (p.cadence && colorMap[p.cadence.status]) || '#9ca3af') +
+        summaryCard('步长', fmtNum((p.stepLength && p.stepLength.value) || 0, 2), 'm', (p.stepLength && colorMap[p.stepLength.status]) || '#9ca3af') +
         summaryCard('分类', c.primaryLabel || '—', '', '#0f7b6c') +
       '</div>' +
     '</div>';

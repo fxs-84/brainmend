@@ -1448,11 +1448,25 @@
         if (overlay) overlay.style.display = 'block';
         var body = $('#gait-body');
         if (body) {
-          body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">加载报告中...</div>';
+          body.innerHTML = '<div id="gait-report-status" style="text-align:center;padding:40px;color:#888;">加载报告中...</div>';
         }
+        // 尝试用 gait-report.js 渲染
         if (typeof window.__gaitReport !== 'undefined' && window.__gaitReport.renderReport) {
-          window.__gaitReport.renderReport(all[idx], body);
+          try {
+            window.__gaitReport.renderReport(all[idx], body);
+            console.log('[gait] history item ' + idx + ' rendered via __gaitReport');
+          } catch (err) {
+            console.error('[gait] renderReport failed for history ' + idx, err);
+            console.error('[gait] record keys:', Object.keys(all[idx] || {}).join(','));
+            console.error('[gait] record has parameters:', !!all[idx].parameters);
+            if (all[idx].parameters) {
+              console.error('[gait] parameters keys:', Object.keys(all[idx].parameters).join(','));
+            }
+            // Fallback: 用 setPhase 显示
+            setPhase(PHASE.RESULTS);
+          }
         } else {
+          console.warn('[gait] __gaitReport not available, using setPhase');
           setPhase(PHASE.RESULTS);
         }
         // 添加返回按钮
