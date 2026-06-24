@@ -414,21 +414,64 @@
       events: []       // [{time, side, type:'HS'|'TO', cyclePct}]
     };
 
-    function analyzeOneSide(HS, TO) {
+    // 从踝关节 Y 位置估算 IC (初始触地), 返回 offset = (HS_time - IC_time) / cycle
+    // 踝在摆动末快速下降 → IC → 支撑相缓慢至最低点 (HS 检测点)
+    // 30fps 下摆动末下降可能跨帧丢失, 用位置阈值比速度更鲁棒
+    function estimateICOffset(frames, side, hsFrameIdx) {
+      var kpName = side + '_ankle';
+      var SEARCH_WINDOW = 0.35;
+      var MIN_SEARCH_FRAMES = 3;
+      var SWING_THRESHOLD = 0.20;  // 踝 y 进入 HS 值 20% 范围内 = 已触地
+      var hsTime = frames[hsFrameIdx].t;
+      var hsKp = getKp(frames[hsFrameIdx], kpName);
+      if (!hsKp) return null;
+      var hsY = hsKp.y;
+      // 收集 HS 之前的踝关节点
+      var points = [];
+      for (var f = hsFrameIdx; f >= 0; f--) {
+        if (hsTime - frames[f].t > SEARCH_WINDOW) break;
+        var kp = getKp(frames[f], kpName);
+        if (kp && kp.score >= 0.3) points.unshift({ t: frames[f].t, y: kp.y, f: f });
+      }
+      if (points.length < MIN_SEARCH_FRAMES) return null;
+      // 在搜索窗口内找最高点 (摆动相顶点, y 最小)
+      var minY = Infinity, minIdx = 0;
+      for (var p = 0; p < points.length; p++) {
+        if (points[p].y < minY) { minY = points[p].y; minIdx = p; }
+      }
+      var swingAmplitude = hsY - minY;  // 摆动振幅 (px)
+      if (swingAmplitude < 5) return null;  // 振幅太小, 信号不可靠
+      // 从摆动顶点之后开始, 找到踝 y 首次进入 HS 值 SWING_THRESHOLD 范围内的帧 = IC
+      // 即: 踝从摆动高位下降到接近地面
+      var icTime = null;
+      for (var q = minIdx + 1; q < points.length; q++) {
+        var proximity = (points[q].y - minY) / swingAmplitude;  // 0=最高位, 1=HS位
+        if (proximity > (1 - SWING_THRESHOLD)) {
+          icTime = points[q].t;
+          break;
+        }
+      }
+      if (icTime === null || icTime >= hsTime) return null;
+      return icTime;
+    }
+
+    // Cadence-adaptive fallback offset (当速度检测失败时)
+    function fallbackOffset(cadence) {
+      if (!cadence || cadence <= 0) return 0.25;
+      if (cadence < 60)  return 0.30;  // 慢走, 支撑相长, mid-stance 偏后
+      if (cadence < 90)  return 0.25;  // 正常
+      return 0.20;                      // 快走, 支撑相短, 偏移小
+    }
+
+    function analyzeOneSide(HS, TO, side) {
       if (!HS || HS.length < 2) return { phases: {}, events: [] };
-      // 用最近 TO 估算支撑相比例, 找不到时用默认值 60%
-      var cycleData = [];
       var allEvents = [];
       for (var i = 0; i < HS.length; i++) {
         allEvents.push({ time: HS[i].time, side: HS[i].side || '?', type: 'HS', cyclePct: 0 });
       }
-      // 配对 TO 到 HS (TO 在 HS 之后, 在下一个 HS 之前)
       var toByCycle = {};
       (TO || []).forEach(function (t) { toByCycle[t.cycleIndex] = t; });
       var stancePcts = [], cycleTimes = [];
-      // HS 检测到踝 y 局部最小值 (mid-stance 附近), 实际 IC 在 HS 之前约 25% 周期
-      // 用 HS 反推 IC: IC = HS - 0.25 * cycle (正常人 mid-stance 在周期 25%)
-      var HS_TO_IC_OFFSET = 0.25;
       for (var i = 0; i < HS.length - 1; i++) {
         var cycle = HS[i + 1].time - HS[i].time;
         if (cycle <= 0.2 || cycle >= 3.0) continue;
@@ -436,10 +479,21 @@
         var to = toByCycle[i];
         var stancePct;
         if (to && to.time > HS[i].time && to.time < HS[i + 1].time) {
-          // stance = (TO - IC) / cycle = (TO - (HS - 0.25*cycle)) / cycle
-          stancePct = ((to.time - (HS[i].time - HS_TO_IC_OFFSET * cycle)) / cycle) * 100;
+          // 自适应偏移: 用踝 Y 速度检测 IC, 失败时 fallback 到 cadence-adaptive 默认值
+          var icTime = estimateICOffset(frames, side, HS[i].frameIndex);
+          var offset;
+          if (icTime !== null && icTime < HS[i].time) {
+            offset = (HS[i].time - icTime) / cycle;
+            // clamp 到合理范围
+            if (offset < 0.10) offset = 0.10;
+            if (offset > 0.40) offset = 0.40;
+          } else {
+            var estCadence = 60 / cycle;
+            offset = fallbackOffset(estCadence);
+          }
+          stancePct = ((to.time - (HS[i].time - offset * cycle)) / cycle) * 100;
         } else {
-          stancePct = 60;  // 正常值兜底
+          stancePct = 60;
         }
         stancePcts.push(stancePct);
         if (to) {
@@ -470,8 +524,8 @@
       };
     }
 
-    var leftStats = analyzeOneSide(leftHS || [], leftTO || []);
-    var rightStats = analyzeOneSide(rightHS || [], rightTO || []);
+    var leftStats = analyzeOneSide(leftHS || [], leftTO || [], 'left');
+    var rightStats = analyzeOneSide(rightHS || [], rightTO || [], 'right');
     var sideCount = 0;
     if (leftStats.phasePcts) { sideCount++; phaseStats.totalCycles = leftStats.events.filter(function (e) { return e.type === 'HS'; }).length - 1; }
     if (rightStats.phasePcts) { sideCount++; phaseStats.totalCycles = Math.max(phaseStats.totalCycles, rightStats.events.filter(function (e) { return e.type === 'HS'; }).length - 1); }
