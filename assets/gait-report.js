@@ -344,22 +344,24 @@
       ];
       html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">';
       phases.forEach(function (p) {
-        var pct = gp.phases[p.key] || 0;
+        var phaseData = gp.phases[p.key];
+        var pct = (phaseData && typeof phaseData === 'object') ? (phaseData.pct || 0) : (phaseData || 0);
         var color = p.key === 'IC' || p.key === 'PSw' ? '#dc2626' :
                     p.key === 'LR' || p.key === 'TSt' ? '#f59e0b' :
                     p.key === 'MSt' || p.key === 'MSw' ? '#10b981' : '#3b82f6';
         html += '<div style="padding:10px;background:#f8f9fa;border-radius:6px;border-top:3px solid ' + color + ';">' +
           '<div style="color:#888;font-size:10px;">' + p.short + ' · ' + p.range + '</div>' +
           '<div style="font-size:13px;color:#333;font-weight:600;margin:2px 0;">' + p.name + '</div>' +
-          '<div style="font-size:18px;font-weight:700;color:' + color + ';">' + pct.toFixed(1) + '%</div>' +
+          '<div style="font-size:18px;font-weight:700;color:' + color + ';">' + (typeof pct === 'number' ? pct.toFixed(1) : '0.0') + '%</div>' +
         '</div>';
       });
       html += '</div>';
       // 步态事件列表 (前 12 个)
       if (gp.events && gp.events.length > 0) {
         var evtList = gp.events.slice(0, 12).map(function (e) {
+          var side = (e.side && e.side.charAt) ? e.side.charAt(0).toUpperCase() : '?';
           return '<span style="display:inline-block;padding:3px 8px;margin:2px;background:' + (e.type === 'HS' ? '#dbeafe' : '#fef3c7') + ';border-radius:4px;font-size:11px;color:' + (e.type === 'HS' ? '#1e40af' : '#92400e') + ';">' +
-            e.type + ' ' + e.side.charAt(0).toUpperCase() + ' @ ' + e.time.toFixed(2) + 's</span>';
+            (e.type || '?') + ' ' + side + ' @ ' + (typeof e.time === 'number' ? e.time.toFixed(2) : '?') + 's</span>';
         }).join('');
         html += '<div style="padding:8px;background:#f0f2f5;border-radius:6px;line-height:1.8;">' +
           '<b style="font-size:12px;color:#333;">步态事件时间轴 (前 12 个):</b><br>' + evtList +
