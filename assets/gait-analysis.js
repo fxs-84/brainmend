@@ -443,7 +443,7 @@
       fps = fps || 30;
       var duration = videoEl.duration;
       if (!isFinite(duration) || duration <= 0) return reject(new Error('Invalid video duration'));
-      var frameCount = Math.min(Math.floor(duration * fps), 600);  // 上限 600 帧
+      var frameCount = Math.min(Math.floor(duration * fps), 600);
       var actualFps = frameCount / duration;
       var frames = [];
       var canvas = document.createElement('canvas');
@@ -451,41 +451,60 @@
       canvas.height = videoEl.videoHeight || 480;
       var ctx = canvas.getContext('2d');
       var idx = 0;
+      var finished = false;
 
-      function seekNext() {
+      function captureCurrentFrame() {
         if (idx >= frameCount) {
+          finished = true;
           videoEl.pause();
+          videoEl.removeEventListener('seeked', onSeeked);
           resolve(frames);
           return;
         }
-        var t = idx / actualFps;
-        videoEl.currentTime = t;
-      }
-
-      videoEl.addEventListener('seeked', function onSeeked() {
-        videoEl.removeEventListener('seeked', onSeeked);
         try {
-          ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-          var dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-          frames.push({ t: idx / actualFps, imageData: dataUrl, w: canvas.width, h: canvas.height });
+          if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+            canvas.width = videoEl.videoWidth;
+            canvas.height = videoEl.videoHeight;
+            ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+            var dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+            frames.push({ t: idx / actualFps, imageData: dataUrl, w: canvas.width, h: canvas.height });
+          }
         } catch (e) {
-          console.warn('[gait] frame capture error', e);
+          console.warn('[gait] frame capture error at', idx, e.message);
         }
         idx++;
-        updateProcessingProgress(idx / frameCount * 0.3);  // 帧提取占总进度 30%
-        // 让 UI 有机会刷新
-        if (idx % 5 === 0) {
-          setTimeout(seekNext, 0);
-        } else {
-          seekNext();
+        updateProcessingProgress(0.05 + (idx / frameCount) * 0.2);
+        if (idx >= frameCount) {
+          finished = true;
+          videoEl.pause();
+          videoEl.removeEventListener('seeked', onSeeked);
+          resolve(frames);
+          return;
         }
-      });
+        setTimeout(function () {
+          if (finished) return;
+          try { videoEl.currentTime = idx / actualFps; }
+          catch (e) { console.warn('[gait] seek error', e.message); }
+        }, 10);
+      }
 
+      function onSeeked() {
+        if (finished) return;
+        captureCurrentFrame();
+      }
+
+      videoEl.addEventListener('seeked', onSeeked);
       videoEl.addEventListener('error', function (e) {
+        if (finished) return;
+        finished = true;
         reject(new Error('Video error during frame extraction'));
       });
 
-      seekNext();
+      setTimeout(function () {
+        if (finished) return;
+        try { videoEl.currentTime = idx / actualFps; }
+        catch (e) { reject(new Error('Seek init failed: ' + e.message)); }
+      }, 100);
     });
   }
 
