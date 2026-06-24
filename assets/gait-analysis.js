@@ -42,7 +42,8 @@
     errorMessage: null,
     cameraDevices: [],    // [{deviceId, label, facingHint}]
     selectedDeviceId: null,
-    cameraFacing: 'environment'  // 'environment' 后置 / 'user' 前置 (移动设备默认值)
+    cameraFacing: 'environment',  // 'environment' 后置 / 'user' 前置 (移动设备默认值)
+    cameraSide: 'right'          // 摄像头在患者哪一侧: 'left' / 'right'
   };
 
   // ============================================================
@@ -279,6 +280,26 @@
             }
           }
         });
+      });
+    });
+  }
+
+  // 摄像方位选择器 — 告知系统摄像头在患者哪一侧 (用于左右标签校正)
+  function renderCameraSideSelector() {
+    var isLeft = state.cameraSide === 'left';
+    var isRight = state.cameraSide === 'right';
+    return '<div style="background:#fff;padding:10px 14px;border-radius:8px;margin-bottom:8px;display:flex;align-items:center;gap:8px;font-size:12px;color:#666;">' +
+      '<span style="font-weight:600;">📷 摄像头方位:</span>' +
+      '<button class="gait-side-btn" data-side="left" style="padding:5px 14px;border-radius:6px;cursor:pointer;font-size:12px;border:1px solid ' + (isLeft ? '#43E97B' : 'rgba(0,0,0,0.15)') + ';background:' + (isLeft ? 'linear-gradient(135deg,#43E97B,#38F9D7)' : 'rgba(0,0,0,0.04)') + ';color:' + (isLeft ? '#fff' : '#666') + ';">患者左侧</button>' +
+      '<button class="gait-side-btn" data-side="right" style="padding:5px 14px;border-radius:6px;cursor:pointer;font-size:12px;border:1px solid ' + (isRight ? '#43E97B' : 'rgba(0,0,0,0.15)') + ';background:' + (isRight ? 'linear-gradient(135deg,#43E97B,#38F9D7)' : 'rgba(0,0,0,0.04)') + ';color:' + (isRight ? '#fff' : '#666') + ';">患者右侧</button>' +
+      '<span style="font-size:11px;opacity:0.7;">用于校正左右腿识别</span>' +
+    '</div>';
+  }
+  function attachCameraSideHandlers() {
+    document.querySelectorAll('.gait-side-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        state.cameraSide = btn.dataset.side;
+        renderPhase();
       });
     });
   }
@@ -521,6 +542,14 @@
 
       // 3. 姿势检测
       var keypointFrames = await detectPoses(frames);
+      updateProcessingProgress(0.90);
+
+      // 3b. 左右标签校正 — 根据摄像头侧+行走方向判断是否需要交换 MoveNet 标签
+      var walkDir = window.__gaitParams.detectWalkingDirection(keypointFrames);
+      var sideResolution = window.__gaitParams.resolveAnatomicalSides(keypointFrames, state.cameraSide, walkDir);
+      if (sideResolution.swapNeeded) {
+        keypointFrames = window.__gaitParams.swapKeypointLabels(keypointFrames);
+      }
       updateProcessingProgress(0.92);
 
       // 4. 计算步态参数
@@ -552,6 +581,8 @@
         armSwing: params.armSwing,
         elbowSwing: params.elbowSwing,
         kneeBraking: { left: params.kneeLeft, right: params.kneeRight },
+        sideResolution: sideResolution,
+        walkingDirection: walkDir,
         brainProfile: window.__gaitParams.computeBrainGaitProfile(
           params.armSwing, params.elbowSwing, params.kneeLeft, params.kneeRight, params
         ),
@@ -677,6 +708,7 @@
     setBody(
       renderError() +
       renderCameraSelector() +
+      renderCameraSideSelector() +
       '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;">' +
         '<h3 style="margin:0 0 8px 0;">&#x1f4cf; 身高自动标定</h3>' +
         '<p style="color:#666;font-size:13px;margin:0 0 12px 0;">输入患者<b>身高 (cm)</b>, 系统将自动从视频画面中识别头顶和踝关节像素距离, 计算比例尺。无需 1 米标尺, 适用于实际临床录制场景。</p>' +
@@ -704,6 +736,7 @@
         renderPhase();
       } else {
         attachCameraSelectorHandlers();
+        attachCameraSideHandlers();
         checkOrientation();
       }
     });
@@ -881,6 +914,7 @@
     setBody(
       renderError() +
       renderCameraSelector() +
+      renderCameraSideSelector() +
       '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;">' +
         '<h3 style="margin:0 0 8px 0;">📹 视频采集</h3>' +
         '<p style="color:#666;font-size:13px;margin:0 0 12px 0;">录制或上传 5-15 秒自然行走的视频 (侧方视角最佳)</p>' +
@@ -950,6 +984,7 @@
       startCamera().then(function (ok) {
         if (!ok) { renderPhase(); return; }
         attachCameraSelectorHandlers();
+        attachCameraSideHandlers();
         checkOrientation();
         $('#gait-record-start').style.display = 'none';
         $('#gait-record-stop').style.display = '';

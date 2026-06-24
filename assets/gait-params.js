@@ -657,6 +657,117 @@
   //       3) 中值滤波剔除离群点
   //       4) 最小间隔约束 (>= 0.30s, 正常人最快 ~200步/分)
   // ============================================================
+  // 行走方向检测 — 从踝关节 X 轨迹判断患者从左向右还是从右向左走
+  // ============================================================
+  function detectWalkingDirection(frames) {
+    if (!frames || frames.length < 30) return 'unknown';
+    var leftX = [], rightX = [];
+    for (var i = 0; i < frames.length; i++) {
+      var la = getKp(frames[i], 'left_ankle');
+      var ra = getKp(frames[i], 'right_ankle');
+      if (la && la.score >= 0.3) leftX.push({ t: frames[i].t, x: la.x });
+      if (ra && ra.score >= 0.3) rightX.push({ t: frames[i].t, x: ra.x });
+    }
+    // 合并两侧踝 X 的斜率
+    var allX = leftX.concat(rightX).sort(function(a,b) { return a.t - b.t; });
+    if (allX.length < 20) return 'unknown';
+    // 线性回归求 X 趋势斜率
+    var n = allX.length, sx = 0, sy = 0, sxy = 0, sx2 = 0;
+    for (var j = 0; j < n; j++) {
+      sx += allX[j].t; sy += allX[j].x;
+      sxy += allX[j].t * allX[j].x; sx2 += allX[j].t * allX[j].t;
+    }
+    var slope = (n * sxy - sx * sy) / (n * sx2 - sx * sx);
+    if (Math.abs(slope) < 3) return 'stationary';  // 几乎没有横向移动
+    return slope > 0 ? 'left_to_right' : 'right_to_left';
+  }
+
+  // ============================================================
+  // 左右标签校正 — 根据摄像头侧和行走方向, 校正 MoveNet 左右标签
+  //
+  // 侧方拍摄时, 靠近摄像头的腿在画面中更低 (y 更大), 置信度更高
+  // 通过比较左右腿的平均置信度和 Y 位置, 判断哪条腿更靠近摄像头
+  // 再根据用户指定的 cameraSide 决定是否需要交换标签
+  // ============================================================
+  function resolveAnatomicalSides(frames, cameraSide, walkDir) {
+    if (!frames || frames.length < 10) return { swapNeeded: false, reason: 'insufficient_frames' };
+    if (!cameraSide || (cameraSide !== 'left' && cameraSide !== 'right')) {
+      cameraSide = 'right';  // 默认摄像头在患者右侧
+    }
+    // 统计左右腿关键点的平均置信度和 Y 位置
+    var leftConf = 0, rightConf = 0, leftY = 0, rightY = 0;
+    var leftCount = 0, rightCount = 0;
+    for (var i = 0; i < frames.length; i++) {
+      var la = getKp(frames[i], 'left_ankle');
+      var ra = getKp(frames[i], 'right_ankle');
+      var lk = getKp(frames[i], 'left_knee');
+      var rk = getKp(frames[i], 'right_knee');
+      var lh = getKp(frames[i], 'left_hip');
+      var rh = getKp(frames[i], 'right_hip');
+      if (la && la.score >= 0.2) { leftConf += la.score; leftY += la.y; leftCount++; }
+      if (ra && ra.score >= 0.2) { rightConf += ra.score; rightY += ra.y; rightCount++; }
+      if (lk && lk.score >= 0.2) { leftConf += lk.score; leftY += lk.y; leftCount++; }
+      if (rk && rk.score >= 0.2) { rightConf += rk.score; rightY += rk.y; rightCount++; }
+      if (lh && lh.score >= 0.2) { leftConf += lh.score; leftY += lh.y; leftCount++; }
+      if (rh && rh.score >= 0.2) { rightConf += rh.score; rightY += rh.y; rightCount++; }
+    }
+    if (leftCount < 10 || rightCount < 10) return { swapNeeded: false, reason: 'insufficient_keypoints' };
+
+    leftConf /= leftCount; rightConf /= rightCount;
+    leftY /= leftCount; rightY /= rightCount;
+
+    // 靠近摄像头的腿: 画面中 Y 更大 (更低), 置信度更高
+    var leftCloser = (leftY > rightY) && (leftConf >= rightConf * 0.8);
+    var rightCloser = (rightY > leftY) && (rightConf >= leftConf * 0.8);
+
+    // 如果无法判断 (正面而非侧面), 信任 MoveNet 标签
+    if (!leftCloser && !rightCloser) {
+      return { swapNeeded: false, reason: 'frontal_view_or_ambiguous', leftConf: leftConf, rightConf: rightConf, leftY: leftY, rightY: rightY };
+    }
+
+    var closerSide = leftCloser ? 'left' : 'right';
+    // 如果靠近摄像头的 MoveNet 标签 == cameraSide, 说明标签正确, 无需交换
+    // 如果靠近摄像头的 MoveNet 标签 != cameraSide, 需要交换
+    var swapNeeded = (closerSide !== cameraSide);
+
+    return {
+      swapNeeded: swapNeeded,
+      closerSide: closerSide,
+      cameraSide: cameraSide,
+      confidenceDiff: Math.abs(leftConf - rightConf),
+      yDiff: Math.abs(leftY - rightY),
+      reason: swapNeeded ? 'closer_leg_mismatch' : 'labels_correct',
+      leftConf: leftConf, rightConf: rightConf,
+      leftY: leftY, rightY: rightY
+    };
+  }
+
+  // 对帧数据执行左右标签交换
+  function swapKeypointLabels(frames) {
+    var swapMap = {
+      'left_ankle': 'right_ankle', 'right_ankle': 'left_ankle',
+      'left_knee': 'right_knee', 'right_knee': 'left_knee',
+      'left_hip': 'right_hip', 'right_hip': 'left_hip',
+      'left_shoulder': 'right_shoulder', 'right_shoulder': 'left_shoulder',
+      'left_elbow': 'right_elbow', 'right_elbow': 'left_elbow',
+      'left_wrist': 'right_wrist', 'right_wrist': 'left_wrist',
+      'left_eye': 'right_eye', 'right_eye': 'left_eye',
+      'left_ear':'right_ear','right_ear':'left_ear'
+    };
+    for (var i = 0; i < frames.length; i++) {
+      var kps = frames[i].keypoints;
+      if (!kps) continue;
+      for (var j = 0; j < kps.length; j++) {
+        var name = kps[j].name;
+        if (swapMap[name]) {
+          kps[j] = Object.assign({}, kps[j], { name: swapMap[name] });
+        }
+      }
+    }
+    return frames;
+  }
+
+  // ============================================================
   function detectHeelStrikes(frames, side) {
     var kpName = side + '_ankle';
     var points = [];
@@ -1564,6 +1675,9 @@
     computeElbowSwing: computeElbowSwing,
     computeKneeBraking: computeKneeBraking,
     computeBrainGaitProfile: computeBrainGaitProfile,
+    detectWalkingDirection: detectWalkingDirection,
+    resolveAnatomicalSides: resolveAnatomicalSides,
+    swapKeypointLabels: swapKeypointLabels,
     detectHeelStrikes: detectHeelStrikes,
     detectToeOffs: detectToeOffs,
     computeGaitCyclePhases: computeGaitCyclePhases,
