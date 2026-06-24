@@ -549,6 +549,7 @@
         parameters: params.parameters,
         asymmetries: params.asymmetries,
         extras: params.extras,
+        armSwing: params.armSwing,
         events: {
           leftHeelStrikes: leftHS,
           rightHeelStrikes: rightHS,
@@ -1102,6 +1103,46 @@
           '<div style="margin-top:10px;padding:8px;background:#f0f2f5;border-radius:6px;font-size:11px;color:#666;line-height:1.7;">' +
             '<b>临床意义</b>: 偏瘫步态常见 LR 延长 (承重困难); 帕金森步态常见 PSw 缩短 (推离无力); 小脑共济失调常见 MSw 变长 (平衡调整); 足下垂常见 ISw/TSw 延长 (廓清障碍)。' +
           '</div>' +
+        '</div>'
+      : '') +
+      // 上肢摆动分析 (ANRM §4.2 上肢观察)
+      (r.armSwing && !r.armSwing.error ?
+        '<h3 style="margin:20px 0 10px 0;font-size:16px;color:#1a1a2e;">💪 上肢摆动分析</h3>' +
+        '<div style="background:#fff;padding:16px;border-radius:10px;margin-bottom:14px;">' +
+          // 肩摆动
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px;">' +
+            '<div style="padding:10px;background:#f8f9fa;border-radius:8px;text-align:center;">' +
+              '<div style="font-size:11px;color:#888;">左肩摆动</div>' +
+              '<div style="font-size:22px;font-weight:700;color:#1a1a2e;">' + (r.armSwing.shoulder.leftAmplitude || 0).toFixed(1) + ' <span style="font-size:12px;color:#999;">' + (r.armSwing.shoulder.unit || 'px') + '</span></div>' +
+              '<div style="font-size:11px;color:#888;">归一化: ' + (r.armSwing.shoulder.leftNormalized || 0).toFixed(2) + '</div>' +
+            '</div>' +
+            '<div style="padding:10px;background:#f8f9fa;border-radius:8px;text-align:center;">' +
+              '<div style="font-size:11px;color:#888;">右肩摆动</div>' +
+              '<div style="font-size:22px;font-weight:700;color:#1a1a2e;">' + (r.armSwing.shoulder.rightAmplitude || 0).toFixed(1) + ' <span style="font-size:12px;color:#999;">' + (r.armSwing.shoulder.unit || 'px') + '</span></div>' +
+              '<div style="font-size:11px;color:#888;">归一化: ' + (r.armSwing.shoulder.rightNormalized || 0).toFixed(2) + '</div>' +
+            '</div>' +
+            '<div style="padding:10px;background:#f8f9fa;border-radius:8px;text-align:center;">' +
+              '<div style="font-size:11px;color:#888;">肩摆不对称</div>' +
+              '<div style="font-size:22px;font-weight:700;color:' + ((r.armSwing.shoulder.asymmetry || 0) > 0.25 ? '#dc2626' : '#10b981') + ';">' + ((r.armSwing.shoulder.asymmetry || 0) * 100).toFixed(0) + '%</div>' +
+              '<div style="font-size:11px;color:#888;">正常 < 20%</div>' +
+            '</div>' +
+            '<div style="padding:10px;background:#f8f9fa;border-radius:8px;text-align:center;">' +
+              '<div style="font-size:11px;color:#888;">上下肢协调</div>' +
+              '<div style="font-size:22px;font-weight:700;color:' + ((r.armSwing.coordination.avg || 0) < 0.25 ? '#dc2626' : '#10b981') + ';">' + ((r.armSwing.coordination.avg || 0) * 100).toFixed(0) + '%</div>' +
+              '<div style="font-size:11px;color:#888;">正常 > 25%</div>' +
+            '</div>' +
+          '</div>' +
+          // 腕部辅助指标
+          '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:12px;padding:10px;background:#f0f2f5;border-radius:6px;">' +
+            '<div>腕摆动 L: <b>' + ((r.armSwing.wrist.leftAmplitude || 0)).toFixed(1) + ' ' + (r.armSwing.shoulder.unit || 'px') + '</b></div>' +
+            '<div>腕摆动 R: <b>' + ((r.armSwing.wrist.rightAmplitude || 0)).toFixed(1) + ' ' + (r.armSwing.shoulder.unit || 'px') + '</b></div>' +
+            '<div>腕不对称: <b>' + ((r.armSwing.wrist.asymmetry || 0) * 100).toFixed(0) + '%</b></div>' +
+          '</div>' +
+          // 临床标记
+          (r.armSwing.flags && r.armSwing.flags.length > 0 ?
+            '<div style="margin-top:10px;padding:8px 12px;background:#fef3c7;border-radius:6px;border-left:3px solid #f59e0b;">' +
+              r.armSwing.flags.map(function (f) { return '<div style="font-size:12px;color:#92400e;line-height:1.6;">⚠ ' + f + '</div>'; }).join('') +
+            '</div>' : '') +
         '</div>'
       : '') +
       // 不对称分析

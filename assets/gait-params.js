@@ -192,6 +192,185 @@
   }
 
   // ============================================================
+  // 上肢摆动分析 — ANRM §4.2 上肢观察要点
+  //
+  // 肩摆动 (shoulder swing) 是躯干旋转+臂摆的复合运动, 临床价值:
+  //   肩摆减少 → 帕金森最早体征 (ANRM §8.2 慌张步态: "摆臂减少")
+  //   不对称   → 偏瘫步态 (ANRM §8.1: "患侧上肢屈曲协同")
+  //   过度摆动 → 小脑共济失调 (ANRM §8.3: 辨距不良泛化)
+  //   无摆动   → 晚期帕金森/卒中后痉挛固定
+  //
+  // 腕摆动 (wrist swing) 作为辅助: 反映肘屈伸 + 肩摆的叠加
+  // ============================================================
+  function computeArmSwing(frames, scale) {
+    if (!frames || frames.length < 10) return { error: 'insufficient_frames' };
+
+    // ---- 提取肩部水平摆动信号 (相对身体中线) ----
+    var leftShoulderX = [], rightShoulderX = [];
+    var leftShoulderRaw = [], rightShoulderRaw = [];
+    for (var i = 0; i < frames.length; i++) {
+      var ls = getKp(frames[i], 'left_shoulder');
+      var rs = getKp(frames[i], 'right_shoulder');
+      if (ls && rs && ls.score >= 0.3 && rs.score >= 0.3) {
+        var midX = (ls.x + rs.x) / 2;  // 身体中线
+        leftShoulderX.push({ t: frames[i].t, x: ls.x - midX });   // 左肩相对中线
+        rightShoulderX.push({ t: frames[i].t, x: rs.x - midX });  // 右肩相对中线 (与左肩反相)
+        leftShoulderRaw.push({ t: frames[i].t, x: ls.x });
+        rightShoulderRaw.push({ t: frames[i].t, x: rs.x });
+      }
+    }
+    // ---- 提取腕部摆动信号 (相对同侧肩) ----
+    var leftWristX = [], rightWristX = [];
+    for (var j = 0; j < frames.length; j++) {
+      var lw = getKp(frames[j], 'left_wrist');
+      var rw = getKp(frames[j], 'right_wrist');
+      var ls2 = getKp(frames[j], 'left_shoulder');
+      var rs2 = getKp(frames[j], 'right_shoulder');
+      if (lw && ls2 && lw.score >= 0.25 && ls2.score >= 0.3) {
+        leftWristX.push({ t: frames[j].t, x: lw.x - ls2.x });
+      }
+      if (rw && rs2 && rw.score >= 0.25 && rs2.score >= 0.3) {
+        rightWristX.push({ t: frames[j].t, x: rw.x - rs2.x });
+      }
+    }
+    // ---- 肩宽 (用于归一化) ----
+    var shoulderWidths = [];
+    for (var k = 0; k < frames.length; k += 5) {  // 每5帧采样
+      var ls3 = getKp(frames[k], 'left_shoulder');
+      var rs3 = getKp(frames[k], 'right_shoulder');
+      if (ls3 && rs3 && ls3.score >= 0.3 && rs3.score >= 0.3) {
+        shoulderWidths.push(Math.abs(rs3.x - ls3.x));
+      }
+    }
+    var avgShoulderWidth = shoulderWidths.length > 0 ?
+      shoulderWidths.reduce(function (s, v) { return s + v; }, 0) / shoulderWidths.length : 40;
+
+    // ---- 信号分析工具函数 ----
+    function peakToPeak(signal) {
+      if (signal.length < 5) return 0;
+      var vals = signal.map(function (s) { return s.x; });
+      return Math.abs(Math.max.apply(null, vals) - Math.min.apply(null, vals));
+    }
+    // 去趋势后峰峰值 (更鲁棒)
+    function detrendedP2P(signal) {
+      if (signal.length < 10) return peakToPeak(signal);
+      var n = signal.length;
+      var sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+      for (var i = 0; i < n; i++) {
+        sumX += i; sumY += signal[i].x;
+        sumXY += i * signal[i].x; sumX2 += i * i;
+      }
+      var slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+      var intercept = (sumY - slope * sumX) / n;
+      var detrended = signal.map(function (s, idx) {
+        return { x: s.x - (slope * idx + intercept), t: s.t };
+      });
+      return peakToPeak(detrended);
+    }
+    function crossCorrelate(sigA, sigB) {
+      var n = Math.min(sigA.length, sigB.length);
+      if (n < 10) return 0;
+      var meanA = sigA.slice(0, n).reduce(function (s, v) { return s + v.x; }, 0) / n;
+      var meanB = sigB.slice(0, n).reduce(function (s, v) { return s + v.x; }, 0) / n;
+      var num = 0, denA = 0, denB = 0;
+      for (var i = 0; i < n; i++) {
+        var da = sigA[i].x - meanA;
+        var db = sigB[i].x - meanB;
+        num += da * db;
+        denA += da * da;
+        denB += db * db;
+      }
+      if (denA === 0 || denB === 0) return 0;
+      return num / Math.sqrt(denA * denB);
+    }
+    // ---- 踝关节 x 信号 (用于上下肢协调) ----
+    var leftAnkleX = [], rightAnkleX = [];
+    for (var m = 0; m < frames.length; m++) {
+      var la = getKp(frames[m], 'left_ankle');
+      var ra = getKp(frames[m], 'right_ankle');
+      if (la && la.score >= 0.3) leftAnkleX.push({ t: frames[m].t, x: la.x });
+      if (ra && ra.score >= 0.3) rightAnkleX.push({ t: frames[m].t, x: ra.x });
+    }
+
+    // ---- 计算肩摆动指标 (主要) ----
+    var shLeftP2P  = detrendedP2P(leftShoulderX);
+    var shRightP2P = detrendedP2P(rightShoulderX);
+    // 归一化: 摆动幅度 / 肩宽 → 无量纲摆动指数 (正常 ~0.15-0.35)
+    var shLeftNorm  = avgShoulderWidth > 0 ? shLeftP2P / avgShoulderWidth : 0;
+    var shRightNorm = avgShoulderWidth > 0 ? shRightP2P / avgShoulderWidth : 0;
+    var shAvgNorm = (shLeftNorm + shRightNorm) / 2;
+
+    // 肩摆不对称
+    var shAsymmetry = (shLeftP2P + shRightP2P) > 0 ?
+      Math.abs(shLeftP2P - shRightP2P) / ((shLeftP2P + shRightP2P) / 2) : 0;
+
+    // ---- 计算腕摆动指标 (辅助) ----
+    var wrLeftP2P  = detrendedP2P(leftWristX);
+    var wrRightP2P = detrendedP2P(rightWristX);
+    var wrAsymmetry = (wrLeftP2P + wrRightP2P) > 0 ?
+      Math.abs(wrLeftP2P - wrRightP2P) / ((wrLeftP2P + wrRightP2P) / 2) : 0;
+
+    // ---- 上下肢协调 (肩 vs 对侧踝) ----
+    var leftShRightAnkle  = crossCorrelate(leftShoulderX, rightAnkleX);
+    var rightShLeftAnkle  = crossCorrelate(rightShoulderX, leftAnkleX);
+    var avgCoordination = (Math.abs(leftShRightAnkle) + Math.abs(rightShLeftAnkle)) / 2;
+
+    // ---- 厘米换算 ----
+    var ampUnit = scale && scale > 0 ? 'cm' : 'px';
+    var convert = scale && scale > 0 ? scale * 100 : 1;
+    var shLeftCm  = shLeftP2P * convert;
+    var shRightCm = shRightP2P * convert;
+    var shAvgCm   = (shLeftCm + shRightCm) / 2;
+    var wrLeftCm  = wrLeftP2P * convert;
+    var wrRightCm = wrRightP2P * convert;
+
+    // ---- 临床标记 (基于 ANRM 手册) ----
+    var flags = [];
+    if (shAvgNorm < 0.08) flags.push('肩摆严重减少 — ANRM §8.2: 帕金森摆臂减少/冻结');
+    else if (shAvgNorm < 0.15) flags.push('肩摆轻度减少 — ANRM: 早期帕金森或老年步态');
+    if (shAsymmetry > 0.30) flags.push('肩摆不对称(' + (shAsymmetry * 100).toFixed(0) + '%) — ANRM §8.1: 偏瘫上肢屈曲协同');
+    else if (shAsymmetry > 0.20) flags.push('肩摆轻度不对称(' + (shAsymmetry * 100).toFixed(0) + '%) — ANRM: 单侧基底节/皮质病变');
+    if (avgCoordination < 0.25) flags.push('上下肢失协调 — ANRM §8.3: 小脑共济失调 (辨距不良泛化至上肢)');
+    if (shAvgCm < 2 && wrLeftCm < 3 && wrRightCm < 3) flags.push('上肢固定 — ANRM: 晚期帕金森/卒中后痉挛固定');
+    if (shAvgNorm > 0.40) flags.push('肩摆过度 — ANRM §8.3: 共济失调辨距不良');
+
+    return {
+      // 肩摆动 (主要指标)
+      shoulder: {
+        leftAmplitude: shLeftCm,
+        rightAmplitude: shRightCm,
+        avgAmplitude: shAvgCm,
+        leftNormalized: shLeftNorm,
+        rightNormalized: shRightNorm,
+        avgNormalized: shAvgNorm,
+        asymmetry: shAsymmetry,
+        unit: ampUnit,
+        shoulderWidthPx: avgShoulderWidth
+      },
+      // 腕摆动 (辅助指标)
+      wrist: {
+        leftAmplitude: wrLeftCm,
+        rightAmplitude: wrRightCm,
+        asymmetry: wrAsymmetry
+      },
+      // 上下肢协调
+      coordination: {
+        leftShoulderRightAnkle: leftShRightAnkle,
+        rightShoulderLeftAnkle: rightShLeftAnkle,
+        avg: avgCoordination
+      },
+      // 信号质量
+      quality: {
+        leftShoulderPoints: leftShoulderX.length,
+        rightShoulderPoints: rightShoulderX.length,
+        leftWristPoints: leftWristX.length,
+        rightWristPoints: rightWristX.length
+      },
+      flags: flags
+    };
+  }
+
+  // ============================================================
   // 足跟着地检测 (Heel-Strike Detection)
   //
   // 算法: 踝关节 y 坐标在每步周期内有最低点 (离地最近, 图像 y 最小)
@@ -847,7 +1026,8 @@
         trunkLeanFwd: trunkLeanFwd,
         rhythmCV:     rhythmCV,
         stepCount:    allHS.length
-      }
+      },
+      armSwing: computeArmSwing(frames, scale)
     };
   }
 
@@ -861,21 +1041,34 @@
     var e = params.extras || {};
 
     var scores = {};
+    var arm = params.armSwing || {};
 
-    // 偏瘫步态: 步长↓ + 不对称性↑ + 支撑相比正常短
+    // 偏瘫步态: 步长↓ + 不对称性↑ + 肩摆不对称 (ANRM §8.1 上肢屈曲协同)
     if (p.stepLength.value < 0.50 && a.stepLength > 0.20 && a.stance > 0.05) {
       scores.hemiplegic = 0.40 + (0.50 - p.stepLength.value) * 0.5 + a.stepLength * 0.5;
+      if (arm.shoulder && arm.shoulder.asymmetry > 0.25) {
+        scores.hemiplegic += Math.min(arm.shoulder.asymmetry, 0.6) * 0.25;
+      }
     } else { scores.hemiplegic = 0; }
 
-    // 帕金森步态: 步频↑ + 步长↓↓ + 步速↓ + 躯干前倾
+    // 帕金森步态: 步频↑ + 步长↓↓ + 步速↓ + 躯干前倾 + 肩摆减少 (ANRM §8.2 摆臂减少)
     if (p.cadence.value > 110 && p.stepLength.value < 0.40 && p.gaitSpeed.value < 0.9) {
       scores.parkinsonian = 0.30 + (p.cadence.value - 110) / 50 * 0.2 +
         (0.40 - p.stepLength.value) * 0.3 + (e.trunkLeanFwd > 0 ? Math.min(e.trunkLeanFwd, 20) / 20 * 0.2 : 0);
+      if (arm.shoulder && arm.shoulder.avgNormalized < 0.12) {
+        scores.parkinsonian += (0.12 - arm.shoulder.avgNormalized) * 1.5;
+      }
     } else { scores.parkinsonian = 0; }
 
-    // 共济失调步态: 步宽↑ + 节奏变异↑
+    // 共济失调步态: 步宽↑ + 节奏变异↑ + 上下肢失协调 (ANRM §8.3 辨距不良泛化)
     if (p.stepWidth.value > 0.13 && e.rhythmCV > 0.15) {
       scores.ataxic = 0.25 + (p.stepWidth.value - 0.13) * 1.5 + e.rhythmCV * 0.5;
+      if (arm.coordination && arm.coordination.avg < 0.25) {
+        scores.ataxic += (0.25 - arm.coordination.avg) * 0.8;
+      }
+      if (arm.shoulder && arm.shoulder.avgNormalized > 0.35) {
+        scores.ataxic += (arm.shoulder.avgNormalized - 0.35) * 0.6;
+      }
     } else { scores.ataxic = 0; }
 
     // 足下垂步态: 步长↓ + 足偏角异常 + 不对称
@@ -1089,6 +1282,7 @@
     inferFoot: inferFoot,
     extractFootKeypoints: extractFootKeypoints,
     extractTrunkAngle: extractTrunkAngle,
+    computeArmSwing: computeArmSwing,
     detectHeelStrikes: detectHeelStrikes,
     detectToeOffs: detectToeOffs,
     computeGaitCyclePhases: computeGaitCyclePhases,
