@@ -741,8 +741,8 @@
       '<div style="background:#fff;padding:24px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);margin-bottom:16px;">' +
         '<h3 style="margin:0 0 12px 0;color:#1a1a2e;">📋 评估流程</h3>' +
         '<ol style="line-height:1.9;color:#444;padding-left:24px;margin:0;">' +
-          '<li><b>身高标定</b>: 输入患者身高, 系统自动从摄像头画面识别头顶和踝关节像素距离 (无需 1 米标尺, 适用于实际临床录制)</li>' +
-          '<li><b>视频采集</b>: 录制 10-15 秒自然行走, 或上传已有视频</li>' +
+          '<li><b>身高标定</b>: 输入患者身高, 系统自动从视频画面识别头顶-踝关节像素距离</li>' +
+          '<li><b>视频采集</b>: 手机置于斜前方 ~45° (非纯侧面), 录制 10-15 秒行走</li>' +
           '<li><b>AI 分析</b>: 自动提取 8 项步态参数 + 步态周期时相 + 模式分类</li>' +
           '<li><b>报告</b>: 步态参数 + 步态周期时相 + 神经定位 + 康复建议</li>' +
         '</ol>' +
@@ -752,7 +752,7 @@
         '<button id="gait-skip-calibration" style="flex:1;min-width:200px;padding:20px;background:linear-gradient(135deg,#636e72,#2d3436);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:16px;">▶ 跳过标定 (使用默认比例)</button>' +
       '</div>' +
       '<div style="background:#f8f9fa;padding:16px;border-radius:8px;margin-top:16px;font-size:12px;color:#666;line-height:1.6;">' +
-        '<b>💡 提示</b>: 准确的身高标定可显著提升步长/步幅/步速的精度。患者站立时, 请确保摄像头能拍到头顶到脚踝的完整画面。默认比例假设 1 米 ≈ 130 像素 (误差约 ±20%)。' +
+        '<b>💡 提示</b>: 手机放斜前方 ~45° 拍行走 (非纯侧面), 可同时捕捉前后+侧向运动, 比纯侧面精度提升 2-3 倍。默认比例假设 1 米 ≈ 130 像素。' +
       '</div>'
     );
     $('#gait-start-calibration').addEventListener('click', function () { setPhase(PHASE.CALIBRATION); });
@@ -781,7 +781,7 @@
       '<div style="position:relative;background:#000;border-radius:8px;overflow:hidden;max-width:100%;">' +
         '<video id="gait-camera-video" autoplay muted playsinline style="display:block;width:100%;"></video>' +
         '<canvas id="gait-calibration-canvas" style="position:absolute;inset:0;cursor:crosshair;"></canvas>' +
-        '<div id="gait-portrait-warn" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.82);color:#fff;padding:16px 28px;border-radius:12px;font-size:16px;font-weight:700;text-align:center;pointer-events:none;white-space:nowrap;border:2px solid #fbbf24;">&#x1f4f1;&#x21c4; 请将手机横置<br><span style="font-size:12px;font-weight:400;opacity:0.85;">侧方横屏拍摄可获得最佳步态分析精度</span></div>' +
+        '<div id="gait-portrait-warn" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.82);color:#fff;padding:16px 28px;border-radius:12px;font-size:16px;font-weight:700;text-align:center;pointer-events:none;white-space:nowrap;border:2px solid #fbbf24;">&#x1f4f1;&#x21c4; 请将手机横置<br><span style="font-size:12px;font-weight:400;opacity:0.85;">斜前方~45°横屏拍摄精度最佳</span></div>' +
       '</div>' +
       '<div id="gait-calibration-status" style="margin:8px 0;padding:8px;background:#f0f2f5;border-radius:6px;font-size:12px;text-align:center;">点击「自动标定」检测头顶-踝关节距离</div>' +
       '<div style="display:flex;gap:8px;">' +
@@ -982,7 +982,7 @@
         '<div id="gait-record-panel">' +
           '<div style="position:relative;background:#000;border-radius:8px;overflow:hidden;max-width:100%;">' +
             '<video id="gait-camera-video" autoplay muted playsinline style="display:block;width:100%;"></video>' +
-            '<div id="gait-portrait-warn" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.82);color:#fff;padding:16px 28px;border-radius:12px;font-size:16px;font-weight:700;text-align:center;pointer-events:none;white-space:nowrap;border:2px solid #fbbf24;">&#x1f4f1;&#x21c4; 请将手机横置<br><span style="font-size:12px;font-weight:400;opacity:0.85;">侧方横屏拍摄可获得最佳步态分析精度</span></div>' +
+            '<div id="gait-portrait-warn" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.82);color:#fff;padding:16px 28px;border-radius:12px;font-size:16px;font-weight:700;text-align:center;pointer-events:none;white-space:nowrap;border:2px solid #fbbf24;">&#x1f4f1;&#x21c4; 请将手机横置<br><span style="font-size:12px;font-weight:400;opacity:0.85;">斜前方~45°横屏拍摄精度最佳</span></div>' +
           '</div>' +
         '</div>' +
         '<div id="gait-upload-panel" style="display:none;text-align:center;padding:40px 20px;">' +
