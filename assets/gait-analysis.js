@@ -633,6 +633,7 @@
         armSwing: params.armSwing,
         elbowSwing: params.elbowSwing,
         kneeBraking: { left: params.kneeLeft, right: params.kneeRight },
+        ankleKinematics: { left: params.ankleLeft, right: params.ankleRight },
         sideResolution: sideResolution,
         walkingDirection: walkDir,
         brainProfile: window.__gaitParams.computeBrainGaitProfile(
