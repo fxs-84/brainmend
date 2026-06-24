@@ -1397,14 +1397,40 @@
       html = list.map(function (r, idx) {
         var p = r.parameters || {};
         var c = r.classification || {};
-        return '<div class="gait-hist-item" data-idx="' + idx + '" style="padding:12px;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:8px;cursor:pointer;background:#fafafa;user-select:none;transition:background 0.15s;" onmouseover="this.style.background=\'#f0f9f4\'" onmouseout="this.style.background=\'#fafafa\'">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+        var n = r.neuro || {};
+        var asym = r.asymmetries || {};
+        var bp = r.brainProfile || {};
+        var arm = r.armSwing || {};
+        // 6 项关键指标预览
+        var stats = [
+          { l: '步速', v: p.gaitSpeed, u: 'm/s', c: '#43E97B' },
+          { l: '步频', v: p.cadence, u: '步/分', c: '#43E97B' },
+          { l: '步长', v: p.stepLength, u: 'm', c: '#43E97B' },
+          { l: '支撑相', v: p.stancePct, u: '%', c: '#43E97B' },
+          { l: '肩摆', v: arm.shoulder ? { value: arm.shoulder.avgNormalized * 100, status: arm.shoulder.avgNormalized > 0.15 ? 'normal' : 'mild' } : null, u: '%', c: '#667eea' },
+          { l: '脑功能', v: bp.overallBrainScore !== undefined ? { value: bp.overallBrainScore, status: bp.overallBrainScore >= 55 ? 'normal' : 'mild' } : null, u: '/100', c: '#764ba2' }
+        ];
+        var statHtml = stats.map(function (s) {
+          if (!s.v) return '';
+          var val = s.v.value !== undefined ? s.v.value : '—';
+          return '<div style="text-align:center;padding:6px;background:#f8f9fa;border-radius:4px;">' +
+            '<div style="font-size:10px;color:#888;">' + s.l + '</div>' +
+            '<div style="font-size:13px;font-weight:700;color:' + s.c + ';">' + (typeof val === 'number' ? val.toFixed(2) : val) + '<span style="font-size:9px;color:#999;">' + s.u + '</span></div>' +
+          '</div>';
+        }).join('');
+        return '<div class="gait-hist-item" data-idx="' + idx + '" style="padding:14px;border:1px solid #e0e0e0;border-radius:10px;margin-bottom:10px;cursor:pointer;background:#fafafa;user-select:none;transition:all 0.15s;" onmouseover="this.style.background=\'#f0f9f4\';this.style.borderColor=\'#43E97B\';this.style.transform=\'translateX(2px)\'" onmouseout="this.style.background=\'#fafafa\';this.style.borderColor=\'#e0e0e0\';this.style.transform=\'translateX(0)\'">' +
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">' +
             '<div style="flex:1;">' +
-              '<div style="font-weight:600;color:#0f7b6c;">' + (c.primaryLabel || '—') + '</div>' +
-              '<div style="font-size:12px;color:#888;margin-top:2px;">' + new Date(r.timestamp).toLocaleString('zh-CN') + ' · 步速 ' + fmtNum(p.gaitSpeed && p.gaitSpeed.value, 2) + ' m/s</div>' +
+              '<div style="font-size:15px;font-weight:700;color:#0f7b6c;">' + (c.primaryLabel || '—') + '</div>' +
+              '<div style="font-size:11px;color:#888;margin-top:2px;">' + new Date(r.timestamp).toLocaleString('zh-CN') + '</div>' +
             '</div>' +
-            '<div style="color:#43E97B;font-size:20px;">→</div>' +
+            '<div style="text-align:right;">' +
+              '<div style="font-size:10px;color:#888;">点击查看</div>' +
+              '<div style="color:#43E97B;font-size:20px;">→</div>' +
+            '</div>' +
           '</div>' +
+          '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;">' + statHtml + '</div>' +
+          (n.level ? '<div style="margin-top:8px;font-size:11px;color:#666;">🧠 神经定位: ' + n.level + '</div>' : '') +
         '</div>';
       }).join('');
     }
@@ -1420,24 +1446,27 @@
         $('#gait-history-overlay').style.display = 'none';
         var overlay = $('#gait-overlay');
         if (overlay) overlay.style.display = 'block';
-        // 直接渲染报告 (绕过 setPhase, 确保显示)
         var body = $('#gait-body');
-        if (body) body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">加载报告中...</div>';
+        if (body) {
+          body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">加载报告中...</div>';
+        }
         if (typeof window.__gaitReport !== 'undefined' && window.__gaitReport.renderReport) {
-          // 用 gait-report.js 的 renderReport 直接渲染 (已包含图表)
           window.__gaitReport.renderReport(all[idx], body);
         } else {
           setPhase(PHASE.RESULTS);
         }
         // 添加返回按钮
         var backBtn = document.createElement('div');
-        backBtn.style.cssText = 'text-align:center;margin-top:16px;';
-        backBtn.innerHTML = '<button id="gait-back-to-history" style="padding:10px 24px;background:rgba(0,0,0,0.06);border:1px solid #ccc;border-radius:8px;cursor:pointer;color:#666;font-size:14px;">← 返回历史记录</button>';
-        body.appendChild(backBtn);
+        backBtn.style.cssText = 'text-align:center;margin-top:16px;padding-bottom:20px;';
+        backBtn.innerHTML = '<button id="gait-back-to-history" style="padding:12px 32px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:30px;cursor:pointer;font-size:14px;font-weight:600;box-shadow:0 4px 12px rgba(67,233,123,0.25);">← 返回历史记录</button>';
+        if (body) body.appendChild(backBtn);
         var backToHist = document.getElementById('gait-back-to-history');
-        if (backToHist) backToHist.addEventListener('click', function () {
+        if (backToHist) backToHist.addEventListener('click', function (e2) {
+          if (e2) { e2.preventDefault(); e2.stopPropagation(); }
           renderHistory();
         });
+        // 滚动到顶部
+        if (body) body.scrollTop = 0;
       };
       item.addEventListener('click', clickHandler);
     });
