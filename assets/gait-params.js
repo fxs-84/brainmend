@@ -1138,8 +1138,8 @@
       if (merged[i].side !== merged[i - 1].side) {
         var dx = merged[i].x - merged[i - 1].x;
         var dy = merged[i].y - merged[i - 1].y;
-        // 假设镜头垂直于行走方向, 步长 = 纵向 (x方向) 距离
-        var lenPx = Math.abs(dx);
+        // 欧氏距离 (侧方+斜45°拍摄均有效)
+        var lenPx = Math.sqrt(dx * dx + dy * dy);
         steps.push({
           value: lenPx * scale,
           from: merged[i - 1].side,
@@ -1161,8 +1161,9 @@
     for (var i = 1; i < heelStrikes.length; i++) {
       var dx = heelStrikes[i].x - heelStrikes[i - 1].x;
       var dy = heelStrikes[i].y - heelStrikes[i - 1].y;
+      // 使用欧氏距离 (支持侧方+斜45°+正面拍摄, xy 均包含前进分量)
       strides.push({
-        value: Math.abs(dx) * scale,
+        value: Math.sqrt(dx * dx + dy * dy) * scale,
         time: heelStrikes[i].time,
         duration: heelStrikes[i].time - heelStrikes[i - 1].time
       });
