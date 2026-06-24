@@ -1475,11 +1475,21 @@
       scores.elderly = 0.20 + (0.55 - p.stepLength.value) * 0.4 + (1.0 - p.gaitSpeed.value) * 0.3;
     } else { scores.elderly = 0; }
 
-    // 正常: 所有参数都在正常范围内
-    var allNormal = ['stepLength','strideLength','stepWidth','footAngle','cadence','gaitSpeed','stancePct']
-      .every(function (k) { return p[k].status === 'normal'; });
-    if (allNormal) scores.normal = 0.50;
-    else scores.normal = 0;
+    // 正常步态: 按正常参数比例打分 (7 项中多数正常即为正常)
+    var normalKeys = ['stepLength','strideLength','stepWidth','footAngle','cadence','gaitSpeed','stancePct'];
+    var normalCount = normalKeys.filter(function (k) { return p[k].status === 'normal'; }).length;
+    var borderlineCount = normalKeys.filter(function (k) {
+      var s = p[k].status;
+      return s === 'normal' || s === 'mild';
+    }).length;
+    // 7 = 正常, 5-6 = 轻度偏离, 3-4 = 亚健康, <3 = 异常
+    if (normalCount >= 6) {
+      scores.normal = 0.60 + (normalCount - 6) * 0.15;  // 0.60-0.75
+    } else if (borderlineCount >= 5) {
+      scores.normal = 0.40;  // 接近正常
+    } else {
+      scores.normal = 0.10;  // 非正常, 但不归零 (防止病理类型被强制选中)
+    }
 
     // 找最高分类
     var labels = {
@@ -1493,13 +1503,19 @@
     };
 
     var primaryKey = 'normal';
-    var primaryScore = 0;
+    var primaryScore = scores.normal || 0;
     Object.keys(scores).forEach(function (k) {
       if (scores[k] > primaryScore) {
         primaryScore = scores[k];
         primaryKey = k;
       }
     });
+
+    // 如果正常得分 ≥ 0.40 但病理得分更高, 仍然输出正常 (除非病理显著高于正常)
+    if (primaryKey !== 'normal' && (scores.normal || 0) >= 0.40 && primaryScore < (scores.normal || 0) + 0.15) {
+      primaryKey = 'normal';
+      primaryScore = scores.normal || 0.40;
+    }
 
     var confidence = Math.min(primaryScore, 0.95);
 
