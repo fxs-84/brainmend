@@ -69,6 +69,71 @@
     };
   }
 
+  /**
+   * 身高自动标定: 适用于患者身高已知 (默认 1.70m), 任意帧中头顶到脚踝的像素距离
+   * 比 1m 静态标尺更实用 — 患者不需站立不动, 任何行走中的侧方视角帧都能用
+   *
+   * 算法: 选取头部 (nose 或 eye) 和踝关节 (ankle) 平均 y 坐标
+   *       body_px = head.y - ankle.y  (图像 y 向下, 头在上故 y 更小)
+   *       scale = body_height_meters / body_px
+   *
+   * 注意: 头顶到脚踝的实际长度 ≈ 身高的 96-98% (头顶有头发缓冲)
+   */
+  function calibrateByHeight(frames, realHeightMeters, options) {
+    options = options || {};
+    var bodyRatio = options.bodyRatio || 0.97;  // 头顶到内踝 ≈ 身高的 97%
+    if (!frames || frames.length === 0) {
+      return { scale: 0, error: 'no_frames' };
+    }
+    if (!realHeightMeters || realHeightMeters < 0.5 || realHeightMeters > 2.5) {
+      return { scale: 0, error: 'invalid_height' };
+    }
+    // 选身高最直立的帧 (head-ankle 像素差最大, 即站得最直的瞬间)
+    var bestFrame = null, bestPixelHeight = 0;
+    for (var i = 0; i < frames.length; i++) {
+      var frame = frames[i];
+      // 兼容两种格式: 帧含 keypoints 数组 或 帧本身就是 {x,y,name}
+      var pose = frame.keypoints ? frame : [frame];
+      var nose = getKp(frame, 'nose');
+      var lEye = getKp(frame, 'left_eye');
+      var rEye = getKp(frame, 'right_eye');
+      var lAnkle = getKp(frame, 'left_ankle');
+      var rAnkle = getKp(frame, 'right_ankle');
+      if (!lAnkle && !rAnkle) continue;
+      // 头部估算: 优先 nose, 其次左右眼平均
+      var headY;
+      if (nose && nose.score >= 0.3) headY = nose.y;
+      else if (lEye && rEye && lEye.score >= 0.3 && rEye.score >= 0.3) headY = (lEye.y + rEye.y) / 2;
+      else continue;
+      // 踝关节估算: 优先左右踝平均, 否则单踝
+      var ankleY;
+      if (lAnkle && rAnkle && lAnkle.score >= 0.3 && rAnkle.score >= 0.3) {
+        ankleY = (lAnkle.y + rAnkle.y) / 2;
+      } else if (lAnkle && lAnkle.score >= 0.3) ankleY = lAnkle.y;
+      else if (rAnkle && rAnkle.score >= 0.3) ankleY = rAnkle.y;
+      else continue;
+      var pxH = Math.abs(ankleY - headY);
+      if (pxH > bestPixelHeight) {
+        bestPixelHeight = pxH;
+        bestFrame = frame;
+      }
+    }
+    if (!bestFrame || bestPixelHeight < 50) {
+      return { scale: 0, error: 'no_valid_pose', pixelHeight: bestPixelHeight };
+    }
+    var refHeight = realHeightMeters * bodyRatio;  // 头顶到内踝
+    var scale = refHeight / bestPixelHeight;
+    return {
+      scale: scale,
+      pixelHeight: bestPixelHeight,
+      realHeight: realHeightMeters,
+      refHeight: refHeight,
+      method: 'height',
+      unit: 'm/px',
+      confidence: bestPixelHeight >= 150 ? 'high' : (bestPixelHeight >= 80 ? 'medium' : 'low')
+    };
+  }
+
   // ============================================================
   // 关键点提取 (MoveNet COCO 17 点)
   // ============================================================
@@ -199,9 +264,9 @@
       }
     }
 
-    // 最小间隔约束 (>= 0.30s, 正常人最快 ~200步/分对应 0.30s)
-    // 同一只脚连续 heel-strike 至少 0.40s 间隔 (最快 150 步/分 = 0.40s)
-    var minInterval = 0.30;
+    // 最小间隔约束 (>= 0.45s, 正常人最快 ~130步/分/脚对应 0.46s)
+    // 防止踝 y 出现多个等高原地 (mid-stance 平台 + 摆动前稳定期) 误判为两次 HS
+    var minInterval = 0.45;
     var result = [];
     var lastT = -Infinity;
     candidates.sort(function (a, b) { return a.t - b.t; });
@@ -231,6 +296,204 @@
       lastT = cand.t;
     }
     return result;
+  }
+
+  /**
+   * 脚尖离地检测 (Toe-Off, TO): 踝关节 y 速度达到该步周期最大上升速度的时刻
+   *
+   * 算法: 在两次 heel-strike 之间 (一个完整步态周期), 寻找踝关节 y 速度
+   *       由负转正 (由下降转为上升) 的最大速度时刻 = 脚蹬离地面瞬间
+   *
+   * 简化策略: 在每个周期后半段 (50-100% cycle), 找 y 局部极大值 (踝抬起到最高)
+   *           然后向前追溯到 y 开始上升的反转点 = 脚尖离地
+   */
+  function detectToeOffs(frames, side, heelStrikes) {
+    if (!frames || frames.length < 3 || heelStrikes.length < 2) return [];
+    var kpName = side + '_ankle';
+    var points = [];
+    for (var i = 0; i < frames.length; i++) {
+      var kp = getKp(frames[i], kpName);
+      if (kp && kp.score >= 0.3) points.push({ frame: i, t: frames[i].t, y: kp.y, x: kp.x, score: kp.score });
+    }
+    if (points.length < 3) return [];
+    // 平滑
+    var smoothed = [];
+    for (var p = 0; p < points.length; p++) {
+      var sum = 0, count = 0;
+      for (var q = -1; q <= 1; q++) {
+        if (p + q >= 0 && p + q < points.length) { sum += points[p + q].y; count++; }
+      }
+      smoothed.push({ y: sum / count, t: points[p].t, frame: points[p].frame, x: points[p].x });
+    }
+    // 计算 y 速度
+    var velocities = [];
+    for (var v = 1; v < smoothed.length; v++) {
+      var dt = smoothed[v].t - smoothed[v - 1].t;
+      if (dt <= 0) { velocities.push(0); continue; }
+      velocities.push((smoothed[v].y - smoothed[v - 1].y) / dt);  // 像素/秒
+    }
+    // 在每个步态周期内 (HS[i] ~ HS[i+1]) 的后 30-70% 区间找 TO
+    // 经验: TO 发生在周期的 60-65% (步态周期支撑相 60%, 摆动相 40%)
+    var results = [];
+    for (var h = 0; h < heelStrikes.length - 1; h++) {
+      var hsT0 = heelStrikes[h].time;
+      var hsT1 = heelStrikes[h + 1].time;
+      var cycle = hsT1 - hsT0;
+      if (cycle <= 0) continue;
+      // TO 算法: HS[i] 检测到踝 y 局部最小值 (mid-stance), TO 是踝 y 首次明显上升的时刻
+      // 用阈值法: 在 HS[i] 之后, 找第一个 y 比 HS[i] 时高出 >10px 的帧 (≈脚离地 ≥3cm)
+      // 兜底: 整个周期内 y 速度 (vy) 最大的点
+      var hsY = null;
+      for (var p = 0; p < smoothed.length; p++) {
+        if (Math.abs(smoothed[p].t - hsT0) < 0.05) { hsY = smoothed[p].y; break; }
+      }
+      var TO_THRESHOLD = 10;  // 像素, 代表脚抬离地面 ~3cm
+      var maxVy = -Infinity, maxIdx = -1, firstRiseIdx = -1;
+      for (var s = 0; s < smoothed.length - 1; s++) {
+        var tt = smoothed[s].t;
+        if (tt < hsT0 + 0.05 || tt > hsT0 + cycle * 0.85) continue;
+        // 阈值法: 找第一个 y > hsY + 10 的点
+        if (firstRiseIdx < 0 && hsY !== null && smoothed[s].y > hsY + TO_THRESHOLD) {
+          firstRiseIdx = s;
+        }
+        // 速度法: 兜底
+        var vy = (smoothed[s + 1].y - smoothed[s].y) / Math.max(smoothed[s + 1].t - smoothed[s].t, 0.001);
+        if (vy > maxVy) { maxVy = vy; maxIdx = s; }
+      }
+      var chosenIdx = firstRiseIdx >= 0 ? firstRiseIdx : maxIdx;
+      if (chosenIdx >= 0) {
+        results.push({
+          frameIndex: smoothed[chosenIdx].frame,
+          time: smoothed[chosenIdx].t,
+          x: smoothed[chosenIdx].x,
+          y: smoothed[chosenIdx].y,
+          cycleIndex: h,
+          cyclePct: ((smoothed[chosenIdx].t - hsT0) / cycle) * 100,
+          velocity: maxVy,
+          method: firstRiseIdx >= 0 ? 'threshold' : 'velocity_peak'
+        });
+      }
+    }
+    return results;
+  }
+
+  /**
+   * 8 时相步态周期分析 (Rancho Los Amigos)
+   *
+   * 步态周期分为 8 个时相, 每个时相占周期的特定百分比 (正常值):
+   *   0%     IC  Initial Contact           脚跟着地
+   *   0-12%  LR  Loading Response          承重反应 (双支撑)
+   *   12-31% MSt Mid Stance                支撑中期
+   *   31-50% TSt Terminal Stance           支撑末期
+   *   50-60% PSw Pre-Swing                 摆动前期 (双支撑, 包含 TO)
+   *   60-75% ISw Initial Swing             摆动初期
+   *   75-87% MSw Mid Swing                 摆动中期
+   *   87-100% TSw Terminal Swing          摆动末期
+   *
+   * 实现: 用 HS + TO 时间戳确定支撑相 (HS → TO) 和摆动相 (TO → next HS),
+   *       然后按比例切片 8 时相
+   */
+  function computeGaitCyclePhases(frames, leftHS, leftTO, rightHS, rightTO) {
+    var phaseStats = {
+      totalCycles: 0,
+      avgCycleTime: 0,
+      // 8 时相时间占比 (左右脚平均)
+      phases: {
+        IC:  { pct: 0, label: '初始着地',       normal: { min: 0,  max: 2  } },
+        LR:  { pct: 0, label: '承重反应',       normal: { min: 8,  max: 14 } },
+        MSt: { pct: 0, label: '支撑中期',       normal: { min: 16, max: 22 } },
+        TSt: { pct: 0, label: '支撑末期',       normal: { min: 16, max: 22 } },
+        PSw: { pct: 0, label: '摆动前期',       normal: { min: 8,  max: 14 } },
+        ISw: { pct: 0, label: '摆动初期',       normal: { min: 12, max: 18 } },
+        MSw: { pct: 0, label: '摆动中期',       normal: { min: 10, max: 14 } },
+        TSw: { pct: 0, label: '摆动末期',       normal: { min: 10, max: 16 } }
+      },
+      stancePct: 0,    // 支撑相总占比
+      swingPct: 0,     // 摆动相总占比
+      doubleSupportPct: 0,  // 双支撑期 (LR + PSw)
+      events: []       // [{time, side, type:'HS'|'TO', cyclePct}]
+    };
+
+    function analyzeOneSide(HS, TO) {
+      if (!HS || HS.length < 2) return { phases: {}, events: [] };
+      // 用最近 TO 估算支撑相比例, 找不到时用默认值 60%
+      var cycleData = [];
+      var allEvents = [];
+      for (var i = 0; i < HS.length; i++) {
+        allEvents.push({ time: HS[i].time, side: HS[i].side || '?', type: 'HS', cyclePct: 0 });
+      }
+      // 配对 TO 到 HS (TO 在 HS 之后, 在下一个 HS 之前)
+      var toByCycle = {};
+      (TO || []).forEach(function (t) { toByCycle[t.cycleIndex] = t; });
+      var stancePcts = [], cycleTimes = [];
+      // HS 检测到踝 y 局部最小值 (mid-stance 附近), 实际 IC 在 HS 之前约 25% 周期
+      // 用 HS 反推 IC: IC = HS - 0.25 * cycle (正常人 mid-stance 在周期 25%)
+      var HS_TO_IC_OFFSET = 0.25;
+      for (var i = 0; i < HS.length - 1; i++) {
+        var cycle = HS[i + 1].time - HS[i].time;
+        if (cycle <= 0.2 || cycle >= 3.0) continue;
+        cycleTimes.push(cycle);
+        var to = toByCycle[i];
+        var stancePct;
+        if (to && to.time > HS[i].time && to.time < HS[i + 1].time) {
+          // stance = (TO - IC) / cycle = (TO - (HS - 0.25*cycle)) / cycle
+          stancePct = ((to.time - (HS[i].time - HS_TO_IC_OFFSET * cycle)) / cycle) * 100;
+        } else {
+          stancePct = 60;  // 正常值兜底
+        }
+        stancePcts.push(stancePct);
+        if (to) {
+          allEvents.push({ time: to.time, side: to.side || '?', type: 'TO', cyclePct: stancePct });
+        }
+      }
+      if (cycleTimes.length === 0) return { phases: {}, events: allEvents };
+      // 8 时相计算 (基于支撑相和摆动相的实际占比, 内部按固定比例切片)
+      var avgCycle = cycleTimes.reduce(function (a, b) { return a + b; }, 0) / cycleTimes.length;
+      var avgStance = stancePcts.reduce(function (a, b) { return a + b; }, 0) / stancePcts.length;
+      var avgSwing = 100 - avgStance;
+      var phasePcts = {
+        IC:  0.5,    // 瞬时事件, 占比近 0
+        LR:  avgStance * 0.20,   // 0-12% of cycle
+        MSt: avgStance * 0.32,   // 12-31%
+        TSt: avgStance * 0.32,   // 31-50%
+        PSw: avgStance * 0.16,   // 50-60%
+        ISw: avgSwing * 0.30,    // 60-75%
+        MSw: avgSwing * 0.30,    // 75-87%
+        TSw: avgSwing * 0.40     // 87-100%
+      };
+      return {
+        avgCycle: avgCycle,
+        avgStance: avgStance,
+        avgSwing: avgSwing,
+        phasePcts: phasePcts,
+        events: allEvents
+      };
+    }
+
+    var leftStats = analyzeOneSide(leftHS || [], leftTO || []);
+    var rightStats = analyzeOneSide(rightHS || [], rightTO || []);
+    var sideCount = 0;
+    if (leftStats.phasePcts) { sideCount++; phaseStats.totalCycles = leftStats.events.filter(function (e) { return e.type === 'HS'; }).length - 1; }
+    if (rightStats.phasePcts) { sideCount++; phaseStats.totalCycles = Math.max(phaseStats.totalCycles, rightStats.events.filter(function (e) { return e.type === 'HS'; }).length - 1); }
+    if (sideCount === 0) return phaseStats;
+    // 合并左右
+    var avgCycle = ((leftStats.avgCycle || 0) + (rightStats.avgCycle || 0)) / Math.max(sideCount, 1);
+    var avgStance = ((leftStats.avgStance || 0) + (rightStats.avgStance || 0)) / Math.max(sideCount, 1);
+    phaseStats.avgCycleTime = avgCycle;
+    phaseStats.stancePct = avgStance;
+    phaseStats.swingPct = 100 - avgStance;
+    phaseStats.doubleSupportPct = (leftStats.phasePcts && rightStats.phasePcts) ?
+      ((leftStats.phasePcts.LR + leftStats.phasePcts.PSw + rightStats.phasePcts.LR + rightStats.phasePcts.PSw) / 2) :
+      ((leftStats.phasePcts && leftStats.phasePcts.LR + leftStats.phasePcts.PSw) || (rightStats.phasePcts && rightStats.phasePcts.LR + rightStats.phasePcts.PSw) || 20);
+    // 合并 8 时相
+    Object.keys(phaseStats.phases).forEach(function (k) {
+      var lv = leftStats.phasePcts ? leftStats.phasePcts[k] : 0;
+      var rv = rightStats.phasePcts ? rightStats.phasePcts[k] : 0;
+      phaseStats.phases[k].pct = (lv + rv) / Math.max(sideCount, 1);
+    });
+    // 合并事件列表
+    phaseStats.events = (leftStats.events || []).concat(rightStats.events || []).sort(function (a, b) { return a.time - b.time; });
+    return phaseStats;
   }
 
   // ============================================================
@@ -767,11 +1030,14 @@
     rangeStatus: rangeStatus,
     distance2D: distance2D,
     calibrateScale: calibrateScale,
+    calibrateByHeight: calibrateByHeight,
     getKp: getKp,
     inferFoot: inferFoot,
     extractFootKeypoints: extractFootKeypoints,
     extractTrunkAngle: extractTrunkAngle,
     detectHeelStrikes: detectHeelStrikes,
+    detectToeOffs: detectToeOffs,
+    computeGaitCyclePhases: computeGaitCyclePhases,
     computeStepLengths: computeStepLengths,
     computeStrideLengths: computeStrideLengths,
     computeStepWidths: computeStepWidths,

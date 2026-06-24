@@ -34,7 +34,7 @@
     recordedURL: null,
     videoDuration: 0,
     scale: 0,
-    calibration: { p1: null, p2: null, scale: 0 },
+    calibration: { p1: null, p2: null, scale: 0, heightCm: 170, method: null },
     capturedFrames: [],   // [{t, keypoints:[{x,y,score,name}]}]
     fps: 30,
     results: null,        // {parameters, asymmetries, classification, neuro, ...}
@@ -499,6 +499,14 @@
       var params = window.__gaitParams.computeAllParams(keypointFrames, state.calibration.scale);
       if (params.error) throw new Error('参数计算失败: ' + params.error);
 
+      // 4b. 步态周期时相 (8 时相 Rancho Los Amigos) — 依赖参数计算后的 heelStrikes
+      updateProcessingProgress(0.94);
+      var leftHS  = (params.heelStrikes && params.heelStrikes.left)  || [];
+      var rightHS = (params.heelStrikes && params.heelStrikes.right) || [];
+      var leftTO  = window.__gaitParams.detectToeOffs(keypointFrames, 'left',  leftHS);
+      var rightTO = window.__gaitParams.detectToeOffs(keypointFrames, 'right', rightHS);
+      var gaitPhases = window.__gaitParams.computeGaitCyclePhases(keypointFrames, leftHS, leftTO, rightHS, rightTO);
+
       var classification = window.__gaitParams.classifyGait(params);
       var neuro = window.__gaitParams.getNeuroLocalization(classification.primary);
       var rehab = window.__gaitParams.getRehabSuggestions(classification.primary);
@@ -512,6 +520,13 @@
         parameters: params.parameters,
         asymmetries: params.asymmetries,
         extras: params.extras,
+        events: {
+          leftHeelStrikes: leftHS,
+          rightHeelStrikes: rightHS,
+          leftToeOffs: leftTO,
+          rightToeOffs: rightTO
+        },
+        gaitPhases: gaitPhases,
         classification: classification,
         neuro: neuro,
         rehab: rehab
@@ -597,26 +612,26 @@
       '<div style="background:#fff;padding:24px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);margin-bottom:16px;">' +
         '<h3 style="margin:0 0 12px 0;color:#1a1a2e;">📋 评估流程</h3>' +
         '<ol style="line-height:1.9;color:#444;padding-left:24px;margin:0;">' +
-          '<li><b>场地准备</b>: 5-10米平坦通道, 侧方放置摄像机, 画面中可见患者全身</li>' +
-          '<li><b>1米标定</b>: 地面放置 1 米参照物, 在画面上点击两端</li>' +
+          '<li><b>身高标定</b>: 输入患者身高, 系统自动从摄像头画面识别头顶和踝关节像素距离 (无需 1 米标尺, 适用于实际临床录制)</li>' +
           '<li><b>视频采集</b>: 录制 10-15 秒自然行走, 或上传已有视频</li>' +
-          '<li><b>AI 分析</b>: 自动提取 8 项步态参数 + 模式分类</li>' +
-          '<li><b>报告</b>: 步态参数 + 神经定位 + 康复建议</li>' +
+          '<li><b>AI 分析</b>: 自动提取 8 项步态参数 + 步态周期时相 + 模式分类</li>' +
+          '<li><b>报告</b>: 步态参数 + 步态周期时相 + 神经定位 + 康复建议</li>' +
         '</ol>' +
       '</div>' +
       '<div style="display:flex;gap:12px;flex-wrap:wrap;">' +
-        '<button id="gait-start-calibration" style="flex:1;min-width:200px;padding:20px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:18px;font-weight:600;">📏 开始标定</button>' +
+        '<button id="gait-start-calibration" style="flex:1;min-width:200px;padding:20px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:18px;font-weight:600;">📏 开始身高标定</button>' +
         '<button id="gait-skip-calibration" style="flex:1;min-width:200px;padding:20px;background:linear-gradient(135deg,#636e72,#2d3436);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:16px;">▶ 跳过标定 (使用默认比例)</button>' +
       '</div>' +
       '<div style="background:#f8f9fa;padding:16px;border-radius:8px;margin-top:16px;font-size:12px;color:#666;line-height:1.6;">' +
-        '<b>💡 提示</b>: 准确的标定可显著提升步长/步幅/步速的精度。默认比例假设 1 米 ≈ 130 像素 (适用于 1.5m 距离、640px 宽画面), 误差约 ±20%。' +
+        '<b>💡 提示</b>: 准确的身高标定可显著提升步长/步幅/步速的精度。患者站立时, 请确保摄像头能拍到头顶到脚踝的完整画面。默认比例假设 1 米 ≈ 130 像素 (误差约 ±20%)。' +
       '</div>'
     );
     $('#gait-start-calibration').addEventListener('click', function () { setPhase(PHASE.CALIBRATION); });
     $('#gait-skip-calibration').addEventListener('click', function () {
-      state.calibration.scale = 1 / 130;  // 默认 130px = 1m
+      state.calibration.scale = 1 / 130;
       state.calibration.realMeters = 1.0;
       state.calibration.pixelDistance = 130;
+      state.calibration.method = 'default';
       state.calibration.note = '使用默认比例 (未标定)';
       setPhase(PHASE.CAPTURE);
     });
@@ -628,16 +643,21 @@
       renderError() +
       renderCameraSelector() +
       '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;">' +
-        '<h3 style="margin:0 0 8px 0;">📏 标定 (1 米参照物)</h3>' +
-        '<p style="color:#666;font-size:13px;margin:0 0 12px 0;">在地面放置 1 米长的标尺 (或卷尺), 让患者站在标尺旁, 在下方摄像头画面上依次点击标尺的<b>左端</b>和<b>右端</b>。</p>' +
+        '<h3 style="margin:0 0 8px 0;">📏 身高自动标定</h3>' +
+        '<p style="color:#666;font-size:13px;margin:0 0 12px 0;">输入患者<b>身高 (cm)</b>, 系统将自动从视频画面中识别头顶和踝关节像素距离, 计算比例尺。无需 1 米标尺, 适用于实际临床录制场景。</p>' +
+        '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;justify-content:center;">' +
+          '<label style="font-size:14px;color:#333;">身高 (cm):</label>' +
+          '<input id="gait-cal-height" type="number" min="100" max="220" step="1" value="' + (state.calibration.heightCm || 170) + '" ' +
+          'style="width:90px;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:16px;text-align:center;">' +
+          '<button id="gait-cal-auto" style="padding:8px 18px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">🎯 自动标定</button>' +
+        '</div>' +
         '<div style="position:relative;background:#000;border-radius:8px;overflow:hidden;max-width:640px;margin:0 auto;">' +
           '<video id="gait-camera-video" autoplay muted playsinline style="display:block;width:100%;height:auto;"></video>' +
           '<canvas id="gait-calibration-canvas" style="position:absolute;inset:0;cursor:crosshair;"></canvas>' +
         '</div>' +
-        '<div id="gait-calibration-status" style="margin-top:12px;padding:10px;background:#f0f2f5;border-radius:6px;font-size:13px;text-align:center;">点击视频画面上的两个标尺端点</div>' +
+        '<div id="gait-calibration-status" style="margin-top:12px;padding:10px;background:#f0f2f5;border-radius:6px;font-size:13px;text-align:center;">点击「自动标定」按钮, 系统从视频中检测头顶-踝关节像素距离</div>' +
         '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">' +
-          '<button id="gait-cal-reset" style="flex:1;padding:10px;background:rgba(0,0,0,0.08);border:none;border-radius:6px;cursor:pointer;">🔄 重新点击</button>' +
-          '<button id="gait-cal-confirm" style="flex:2;padding:10px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;opacity:0.5;" disabled>✓ 确认标定</button>' +
+          '<button id="gait-cal-confirm" style="flex:2;padding:10px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;opacity:0.5;" disabled>✓ 确认标定 →</button>' +
           '<button id="gait-cal-skip" style="flex:1;padding:10px;background:rgba(0,0,0,0.08);border:none;border-radius:6px;cursor:pointer;">跳过 →</button>' +
         '</div>' +
       '</div>'
@@ -645,14 +665,17 @@
     startCamera().then(function (ok) {
       if (!ok) {
         state.errorMessage = '无法启动摄像头, 请使用"跳过"或刷新页面重试';
+        renderPhase();
       } else {
         attachCameraSelectorHandlers();
       }
     });
-    // Calibration canvas
+    // 身高标定画布 (覆盖在视频上, 显示检测到的关键点和身高像素距离)
     var canvas = $('#gait-calibration-canvas');
     var video = $('#gait-camera-video');
     var ctx = canvas.getContext('2d');
+    var detectCanvas = document.createElement('canvas');
+    var detectCtx = detectCanvas.getContext('2d');
     function syncCanvas() {
       if (video.videoWidth) {
         canvas.width = video.videoWidth;
@@ -661,86 +684,154 @@
       drawCalibration();
     }
     video.addEventListener('loadedmetadata', syncCanvas);
+
     function drawCalibration() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (state.calibration.p1) drawPoint(state.calibration.p1, '#10b981', '左');
-      if (state.calibration.p2) drawPoint(state.calibration.p2, '#10b981', '右');
-      if (state.calibration.p1 && state.calibration.p2) {
+      var kps = state.calibration.detectedKeypoints;
+      if (!kps || kps.length === 0) return;
+      // 画关键点
+      kps.forEach(function (k) {
+        if (k.score >= 0.3) {
+          ctx.beginPath();
+          ctx.arc(k.x, k.y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = '#10b981';
+          ctx.fill();
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+      });
+      // 连线: 头顶 → 踝关节
+      var nose = kps.find(function (k) { return k.name === 'nose'; });
+      var lEye = kps.find(function (k) { return k.name === 'left_eye'; });
+      var rEye = kps.find(function (k) { return k.name === 'right_eye'; });
+      var lAnkle = kps.find(function (k) { return k.name === 'left_ankle'; });
+      var rAnkle = kps.find(function (k) { return k.name === 'right_ankle'; });
+      var headY = (nose && nose.score >= 0.3) ? nose.y :
+                  ((lEye && rEye && lEye.score >= 0.3 && rEye.score >= 0.3) ? (lEye.y + rEye.y) / 2 : null);
+      var ankleY = (lAnkle && rAnkle && lAnkle.score >= 0.3 && rAnkle.score >= 0.3) ? (lAnkle.y + rAnkle.y) / 2 :
+                   ((lAnkle && lAnkle.score >= 0.3) ? lAnkle.y :
+                   ((rAnkle && rAnkle.score >= 0.3) ? rAnkle.y : null));
+      if (headY != null && ankleY != null) {
+        var midX = (lAnkle && rAnkle && lAnkle.score >= 0.3 && rAnkle.score >= 0.3)
+                   ? (lAnkle.x + rAnkle.x) / 2
+                   : ((lAnkle && lAnkle.score >= 0.3) ? lAnkle.x : rAnkle.x);
+        var midHeadX = (nose && nose.score >= 0.3) ? nose.x
+                     : ((lEye && rEye && lEye.score >= 0.3 && rEye.score >= 0.3) ? (lEye.x + rEye.x) / 2 : midX);
         ctx.beginPath();
-        ctx.moveTo(state.calibration.p1.x, state.calibration.p1.y);
-        ctx.lineTo(state.calibration.p2.x, state.calibration.p2.y);
+        ctx.setLineDash([6, 4]);
+        ctx.moveTo(midHeadX, headY);
+        ctx.lineTo(midX, ankleY);
         ctx.strokeStyle = '#fbbf24';
         ctx.lineWidth = 2;
         ctx.stroke();
-        var mid = {
-          x: (state.calibration.p1.x + state.calibration.p2.x) / 2,
-          y: (state.calibration.p1.y + state.calibration.p2.y) / 2
-        };
-        var dist = Math.hypot(state.calibration.p2.x - state.calibration.p1.x, state.calibration.p2.y - state.calibration.p1.y);
+        ctx.setLineDash([]);
+        var pxH = Math.abs(ankleY - headY);
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(midX + 10, (headY + ankleY) / 2 - 14, 130, 28);
         ctx.fillStyle = '#fff';
-        ctx.strokeStyle = '#000';
-        ctx.font = 'bold 18px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.lineWidth = 3;
-        ctx.strokeText('像素距离: ' + Math.round(dist) + 'px', mid.x, mid.y - 10);
-        ctx.fillText('像素距离: ' + Math.round(dist) + 'px', mid.x, mid.y - 10);
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('身高像素: ' + Math.round(pxH) + 'px', midX + 16, (headY + ankleY) / 2 + 6);
       }
     }
-    function drawPoint(p, color, label) {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 14px sans-serif';
-      ctx.fillText(label, p.x + 14, p.y + 4);
-    }
-    canvas.addEventListener('click', function (e) {
-      var rect = canvas.getBoundingClientRect();
-      var x = (e.clientX - rect.left) * (canvas.width / rect.width);
-      var y = (e.clientY - rect.top) * (canvas.height / rect.height);
-      if (!state.calibration.p1) {
-        state.calibration.p1 = { x: x, y: y };
-      } else if (!state.calibration.p2) {
-        state.calibration.p2 = { x: x, y: y };
-        $('#gait-cal-confirm').disabled = false;
-        $('#gait-cal-confirm').style.opacity = '1';
-      } else {
-        // 重置
-        state.calibration.p1 = { x: x, y: y };
-        state.calibration.p2 = null;
-        $('#gait-cal-confirm').disabled = true;
-        $('#gait-cal-confirm').style.opacity = '0.5';
+
+    function setStatus(msg, color) {
+      var s = $('#gait-calibration-status');
+      if (s) {
+        s.textContent = msg;
+        s.style.color = color || '#444';
       }
-      drawCalibration();
-    });
-    $('#gait-cal-reset').addEventListener('click', function () {
-      state.calibration.p1 = null;
-      state.calibration.p2 = null;
-      $('#gait-cal-confirm').disabled = true;
-      $('#gait-cal-confirm').style.opacity = '0.5';
-      drawCalibration();
-    });
-    $('#gait-cal-confirm').addEventListener('click', function () {
-      var cal = window.__gaitParams.calibrateScale(state.calibration.p1, state.calibration.p2, 1.0);
+    }
+
+    function updateCalibrationFromKeypoints(keypoints, heightCm) {
+      var frames = [{ t: 0, keypoints: keypoints }];
+      var cal = window.__gaitParams.calibrateByHeight(frames, heightCm / 100);
       if (cal.error) {
-        state.errorMessage = '标定失败: ' + cal.error;
+        setStatus('标定失败: ' + cal.error + ' — 请确保患者全身在画面中, 头顶和脚踝清晰可见', '#dc2626');
+        return false;
+      }
+      state.calibration.scale = cal.scale;
+      state.calibration.realMeters = cal.realHeight;
+      state.calibration.pixelDistance = cal.pixelHeight;
+      state.calibration.heightCm = heightCm;
+      state.calibration.method = 'height';
+      state.calibration.confidence = cal.confidence;
+      state.calibration.detectedKeypoints = keypoints;
+      drawCalibration();
+      var scaleCmPerPx = (cal.scale * 100).toFixed(2);
+      setStatus('✓ 标定成功 — 比例: ' + scaleCmPerPx + ' cm/px (身高像素 ' + Math.round(cal.pixelHeight) + 'px, 置信度: ' + cal.confidence + ')', '#10b981');
+      $('#gait-cal-confirm').disabled = false;
+      $('#gait-cal-confirm').style.opacity = '1';
+      return true;
+    }
+
+    // 高度输入变更
+    var heightInput = $('#gait-cal-height');
+    if (heightInput) {
+      heightInput.addEventListener('change', function () {
+        state.calibration.heightCm = parseInt(heightInput.value, 10) || 170;
+      });
+    }
+
+    // 自动标定按钮
+    $('#gait-cal-auto').addEventListener('click', function () {
+      var btn = $('#gait-cal-auto');
+      if (video.videoWidth === 0) {
+        setStatus('摄像头未就绪, 请稍候再试', '#dc2626');
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = '⏳ 加载AI模型...';
+      setStatus('⏳ 首次使用需加载 ~2MB AI 模型, 请稍候...', '#444');
+      loadPoseDetection()
+        .then(function (detector) {
+          btn.textContent = '⏳ 检测人体...';
+          // 把当前视频帧绘制到 detectCanvas
+          detectCanvas.width = video.videoWidth;
+          detectCanvas.height = video.videoHeight;
+          detectCtx.drawImage(video, 0, 0, detectCanvas.width, detectCanvas.height);
+          return detector.estimatePoses(detectCanvas, { flipHorizontal: false });
+        })
+        .then(function (poses) {
+          var pose = poses && poses[0];
+          if (!pose || !pose.keypoints || pose.keypoints.length === 0) {
+            setStatus('⚠️ 未检测到人体 — 请确保患者全身在画面中, 头顶和脚踝清晰可见', '#dc2626');
+            return;
+          }
+          var kps = pose.keypoints.map(function (k) {
+            return { x: k.x, y: k.y, score: k.score || 0, name: k.name || '' };
+          });
+          var heightCm = parseInt(heightInput.value, 10) || 170;
+          updateCalibrationFromKeypoints(kps, heightCm);
+        })
+        .catch(function (e) {
+          console.error('[gait] auto-cal error', e);
+          setStatus('❌ AI 模型加载/检测失败: ' + (e.message || e) + ' — 请刷新或使用"跳过"', '#dc2626');
+        })
+        .then(function () {
+          btn.disabled = false;
+          btn.textContent = '🎯 自动标定';
+        });
+    });
+
+    // 确认 → 进入录制
+    $('#gait-cal-confirm').addEventListener('click', function () {
+      if (!state.calibration.scale || state.calibration.scale <= 0) {
+        state.errorMessage = '请先点击"自动标定"成功后再确认, 或使用"跳过"';
         renderPhase();
         return;
       }
-      state.calibration.scale = cal.scale;
-      state.calibration.realMeters = cal.realMeters;
-      state.calibration.pixelDistance = cal.pixelDistance;
       stopCamera();
       setPhase(PHASE.CAPTURE);
     });
+    // 跳过 → 默认比例
     $('#gait-cal-skip').addEventListener('click', function () {
       state.calibration.scale = 1 / 130;
       state.calibration.realMeters = 1.0;
       state.calibration.pixelDistance = 130;
+      state.calibration.heightCm = 170;
+      state.calibration.method = 'default';
       state.calibration.note = '使用默认比例 (未标定)';
       stopCamera();
       setPhase(PHASE.CAPTURE);
@@ -947,6 +1038,37 @@
         paramCard('stancePct', '支撑相', '🦶') +
         paramCard('swingPct', '摆动相', '💨') +
       '</div>' +
+      // 步态周期 8 时相 (Rancho Los Amigos)
+      (r.gaitPhases && !r.gaitPhases.error && r.gaitPhases.phases ?
+        '<h3 style="margin:20px 0 10px 0;font-size:16px;color:#1a1a2e;">🔄 步态周期时相 (Rancho Los Amigos 8 时相)</h3>' +
+        '<div style="background:#fff;padding:14px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,0.06);">' +
+          '<div style="font-size:12px;color:#666;margin-bottom:10px;">检测到 <b>' + r.gaitPhases.totalCycles + '</b> 个完整步态周期, 平均周期 <b>' + (r.gaitPhases.avgCycleTime ? r.gaitPhases.avgCycleTime.toFixed(2) : '—') + 's</b>, 共 <b>' + r.gaitPhases.events.length + '</b> 个步态事件 (HS/TO)</div>' +
+          '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:11px;">' +
+            [
+              { key: 'IC',  name: '初始触地',  short: 'IC' },
+              { key: 'LR',  name: '承重反应',  short: 'LR' },
+              { key: 'MSt', name: '站立中期',  short: 'MSt' },
+              { key: 'TSt', name: '推离前期',  short: 'TSt' },
+              { key: 'PSw', name: '推离后期',  short: 'PSw' },
+              { key: 'ISw', name: '摆动初期',  short: 'ISw' },
+              { key: 'MSw', name: '摆动中期',  short: 'MSw' },
+              { key: 'TSw', name: '摆动末期',  short: 'TSw' }
+            ].map(function (p) {
+              var pct = r.gaitPhases.phases[p.key] || 0;
+              var color = p.key === 'IC' || p.key === 'PSw' ? '#dc2626' :
+                          p.key === 'LR' || p.key === 'TSt' ? '#f59e0b' :
+                          p.key === 'MSt' || p.key === 'MSw' ? '#10b981' : '#3b82f6';
+              return '<div style="padding:8px;background:#f8f9fa;border-radius:6px;border-left:3px solid ' + color + ';">' +
+                '<div style="color:#666;">' + p.short + ' · ' + p.name + '</div>' +
+                '<div style="font-size:16px;font-weight:700;color:' + color + ';">' + pct.toFixed(1) + '%</div>' +
+              '</div>';
+            }).join('') +
+          '</div>' +
+          '<div style="margin-top:10px;padding:8px;background:#f0f2f5;border-radius:6px;font-size:11px;color:#666;line-height:1.7;">' +
+            '<b>临床意义</b>: 偏瘫步态常见 LR 延长 (承重困难); 帕金森步态常见 PSw 缩短 (推离无力); 小脑共济失调常见 MSw 变长 (平衡调整); 足下垂常见 ISw/TSw 延长 (廓清障碍)。' +
+          '</div>' +
+        '</div>'
+      : '') +
       // 不对称分析
       '<h3 style="margin:20px 0 10px 0;font-size:16px;color:#1a1a2e;">⚖️ 不对称分析</h3>' +
       '<div style="background:#fff;padding:16px;border-radius:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;font-size:13px;">' +

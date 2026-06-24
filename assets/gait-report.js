@@ -320,6 +320,52 @@
       '</div>' +
     '</div>';
 
+    // 步态周期 8 时相 (Rancho Los Amigos)
+    if (r.gaitPhases && !r.gaitPhases.error && r.gaitPhases.phases) {
+      var gp = r.gaitPhases;
+      html += '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;">' +
+        '<h3 style="margin:0 0 12px 0;font-size:16px;">🔄 步态周期时相 (Rancho Los Amigos 8 时相)</h3>' +
+        '<div style="font-size:12px;color:#666;margin-bottom:12px;">检测到 <b>' + gp.totalCycles + '</b> 个完整步态周期 · 平均周期 <b>' + (gp.avgCycleTime ? gp.avgCycleTime.toFixed(2) : '—') + 's</b> · 共 <b>' + gp.events.length + '</b> 个步态事件 (HS + TO)</div>';
+      // 阶段条
+      var phases = [
+        { key: 'IC',  name: '初始触地',  range: '0-2%' },
+        { key: 'LR',  name: '承重反应',  range: '2-12%' },
+        { key: 'MSt', name: '站立中期',  range: '12-31%' },
+        { key: 'TSt', name: '推离前期',  range: '31-50%' },
+        { key: 'PSw', name: '推离后期',  range: '50-62%' },
+        { key: 'ISw', name: '摆动初期',  range: '62-75%' },
+        { key: 'MSw', name: '摆动中期',  range: '75-87%' },
+        { key: 'TSw', name: '摆动末期',  range: '87-100%' }
+      ];
+      html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">';
+      phases.forEach(function (p) {
+        var pct = gp.phases[p.key] || 0;
+        var color = p.key === 'IC' || p.key === 'PSw' ? '#dc2626' :
+                    p.key === 'LR' || p.key === 'TSt' ? '#f59e0b' :
+                    p.key === 'MSt' || p.key === 'MSw' ? '#10b981' : '#3b82f6';
+        html += '<div style="padding:10px;background:#f8f9fa;border-radius:6px;border-top:3px solid ' + color + ';">' +
+          '<div style="color:#888;font-size:10px;">' + p.short + ' · ' + p.range + '</div>' +
+          '<div style="font-size:13px;color:#333;font-weight:600;margin:2px 0;">' + p.name + '</div>' +
+          '<div style="font-size:18px;font-weight:700;color:' + color + ';">' + pct.toFixed(1) + '%</div>' +
+        '</div>';
+      });
+      html += '</div>';
+      // 步态事件列表 (前 12 个)
+      if (gp.events && gp.events.length > 0) {
+        var evtList = gp.events.slice(0, 12).map(function (e) {
+          return '<span style="display:inline-block;padding:3px 8px;margin:2px;background:' + (e.type === 'HS' ? '#dbeafe' : '#fef3c7') + ';border-radius:4px;font-size:11px;color:' + (e.type === 'HS' ? '#1e40af' : '#92400e') + ';">' +
+            e.type + ' ' + e.side.charAt(0).toUpperCase() + ' @ ' + e.time.toFixed(2) + 's</span>';
+        }).join('');
+        html += '<div style="padding:8px;background:#f0f2f5;border-radius:6px;line-height:1.8;">' +
+          '<b style="font-size:12px;color:#333;">步态事件时间轴 (前 12 个):</b><br>' + evtList +
+        '</div>';
+      }
+      html += '<div style="margin-top:10px;padding:8px 12px;background:#f0f2f5;border-radius:6px;font-size:11px;color:#666;line-height:1.7;">' +
+        '<b>临床解读</b>: 偏瘫步态常表现为 LR 延长 (承重困难); 帕金森步态常表现为 PSw 缩短 + MSw 变长 (推离无力, 摆动拖曳); 小脑共济失调常见 MSw 显著延长 (平衡调整困难); 足下垂常见 ISw/TSw 延长 (廓清障碍, 步态拖地)。' +
+      '</div>';
+      html += '</div>';
+    }
+
     // 神经定位
     html += '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;border-left:4px solid #0f7b6c;">' +
       '<h3 style="margin:0 0 10px 0;font-size:16px;">🧠 神经定位提示</h3>' +
