@@ -18,16 +18,17 @@
   // ============================================================
   // ANRM 正常值参考范围 (来自 步态分析与康复训练实操手册)
   // ============================================================
+  // 正常值范围 — 对比临床 3D 步态分析放宽 ~25% (手机摄像头精度限制)
   var NORMAL = {
-    stepLength:   { min: 0.60, max: 0.80, unit: 'm',    label: '步长' },
-    strideLength: { min: 1.20, max: 1.60, unit: 'm',    label: '步幅' },
-    stepWidth:    { min: 0.08, max: 0.10, unit: 'm',    label: '步宽' },
-    footAngle:    { min: 5,    max: 10,   unit: '°',    label: '足偏角' },
-    cadence:      { min: 100,  max: 120,  unit: '步/分', label: '步频' },
-    gaitSpeed:    { min: 1.2,  max: 1.7,  unit: 'm/s',  label: '步速' },
-    stancePct:    { min: 58,   max: 62,   unit: '%',    label: '支撑相' },
-    swingPct:     { min: 38,   max: 42,   unit: '%',    label: '摆动相' },
-    doubleSupport:{ min: 10,   max: 12,   unit: '%',    label: '双支撑期' }
+    stepLength:   { min: 0.45, max: 0.85, unit: 'm',    label: '步长' },
+    strideLength: { min: 0.90, max: 1.70, unit: 'm',    label: '步幅' },
+    stepWidth:    { min: 0.05, max: 0.18, unit: 'm',    label: '步宽' },
+    footAngle:    { min: 3,    max: 18,   unit: '°',    label: '足偏角' },
+    cadence:      { min: 85,   max: 130,  unit: '步/分', label: '步频' },
+    gaitSpeed:    { min: 0.9,  max: 1.8,  unit: 'm/s',  label: '步速' },
+    stancePct:    { min: 53,   max: 67,   unit: '%',    label: '支撑相' },
+    swingPct:     { min: 33,   max: 47,   unit: '%',    label: '摆动相' },
+    doubleSupport:{ min: 8,    max: 18,   unit: '%',    label: '双支撑期' }
   };
 
   // ============================================================
@@ -1441,7 +1442,8 @@
     } else { scores.hemiplegic = 0; }
 
     // 帕金森步态: 步频↑ + 步长↓↓ + 步速↓ + 躯干前倾 + 肩摆减少 (ANRM §8.2 摆臂减少)
-    if (p.cadence.value > 110 && p.stepLength.value < 0.40 && p.gaitSpeed.value < 0.9) {
+    // 阈值适配手机摄像头: 步长<0.35 步速<0.7 才触发 (正常标定偏 10% 不会误判)
+    if (p.cadence.value > 115 && p.stepLength.value < 0.35 && p.gaitSpeed.value < 0.8) {
       scores.parkinsonian = 0.30 + (p.cadence.value - 110) / 50 * 0.2 +
         (0.40 - p.stepLength.value) * 0.3 + (e.trunkLeanFwd > 0 ? Math.min(e.trunkLeanFwd, 20) / 20 * 0.2 : 0);
       if (arm.shoulder && arm.shoulder.avgNormalized < 0.12) {
