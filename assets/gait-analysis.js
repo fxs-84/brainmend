@@ -50,34 +50,66 @@
   // TF.js 懒加载
   // ============================================================
   var TFJS_TF_URL     = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js';
+  var TFJS_TF_MIRRORS = [
+    'https://unpkg.com/@tensorflow/tfjs@4.17.0/dist/tf.min.js',
+    'https://cdn.bootcdn.net/ajax/libs/tensorflow/4.17.0/tf.min.js'
+  ];
   var TFJS_POSE_URL   = 'https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js';
-  var TFJS_POSE_FALLBACK = 'https://unpkg.com/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js';
+  var TFJS_POSE_MIRRORS = [
+    'https://unpkg.com/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js'
+  ];
   var detectorPromise = null;
   var tfPromise       = null;
 
-  function loadScriptOnce(src) {
+  var SCRIPT_LOAD_TIMEOUT = 18000;  // 18s 超时 (国内 CDN 较慢)
+
+  function loadScriptOnce(src, timeoutMs) {
+    timeoutMs = timeoutMs || SCRIPT_LOAD_TIMEOUT;
     return new Promise(function (resolve, reject) {
-      var exists = document.querySelector('script[data-src="' + src + '"]');
+      var key = src.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 80);
+      var exists = document.querySelector('script[data-src-key="' + key + '"]');
       if (exists) {
         if (exists.dataset.loaded === '1') return resolve();
-        exists.addEventListener('load', function () { resolve(); });
-        exists.addEventListener('error', function () { reject(new Error('Failed to load ' + src)); });
+        var t = setTimeout(function () { reject(new Error('Script load timeout: ' + src.substring(0,60))); }, timeoutMs);
+        exists.addEventListener('load', function () { clearTimeout(t); resolve(); });
+        exists.addEventListener('error', function () { clearTimeout(t); reject(new Error('Failed: ' + src.substring(0,60))); });
         return;
       }
       var s = document.createElement('script');
       s.src = src;
       s.async = true;
-      s.dataset.src = src;
-      s.onload = function () { s.dataset.loaded = '1'; resolve(); };
-      s.onerror = function () { reject(new Error('Failed to load ' + src)); };
+      s.dataset.srcKey = key;
+      var t = setTimeout(function () {
+        s.onload = null; s.onerror = null;
+        if (s.parentNode) s.parentNode.removeChild(s);
+        reject(new Error('Script load timeout: ' + src.substring(0, 60)));
+      }, timeoutMs);
+      s.onload = function () { clearTimeout(t); s.dataset.loaded = '1'; resolve(); };
+      s.onerror = function () { clearTimeout(t); reject(new Error('Failed: ' + src.substring(0, 60))); };
       document.head.appendChild(s);
     });
   }
 
+  // 多镜像尝试加载
+  function loadScriptWithFallback(urls, label) {
+    var idx = 0;
+    function tryNext(err) {
+      if (idx >= urls.length) return Promise.reject(err || new Error('All CDN mirrors failed for ' + label));
+      console.log('[gait] loading ' + label + ' from', urls[idx].substring(0, 50));
+      return loadScriptOnce(urls[idx]).catch(function (e) {
+        console.warn('[gait] CDN mirror ' + idx + ' failed for ' + label, e.message);
+        idx++;
+        return tryNext(e);
+      });
+    }
+    return tryNext();
+  }
+
   function loadTensorFlow() {
     if (tfPromise) return tfPromise;
-    tfPromise = loadScriptOnce(TFJS_TF_URL).then(function () {
-      if (!window.tf) throw new Error('TF.js not available after load');
+    var urls = [TFJS_TF_URL].concat(TFJS_TF_MIRRORS);
+    tfPromise = loadScriptWithFallback(urls, 'TF.js').then(function () {
+      if (!window.tf) throw new Error('TF.js not available after load — 请检查网络连接');
       return window.tf;
     });
     return tfPromise;
@@ -87,13 +119,9 @@
     if (detectorPromise) return detectorPromise;
     detectorPromise = (async function () {
       await loadTensorFlow();
-      try {
-        await loadScriptOnce(TFJS_POSE_URL);
-      } catch (e) {
-        console.warn('[gait] primary pose-detection CDN failed, trying fallback', e);
-        await loadScriptOnce(TFJS_POSE_FALLBACK);
-      }
-      if (!window.poseDetection) throw new Error('poseDetection global not available');
+      var poseUrls = [TFJS_POSE_URL].concat(TFJS_POSE_MIRRORS);
+      await loadScriptWithFallback(poseUrls, 'pose-detection');
+      if (!window.poseDetection) throw new Error('PoseDetection 模型未就绪 — 请刷新重试');
       var detector = await window.poseDetection.createDetector(
         window.poseDetection.SupportedModels.MoveNet,
         { modelType: window.poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
@@ -518,7 +546,8 @@
       return;
     }
     setPhase(PHASE.PROCESSING);
-    updateProcessingProgress(0.05);
+    updateProcessingProgress(0.02);
+    $('#gait-progress-title').textContent = '加载视频...';
 
     try {
       // 1. 加载视频
@@ -532,15 +561,19 @@
         v.onerror = function () { reject(new Error('Video load failed')); };
       });
       state.videoDuration = v.duration;
-      updateProcessingProgress(0.1);
+      updateProcessingProgress(0.10);
 
-      // 2. 提取帧
+      // 2. 提取帧 (同时开始预热 AI 模型)
+      $('#gait-progress-title').textContent = '提取视频帧...';
       var frames = await extractFrames(v, 30);
-      updateProcessingProgress(0.3);
+      updateProcessingProgress(0.25);
 
       if (frames.length < 5) throw new Error('视频帧数过少 (需要至少 5 帧, 实际 ' + frames.length + ')');
 
-      // 3. 姿势检测
+      // 3. 加载 AI 模型 + 姿势检测
+      $('#gait-progress-title').textContent = '加载 AI 姿势识别模型...';
+      $('#gait-progress-text').textContent = '首次使用需下载 ~8MB 模型, 国内用户可能需要 15-30 秒';
+      updateProcessingProgress(0.28);
       var keypointFrames = await detectPoses(frames);
       updateProcessingProgress(0.90);
 
@@ -605,7 +638,14 @@
       setPhase(PHASE.RESULTS);
     } catch (e) {
       console.error('[gait] process error', e);
-      state.errorMessage = '处理失败: ' + (e.message || e);
+      var msg = e.message || String(e);
+      if (msg.indexOf('CDN') !== -1 || msg.indexOf('Failed') !== -1 || msg.indexOf('timeout') !== -1) {
+        state.errorMessage = 'AI 模型加载失败 — 网络不通或 CDN 超时。请检查网络后刷新重试。(' + msg.substring(0, 40) + ')';
+      } else if (msg.indexOf('TF.js') !== -1 || msg.indexOf('poseDetection') !== -1) {
+        state.errorMessage = 'AI 模型未就绪 — 请刷新页面后重试。(' + msg.substring(0, 40) + ')';
+      } else {
+        state.errorMessage = '处理失败: ' + msg;
+      }
       setPhase(PHASE.CAPTURE);
     }
   }
