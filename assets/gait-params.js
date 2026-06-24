@@ -1304,6 +1304,47 @@
     return stddev(arr) / m;
   }
 
+  // 去除两端离群值后再求均值 (trim 比例 0.0-0.5, 默认 0.2)
+  function trimmedMean(arr, trimPct) {
+    trimPct = trimPct || 0.2;
+    if (!arr || arr.length === 0) return 0;
+    if (arr.length <= 3) return mean(arr);  // 太短不 trim
+    var sorted = arr.slice().sort(function (a, b) { return a - b; });
+    var trimCount = Math.floor(sorted.length * trimPct);
+    var keep = sorted.slice(trimCount, sorted.length - trimCount);
+    if (keep.length === 0) return mean(arr);
+    return mean(keep);
+  }
+
+  // 子帧 HS 精炼: 在检测到的 Y 最小值附近做抛物线插值
+  function refineHeelStrike(frames, hs, side) {
+    if (!hs || hs.frameIndex === undefined) return hs;
+    var kpName = side + '_ankle';
+    var fi = hs.frameIndex;
+    if (fi < 1 || fi >= frames.length - 1) return hs;
+    var y0 = getKp(frames[fi - 1], kpName);
+    var y1 = getKp(frames[fi],     kpName);
+    var y2 = getKp(frames[fi + 1], kpName);
+    if (!y0 || !y1 || !y2 || y0.score < 0.2 || y1.score < 0.2 || y2.score < 0.2) return hs;
+    // 抛物线插值: y = a*t² + b*t + c, 设 t=-1,0,1
+    var a = (y0.y + y2.y - 2 * y1.y) / 2;
+    var b = (y2.y - y0.y) / 2;
+    if (Math.abs(a) < 0.01) return hs;  // 近乎直线, 不插值
+    var tPeak = -b / (2 * a);  // 谷底位置 (-1 到 1 之间)
+    if (tPeak < -0.8 || tPeak > 0.8) return hs;  // 极值在邻域外
+    // tPeak=0 表示谷底恰好在 fi, <0 表示谷底在 fi-1 侧, >0 在 fi+1 侧
+    var refinedTime = frames[fi].t + tPeak * (frames[fi + 1].t - frames[fi].t);
+    return {
+      frameIndex: hs.frameIndex,
+      time: refinedTime,
+      x: hs.x + tPeak * (frames[fi + 1].t - frames[fi].t > 0 ?
+        (getKp(frames[fi + Math.sign(tPeak) || 0], kpName) || hs).x - hs.x : 0),
+      y: y1.y + b * tPeak + a * tPeak * tPeak,
+      confidence: hs.confidence,
+      refined: true
+    };
+  }
+
   function asymmetry(left, right) {
     if (!left || !right || left === 0 || right === 0) return 0;
     return Math.abs(left - right) / Math.max(left, right);
@@ -1332,25 +1373,25 @@
       if (s.to === 'left') stepLensL.push(s.value);
       else stepLensR.push(s.value);
     });
-    var stepLengthL = mean(stepLensL);
-    var stepLengthR = mean(stepLensR);
-    var stepLength  = mean(stepLens.map(function (s) { return s.value; }));
+    var stepLengthL = trimmedMean(stepLensL);
+    var stepLengthR = trimmedMean(stepLensR);
+    var stepLength  = trimmedMean(stepLens.map(function (s) { return s.value; }));
 
     // 步幅
     var stridesL = computeStrideLengths(leftHS, scale);
     var stridesR = computeStrideLengths(rightHS, scale);
-    var strideLengthL = mean(stridesL.map(function (s) { return s.value; }));
-    var strideLengthR = mean(stridesR.map(function (s) { return s.value; }));
+    var strideLengthL = trimmedMean(stridesL.map(function (s) { return s.value; }));
+    var strideLengthR = trimmedMean(stridesR.map(function (s) { return s.value; }));
     var strideLength  = (strideLengthL + strideLengthR) / 2;
 
     // 步宽
     var widths = computeStepWidths(frames, leftHS, rightHS, scale);
-    var stepWidth = mean(widths.map(function (w) { return w.value; }));
+    var stepWidth = trimmedMean(widths.map(function (w) { return w.value; }));
 
     // 足偏角
     var footAngles = computeFootAngles(frames, scale);
-    var footAngleL = mean(footAngles.filter(function (a) { return a.side === 'left'; }).map(function (a) { return a.value; }));
-    var footAngleR = mean(footAngles.filter(function (a) { return a.side === 'right'; }).map(function (a) { return a.value; }));
+    var footAngleL = trimmedMean(footAngles.filter(function (a) { return a.side === 'left'; }).map(function (a) { return a.value; }));
+    var footAngleR = trimmedMean(footAngles.filter(function (a) { return a.side === 'right'; }).map(function (a) { return a.value; }));
     var footAngle = (footAngleL + footAngleR) / 2;
 
     // 步频
@@ -1694,6 +1735,8 @@
     computeElbowSwing: computeElbowSwing,
     computeKneeBraking: computeKneeBraking,
     computeBrainGaitProfile: computeBrainGaitProfile,
+    trimmedMean: trimmedMean,
+    refineHeelStrike: refineHeelStrike,
     detectWalkingDirection: detectWalkingDirection,
     resolveAnatomicalSides: resolveAnatomicalSides,
     swapKeypointLabels: swapKeypointLabels,
