@@ -208,6 +208,9 @@
         v.muted = true;
         v.playsInline = true;
         await v.play();
+        // 视频流就绪后检测方向
+        checkOrientation();
+        v.addEventListener('loadedmetadata', checkOrientation);
       }
       return true;
     } catch (e) {
@@ -219,7 +222,7 @@
           var fb = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
           state.mediaStream = fb;
           var v = $('#gait-camera-video');
-          if (v) { v.srcObject = fb; v.muted = true; v.playsInline = true; await v.play(); }
+          if (v) { v.srcObject = fb; v.muted = true; v.playsInline = true; await v.play(); checkOrientation(); }
           console.warn('[gait] fallback to front camera');
           return true;
         } catch (e2) { /* fall through */ }
@@ -281,12 +284,38 @@
   }
 
   function stopCamera() {
+    if (_orientationWarnTimer) {
+      clearInterval(_orientationWarnTimer);
+      _orientationWarnTimer = null;
+    }
     if (state.mediaStream) {
       state.mediaStream.getTracks().forEach(function (t) { t.stop(); });
       state.mediaStream = null;
     }
     var v = $('#gait-camera-video');
     if (v) { v.srcObject = null; v.pause(); }
+  }
+
+  // 检测摄像头方向, 竖屏时显示横置提示
+  var _orientationWarnTimer = null;
+  function checkOrientation() {
+    var v = $('#gait-camera-video');
+    var warn = $('#gait-portrait-warn');
+    if (!v || !warn || !v.videoWidth) return;
+    // portrait = 高 > 宽 (手机竖持)
+    if (v.videoHeight > v.videoWidth) {
+      warn.style.display = 'block';
+      // 每 2 秒重检一次, 用户横置后自动消失
+      if (!_orientationWarnTimer) {
+        _orientationWarnTimer = setInterval(checkOrientation, 2000);
+      }
+    } else {
+      warn.style.display = 'none';
+      if (_orientationWarnTimer) {
+        clearInterval(_orientationWarnTimer);
+        _orientationWarnTimer = null;
+      }
+    }
   }
 
   // ============================================================
@@ -643,22 +672,23 @@
       renderError() +
       renderCameraSelector() +
       '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;">' +
-        '<h3 style="margin:0 0 8px 0;">📏 身高自动标定</h3>' +
+        '<h3 style="margin:0 0 8px 0;">&#x1f4cf; 身高自动标定</h3>' +
         '<p style="color:#666;font-size:13px;margin:0 0 12px 0;">输入患者<b>身高 (cm)</b>, 系统将自动从视频画面中识别头顶和踝关节像素距离, 计算比例尺。无需 1 米标尺, 适用于实际临床录制场景。</p>' +
         '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;justify-content:center;">' +
           '<label style="font-size:14px;color:#333;">身高 (cm):</label>' +
           '<input id="gait-cal-height" type="number" min="100" max="220" step="1" value="' + (state.calibration.heightCm || 170) + '" ' +
           'style="width:90px;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:16px;text-align:center;">' +
-          '<button id="gait-cal-auto" style="padding:8px 18px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">🎯 自动标定</button>' +
+          '<button id="gait-cal-auto" style="padding:8px 18px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">&#x1f3af; 自动标定</button>' +
         '</div>' +
         '<div style="position:relative;background:#000;border-radius:8px;overflow:hidden;max-width:640px;margin:0 auto;">' +
           '<video id="gait-camera-video" autoplay muted playsinline style="display:block;width:100%;height:auto;"></video>' +
           '<canvas id="gait-calibration-canvas" style="position:absolute;inset:0;cursor:crosshair;"></canvas>' +
+          '<div id="gait-portrait-warn" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.82);color:#fff;padding:16px 28px;border-radius:12px;font-size:16px;font-weight:700;text-align:center;pointer-events:none;white-space:nowrap;border:2px solid #fbbf24;">&#x1f4f1;&#x21c4; 请将手机横置<br><span style="font-size:12px;font-weight:400;opacity:0.85;">侧方横屏拍摄可获得最佳步态分析精度</span></div>' +
         '</div>' +
         '<div id="gait-calibration-status" style="margin-top:12px;padding:10px;background:#f0f2f5;border-radius:6px;font-size:13px;text-align:center;">点击「自动标定」按钮, 系统从视频中检测头顶-踝关节像素距离</div>' +
         '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">' +
-          '<button id="gait-cal-confirm" style="flex:2;padding:10px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;opacity:0.5;" disabled>✓ 确认标定 →</button>' +
-          '<button id="gait-cal-skip" style="flex:1;padding:10px;background:rgba(0,0,0,0.08);border:none;border-radius:6px;cursor:pointer;">跳过 →</button>' +
+          '<button id="gait-cal-confirm" style="flex:2;padding:10px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;opacity:0.5;" disabled>&#x2713; 确认标定 &#x2192;</button>' +
+          '<button id="gait-cal-skip" style="flex:1;padding:10px;background:rgba(0,0,0,0.08);border:none;border-radius:6px;cursor:pointer;">跳过 &#x2192;</button>' +
         '</div>' +
       '</div>'
     );
@@ -668,6 +698,7 @@
         renderPhase();
       } else {
         attachCameraSelectorHandlers();
+        checkOrientation();
       }
     });
     // 身高标定画布 (覆盖在视频上, 显示检测到的关键点和身高像素距离)
@@ -684,6 +715,7 @@
       drawCalibration();
     }
     video.addEventListener('loadedmetadata', syncCanvas);
+    video.addEventListener('loadedmetadata', checkOrientation);
 
     function drawCalibration() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -854,6 +886,7 @@
           '<div id="gait-record-panel">' +
             '<div style="position:relative;background:#000;border-radius:8px;overflow:hidden;max-width:640px;margin:0 auto;">' +
               '<video id="gait-camera-video" autoplay muted playsinline style="display:block;width:100%;height:auto;"></video>' +
+              '<div id="gait-portrait-warn" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.82);color:#fff;padding:16px 28px;border-radius:12px;font-size:16px;font-weight:700;text-align:center;pointer-events:none;white-space:nowrap;border:2px solid #fbbf24;">&#x1f4f1;&#x21c4; 请将手机横置<br><span style="font-size:12px;font-weight:400;opacity:0.85;">侧方横屏拍摄可获得最佳步态分析精度</span></div>' +
             '</div>' +
             '<div style="display:flex;gap:8px;margin-top:10px;align-items:center;justify-content:center;">' +
               '<span id="gait-record-timer" style="font-size:24px;font-weight:700;color:#dc2626;font-family:monospace;">00:00</span>' +
@@ -895,7 +928,7 @@
         if (mode === 'record') {
           $('#gait-record-panel').style.display = '';
           $('#gait-upload-panel').style.display = 'none';
-          startCamera().then(function (ok) { if (ok) attachCameraSelectorHandlers(); });
+          startCamera().then(function (ok) { if (ok) { attachCameraSelectorHandlers(); checkOrientation(); } });
         } else {
           $('#gait-record-panel').style.display = 'none';
           $('#gait-upload-panel').style.display = '';
@@ -904,12 +937,14 @@
       });
     });
     // 初次进入默认显示录制面板时启动摄像头
-    startCamera().then(function (ok) { if (ok) attachCameraSelectorHandlers(); });
+    startCamera().then(function (ok) { if (ok) { attachCameraSelectorHandlers(); checkOrientation(); } });
     // Recording controls
     var recTimer = null, recStart = 0;
     $('#gait-record-start').addEventListener('click', function () {
       startCamera().then(function (ok) {
         if (!ok) { renderPhase(); return; }
+        attachCameraSelectorHandlers();
+        checkOrientation();
         $('#gait-record-start').style.display = 'none';
         $('#gait-record-stop').style.display = '';
         startRecording();
