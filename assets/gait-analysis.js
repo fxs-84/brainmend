@@ -39,7 +39,10 @@
     fps: 30,
     results: null,        // {parameters, asymmetries, classification, neuro, ...}
     processingProgress: 0,
-    errorMessage: null
+    errorMessage: null,
+    cameraDevices: [],    // [{deviceId, label, facingHint}]
+    selectedDeviceId: null,
+    cameraFacing: 'environment'  // 'environment' 后置 / 'user' 前置 (移动设备默认值)
   };
 
   // ============================================================
@@ -132,15 +135,73 @@
   function statusText(s) { return ({ normal: '正常', mild: '轻度异常', moderate: '中度异常', severe: '重度异常', unknown: '未测量' })[s] || '—'; }
 
   // ============================================================
-  // 摄像头
+  // 摄像头设备枚举与选择
   // ============================================================
+  function inferFacingFromLabel(label) {
+    var s = (label || '').toLowerCase();
+    if (/back|rear|environment|后置|背面/i.test(s)) return 'environment';
+    if (/front|user|前置|正面|自拍/i.test(s)) return 'user';
+    return null;
+  }
+
+  async function enumerateCameras() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      state.cameraDevices = [];
+      return [];
+    }
+    try {
+      // 部分浏览器需要先获取一次权限才能看到完整 label
+      if (!state.mediaStream) {
+        try {
+          var tmp = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          tmp.getTracks().forEach(function (t) { t.stop(); });
+        } catch (e) { /* 静默, 后续启动摄像头会再次尝试 */ }
+      }
+      var devs = await navigator.mediaDevices.enumerateDevices();
+      state.cameraDevices = devs
+        .filter(function (d) { return d.kind === 'videoinput'; })
+        .map(function (d, i) {
+          var facing = inferFacingFromLabel(d.label);
+          return {
+            deviceId: d.deviceId,
+            label: d.label || ('摄像头 ' + (i + 1)),
+            facingHint: facing,
+            index: i
+          };
+        });
+      return state.cameraDevices;
+    } catch (e) {
+      console.warn('[gait] enumerateDevices failed', e);
+      state.cameraDevices = [];
+      return [];
+    }
+  }
+
+  function buildCameraConstraints() {
+    var constraints = { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false };
+    if (state.selectedDeviceId) {
+      constraints.video.deviceId = { exact: state.selectedDeviceId };
+    } else {
+      constraints.video.facingMode = { ideal: state.cameraFacing };
+    }
+    return constraints;
+  }
+
   async function startCamera() {
     try {
       if (state.mediaStream) stopCamera();
-      state.mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
-        audio: false
-      });
+      // 重新枚举设备 (label 在权限授予后会更新)
+      await enumerateCameras();
+      var constraints = buildCameraConstraints();
+      state.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      // 拿到实际 track 的 settings, 反查 deviceId (供 UI 高亮)
+      var track = state.mediaStream.getVideoTracks()[0];
+      if (track && track.getSettings) {
+        var settings = track.getSettings();
+        if (settings.deviceId && settings.deviceId !== state.selectedDeviceId) {
+          state.selectedDeviceId = settings.deviceId;
+        }
+      }
       var v = $('#gait-camera-video');
       if (v) {
         v.srcObject = state.mediaStream;
@@ -151,9 +212,72 @@
       return true;
     } catch (e) {
       console.error('[gait] camera error', e);
+      // 后置失败时降级尝试前置
+      if (state.cameraFacing === 'environment' && !state.selectedDeviceId) {
+        try {
+          state.cameraFacing = 'user';
+          var fb = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+          state.mediaStream = fb;
+          var v = $('#gait-camera-video');
+          if (v) { v.srcObject = fb; v.muted = true; v.playsInline = true; await v.play(); }
+          console.warn('[gait] fallback to front camera');
+          return true;
+        } catch (e2) { /* fall through */ }
+      }
       state.errorMessage = '无法访问摄像头: ' + (e.message || e.name);
       return false;
     }
+  }
+
+  async function selectCamera(deviceId) {
+    state.selectedDeviceId = deviceId;
+    // 如果有 hint, 同步 facing
+    var dev = state.cameraDevices.find(function (d) { return d.deviceId === deviceId; });
+    if (dev && dev.facingHint) state.cameraFacing = dev.facingHint;
+    if (state.mediaStream) {
+      return await startCamera();
+    }
+    return true;
+  }
+
+  function renderCameraSelector() {
+    if (!state.cameraDevices || state.cameraDevices.length <= 1) return '';
+    var buttons = state.cameraDevices.map(function (d) {
+      var isActive = (state.selectedDeviceId === d.deviceId) ||
+                     (!state.selectedDeviceId && d.facingHint === state.cameraFacing);
+      var hint = d.facingHint === 'environment' ? '后置' :
+                 d.facingHint === 'user' ? '前置' : '';
+      var label = hint ? (hint + ' · ' + d.label) : d.label;
+      return '<button class="gait-cam-btn" data-device-id="' + d.deviceId + '" ' +
+             'style="padding:6px 12px;margin:0 4px 4px 0;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid ' +
+             (isActive ? '#43E97B' : 'rgba(0,0,0,0.15)') + ';background:' +
+             (isActive ? 'linear-gradient(135deg,#43E97B,#38F9D7)' : 'rgba(0,0,0,0.06)') +
+             ';color:' + (isActive ? '#fff' : '#333') + ';font-weight:' + (isActive ? '600' : '400') + ';">' +
+             '📷 ' + label + '</button>';
+    }).join('');
+    return '<div style="margin:8px 0;padding:8px;background:#f8fafc;border-radius:6px;">' +
+           '<div style="font-size:12px;color:#666;margin-bottom:4px;">📷 摄像头选择 (点击切换前后置)</div>' +
+           '<div id="gait-camera-buttons" style="display:flex;flex-wrap:wrap;">' + buttons + '</div>' +
+           '</div>';
+  }
+
+  function attachCameraSelectorHandlers() {
+    var container = $('#gait-camera-buttons');
+    if (!container) return;
+    container.querySelectorAll('.gait-cam-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var devId = btn.getAttribute('data-device-id');
+        if (devId === state.selectedDeviceId) return;
+        selectCamera(devId).then(function (ok) {
+          if (ok) {
+            // 重新渲染按钮高亮 + 重新绘制标定点 (摄像头可能换了)
+            if (state.phase === PHASE.CALIBRATION) {
+              renderCalibration();
+            }
+          }
+        });
+      });
+    });
   }
 
   function stopCamera() {
@@ -502,6 +626,7 @@
     clearError();
     setBody(
       renderError() +
+      renderCameraSelector() +
       '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;">' +
         '<h3 style="margin:0 0 8px 0;">📏 标定 (1 米参照物)</h3>' +
         '<p style="color:#666;font-size:13px;margin:0 0 12px 0;">在地面放置 1 米长的标尺 (或卷尺), 让患者站在标尺旁, 在下方摄像头画面上依次点击标尺的<b>左端</b>和<b>右端</b>。</p>' +
@@ -520,6 +645,8 @@
     startCamera().then(function (ok) {
       if (!ok) {
         state.errorMessage = '无法启动摄像头, 请使用"跳过"或刷新页面重试';
+      } else {
+        attachCameraSelectorHandlers();
       }
     });
     // Calibration canvas
@@ -624,6 +751,7 @@
     clearError();
     setBody(
       renderError() +
+      renderCameraSelector() +
       '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;">' +
         '<h3 style="margin:0 0 8px 0;">📹 视频采集</h3>' +
         '<p style="color:#666;font-size:13px;margin:0 0 12px 0;">录制或上传 5-15 秒自然行走的视频 (侧方视角最佳)</p>' +
@@ -676,7 +804,7 @@
         if (mode === 'record') {
           $('#gait-record-panel').style.display = '';
           $('#gait-upload-panel').style.display = 'none';
-          startCamera();
+          startCamera().then(function (ok) { if (ok) attachCameraSelectorHandlers(); });
         } else {
           $('#gait-record-panel').style.display = 'none';
           $('#gait-upload-panel').style.display = '';
@@ -684,6 +812,8 @@
         }
       });
     });
+    // 初次进入默认显示录制面板时启动摄像头
+    startCamera().then(function (ok) { if (ok) attachCameraSelectorHandlers(); });
     // Recording controls
     var recTimer = null, recStart = 0;
     $('#gait-record-start').addEventListener('click', function () {
