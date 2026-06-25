@@ -690,13 +690,21 @@
         reject(new Error('Video error during frame extraction'));
       });
 
-      // 全局超时: 45s (15fps × 14s = 210 帧, 每帧 seek ~200ms, 总 ~42s)
+      // 全局超时: 90s (移动端 seek 可能每帧 200-500ms, 留足余量)
       globalTimeout = setTimeout(function () {
         if (finished) return;
-        finished = true;
         videoEl.removeEventListener('seeked', onSeeked);
-        reject(new Error('Frame extraction timeout (45s, captured ' + frames.length + '/' + frameCount + ' frames)'));
-      }, 45000);
+        // 优雅降级: 如果已捕获足够帧 (>一半), 用已有帧继续处理, 不报错
+        if (frames.length >= Math.max(10, frameCount * 0.4)) {
+          console.warn('[gait] frame extraction partial: ' + frames.length + '/' + frameCount + ' (timeout, using partial)');
+          finished = true;
+          videoEl.pause();
+          resolve(frames);
+        } else {
+          finished = true;
+          reject(new Error('帧提取超时且帧数不足 (' + frames.length + '/' + frameCount + '), 请尝试用较短视频或降低分辨率'));
+        }
+      }, 90000);
 
       // 启动 seek 循环 (currentTime=0 nudge 强制触发首次 seeked)
       setTimeout(function () {
