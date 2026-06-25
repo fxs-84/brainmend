@@ -790,6 +790,27 @@
     }
     if (points.length < 5) return [];
 
+    // ---------- 0. 从全部关键点估算人体像素身高 (nose→ankle 中位数) ----------
+    function calcBodyHeightPx() {
+      var heights = [];
+      for (var i = 0; i < frames.length; i++) {
+        var nose = getKp(frames[i], 'nose');
+        var la = getKp(frames[i], 'left_ankle');
+        var ra = getKp(frames[i], 'right_ankle');
+        if (nose && la && ra && nose.score >= 0.3 && la.score >= 0.3 && ra.score >= 0.3) {
+          heights.push(((la.y + ra.y) / 2) - nose.y);
+        }
+      }
+      if (heights.length < 5) return null;
+      heights.sort(function (a, b) { return a - b; });
+      return heights[Math.floor(heights.length * 0.5)]; // median
+    }
+    var bodyH = calcBodyHeightPx();
+    // 摆动深度 = 身体像素 3% (正常人步态踝关节垂直位移 ~5cm, 身高 ~170cm → 3%)
+    // min 3px (手机远距离), max 25px (近距离), 默认 8px (无身高信息时)
+    var SWING_DEPTH = bodyH ? Math.max(3, Math.min(25, bodyH * 0.03)) : 8;
+    var HS_RECOVERY_TOL = bodyH ? Math.max(2, Math.min(12, bodyH * 0.015)) : 5;
+
     // ---------- 1. 中值滤波 (window=5) 抗脉冲噪声 ----------
     function medianFilter(pts, win) {
       var half = Math.floor(win / 2);
@@ -829,8 +850,7 @@
     var baseline = allY[Math.floor(allY.length * 0.70)];
 
     // ---------- 3. 摆动顶点检测 + 4. HS = 上升回基线 ----------
-    var SWING_DEPTH = 8;          // y 必须低于 baseline 至少 8px 才算摆动 (抗噪声)
-    var HS_RECOVERY_TOL = 5;      // HS = y 上升到 baseline - 5 以内
+    // SWING_DEPTH / HS_RECOVERY_TOL 已在上面根据人体身高自适应计算
     var HS_RECOVERY_WIN = 0.70;   // 摆动顶点后 0.70s 内必须恢复 (覆盖慢走 60 SPM: cycle=2s, swing≈0.6s)
     var PEAK_SEARCH_WIN = 5;      // 摆动顶点局部最小值搜索窗口 (10 帧 = 0.33s)
 
