@@ -373,6 +373,42 @@
       html += '</div>';
     }
 
+    // 时相截图 — 算法可视化验证锚点 (每个脚首个完整周期)
+    if (r.phaseSnapshots && r.phaseSnapshots.length > 0) {
+      var bySide = { left: [], right: [] };
+      r.phaseSnapshots.forEach(function (s) {
+        if (bySide[s.side]) bySide[s.side].push(s);
+      });
+      var phaseOrder = ['IC', 'LR', 'MSt', 'TSt', 'PSw', 'ISw', 'MSw', 'TSw'];
+      html += '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;">' +
+        '<h3 style="margin:0 0 6px 0;font-size:16px;">📸 时相截图 (可视化算法验证)</h3>' +
+        '<div style="font-size:12px;color:#666;margin-bottom:14px;">从视频中按检测到的 HS/TO 时间戳精确定位每个时相帧。请核对: <b>IC</b> 应为足跟刚触地; <b>PSw</b> 应为足趾即将离地; <b>MSw</b> 应为摆动中点脚离地最高。</div>';
+      ['left', 'right'].forEach(function (side) {
+        var snaps = bySide[side];
+        if (!snaps || !snaps.length) return;
+        var sideLabel = side === 'left' ? '左脚' : '右脚';
+        html += '<div style="margin-bottom:14px;">' +
+          '<div style="font-size:13px;font-weight:600;color:#0f7b6c;margin-bottom:8px;">' + sideLabel + ' · 周期 ' + snaps[0].cycleIndex + ' (' + snaps.length + ' 个时相)</div>' +
+          '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">';
+        snaps.sort(function (a, b) {
+          return phaseOrder.indexOf(a.phase) - phaseOrder.indexOf(b.phase);
+        });
+        snaps.forEach(function (s) {
+          var stanceColor = s.stance ? '#3b82f6' : '#f59e0b';
+          var stanceLabel = s.stance ? '支撑' : '摆动';
+          html += '<div style="background:#f8f9fa;border-radius:6px;overflow:hidden;border-top:3px solid ' + stanceColor + ';">' +
+            '<img src="' + s.imageData + '" style="width:100%;height:auto;display:block;background:#000;" />' +
+            '<div style="padding:6px 8px;">' +
+              '<div style="font-size:11px;font-weight:700;color:#333;">' + s.phase + ' · ' + s.label + '</div>' +
+              '<div style="font-size:10px;color:#888;margin-top:2px;">t=' + s.time.toFixed(2) + 's · ' + stanceLabel + '</div>' +
+            '</div>' +
+          '</div>';
+        });
+        html += '</div></div>';
+      });
+      html += '</div>';
+    }
+
     // 神经定位
     html += '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;border-left:4px solid #0f7b6c;">' +
       '<h3 style="margin:0 0 10px 0;font-size:16px;">🧠 神经定位提示</h3>' +
