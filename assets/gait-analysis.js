@@ -608,13 +608,13 @@
         reject(new Error('Video error during frame extraction'));
       });
 
-      // 全局超时: 60s 内拿不到所有帧就 reject
+      // 全局超时: 45s (15fps × 14s = 210 帧, 每帧 seek ~200ms, 总 ~42s)
       globalTimeout = setTimeout(function () {
         if (finished) return;
         finished = true;
         videoEl.removeEventListener('seeked', onSeeked);
-        reject(new Error('Frame extraction timeout (60s, captured ' + frames.length + '/' + frameCount + ' frames)'));
-      }, 60000);
+        reject(new Error('Frame extraction timeout (45s, captured ' + frames.length + '/' + frameCount + ' frames)'));
+      }, 45000);
 
       // 启动 seek 循环 (currentTime=0 nudge 强制触发首次 seeked)
       setTimeout(function () {
@@ -709,9 +709,9 @@
         throw new Error('视频首帧未解码 (videoWidth=' + (v.videoWidth || 0) + '), 请重新上传或换视频');
       }
 
-      // 2. 提取帧 (同时开始预热 AI 模型)
+      // 2. 提取帧 — 15fps (足够步态分析, 手机 seek 性能下 30fps 会超时)
       $('#gait-progress-title').textContent = '提取视频帧...';
-      var frames = await extractFrames(v, 30);
+      var frames = await extractFrames(v, 15);
       updateProcessingProgress(0.25);
 
       if (frames.length < 5) throw new Error('视频帧数过少 (需要至少 5 帧, 实际 ' + frames.length + ')');
@@ -834,6 +834,26 @@
   function loadHistory() {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
     catch (e) { return []; }
+  }
+
+  function deleteHistoryRecord(idx) {
+    try {
+      var log = loadHistory();
+      if (idx < 0 || idx >= log.length) return;
+      log.splice(idx, 1);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(log));
+      // 如果 state.results 指向被删除的记录, 也清掉
+      if (state.results && state.results.timestamp === log[idx] && log[idx] === undefined) {
+        state.results = null;
+      }
+    } catch (e) {
+      console.warn('[gait] deleteHistoryRecord error', e.message);
+    }
+  }
+
+  function clearAllHistory() {
+    try { localStorage.removeItem(STORAGE_KEY); state.results = null; }
+    catch (e) { console.warn('[gait] clearAllHistory error', e.message); }
   }
 
   // ============================================================
@@ -1539,6 +1559,10 @@
     if (list.length === 0) {
       html = '<p style="color:#888;text-align:center;padding:20px;">暂无历史记录</p>';
     } else {
+      html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+        '<div style="font-size:13px;color:#666;">共 <b>' + list.length + '</b> 条记录</div>' +
+        '<button id="gait-hist-clear-all" style="padding:6px 14px;background:#fee;color:#dc2626;border:1px solid #fcc;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">🗑 清空全部</button>' +
+      '</div>';
       html = list.map(function (r, idx) {
         var p = r.parameters || {};
         var c = r.classification || {};
@@ -1563,8 +1587,9 @@
             '<div style="font-size:13px;font-weight:700;color:' + s.c + ';">' + (typeof val === 'number' ? val.toFixed(2) : val) + '<span style="font-size:9px;color:#999;">' + s.u + '</span></div>' +
           '</div>';
         }).join('');
-        return '<div class="gait-hist-item" data-idx="' + idx + '" style="padding:14px;border:1px solid #e0e0e0;border-radius:10px;margin-bottom:10px;cursor:pointer;background:#fafafa;user-select:none;transition:all 0.15s;" onmouseover="this.style.background=\'#f0f9f4\';this.style.borderColor=\'#43E97B\';this.style.transform=\'translateX(2px)\'" onmouseout="this.style.background=\'#fafafa\';this.style.borderColor=\'#e0e0e0\';this.style.transform=\'translateX(0)\'">' +
-          '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">' +
+        return '<div class="gait-hist-item" data-idx="' + idx + '" style="padding:14px;border:1px solid #e0e0e0;border-radius:10px;margin-bottom:10px;cursor:pointer;background:#fafafa;user-select:none;transition:all 0.15s;position:relative;" onmouseover="this.style.background=\'#f0f9f4\';this.style.borderColor=\'#43E97B\';this.style.transform=\'translateX(2px)\'" onmouseout="this.style.background=\'#fafafa\';this.style.borderColor=\'#e0e0e0\';this.style.transform=\'translateX(0)\'">' +
+          '<button class="gait-hist-del" data-idx="' + idx + '" style="position:absolute;top:8px;right:8px;width:28px;height:28px;border:none;background:#fee;color:#dc2626;border-radius:50%;cursor:pointer;font-size:14px;font-weight:700;line-height:1;padding:0;" title="删除此记录">×</button>' +
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;padding-right:36px;">' +
             '<div style="flex:1;">' +
               '<div style="font-size:15px;font-weight:700;color:#0f7b6c;">' + (c.primaryLabel || '—') + '</div>' +
               '<div style="font-size:11px;color:#888;margin-top:2px;">' + new Date(r.timestamp).toLocaleString('zh-CN') + '</div>' +
@@ -1580,6 +1605,30 @@
       }).join('');
     }
     $('#gait-history-list').innerHTML = html;
+    // 清空全部按钮
+    var clearAllBtn = document.getElementById('gait-hist-clear-all');
+    if (clearAllBtn) {
+      clearAllBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (confirm('确定清空全部历史记录？此操作不可撤销。')) {
+          clearAllHistory();
+          renderHistory();
+        }
+      });
+    }
+    // 删除按钮 — 阻止冒泡到 item 点击, 调用 deleteHistoryRecord
+    document.querySelectorAll('.gait-hist-del').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var idx = parseInt(btn.dataset.idx, 10);
+        if (confirm('确定删除这条记录？此操作不可撤销。')) {
+          deleteHistoryRecord(idx);
+          renderHistory();
+        }
+      });
+    });
     var items = document.querySelectorAll('.gait-hist-item');
     items.forEach(function (item) {
       var clickHandler = function (e) {
