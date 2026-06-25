@@ -522,12 +522,41 @@
     }
   }
 
+  // 强制视频元素解码首帧 (某些上传视频 metadata ready 但首帧未解码, videoWidth=0)
+  function forceDecodeFirstFrame(videoEl, timeoutMs) {
+    return new Promise(function (resolve) {
+      if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) { resolve(); return; }
+      var done = false;
+      function finish() { if (!done) { done = true; resolve(); } }
+      var t = setTimeout(finish, timeoutMs || 3000);
+      function onLoaded() {
+        if (videoEl.videoWidth > 0) {
+          videoEl.removeEventListener('loadeddata', onLoaded);
+          clearTimeout(t);
+          finish();
+        }
+      }
+      videoEl.addEventListener('loadeddata', onLoaded);
+      try {
+        videoEl.muted = true;
+        var p = videoEl.play();
+        if (p && p.then) {
+          p.then(function () { setTimeout(function () { try { videoEl.pause(); videoEl.currentTime = 0; } catch (e) {} finish(); }, 100); })
+           .catch(function () { finish(); });
+        } else {
+          setTimeout(function () { try { videoEl.pause(); } catch (e) {} finish(); }, 200);
+        }
+      } catch (e) { finish(); }
+    });
+  }
+
   function extractFrames(videoEl, fps) {
     return new Promise(function (resolve, reject) {
       fps = fps || 30;
       var duration = videoEl.duration;
       if (!isFinite(duration) || duration <= 0) return reject(new Error('Invalid video duration'));
       var frameCount = Math.min(Math.floor(duration * fps), 600);
+      if (frameCount <= 0) return reject(new Error('Invalid frameCount: ' + frameCount));
       var actualFps = frameCount / duration;
       var frames = [];
       var canvas = document.createElement('canvas');
@@ -536,10 +565,14 @@
       var ctx = canvas.getContext('2d');
       var idx = 0;
       var finished = false;
+      var noProgressFrames = 0;  // 连续 videoWidth=0 计数
+      var globalTimeout = null;
 
       function captureCurrentFrame() {
+        if (finished) return;
         if (idx >= frameCount) {
           finished = true;
+          if (globalTimeout) clearTimeout(globalTimeout);
           videoEl.pause();
           videoEl.removeEventListener('seeked', onSeeked);
           resolve(frames);
@@ -552,6 +585,9 @@
             ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
             var dataUrl = canvas.toDataURL('image/jpeg', 0.5);
             frames.push({ t: idx / actualFps, imageData: dataUrl, w: canvas.width, h: canvas.height });
+            noProgressFrames = 0;
+          } else {
+            noProgressFrames++;
           }
         } catch (e) {
           console.warn('[gait] frame capture error at', idx, e.message);
@@ -560,6 +596,7 @@
         updateProcessingProgress(0.05 + (idx / frameCount) * 0.2);
         if (idx >= frameCount) {
           finished = true;
+          if (globalTimeout) clearTimeout(globalTimeout);
           videoEl.pause();
           videoEl.removeEventListener('seeked', onSeeked);
           resolve(frames);
@@ -567,8 +604,14 @@
         }
         setTimeout(function () {
           if (finished) return;
-          try { videoEl.currentTime = idx / actualFps; }
-          catch (e) { console.warn('[gait] seek error', e.message); }
+          try {
+            // 微调 ±0.005s 强制触发 seeked 事件 (currentTime 未变化时不触发)
+            var target = idx / actualFps;
+            if (Math.abs((videoEl.currentTime || 0) - target) < 0.005) {
+              target = target > 0 ? target - 0.005 : target + 0.005;
+            }
+            videoEl.currentTime = target;
+          } catch (e) { console.warn('[gait] seek error', e.message); }
         }, 10);
       }
 
@@ -581,14 +624,41 @@
       videoEl.addEventListener('error', function (e) {
         if (finished) return;
         finished = true;
+        if (globalTimeout) clearTimeout(globalTimeout);
         reject(new Error('Video error during frame extraction'));
       });
 
-      setTimeout(function () {
+      // 全局超时: 30s 内拿不到任何帧就 reject (避免上传格式不支持/解码失败时永久挂起)
+      globalTimeout = setTimeout(function () {
         if (finished) return;
-        try { videoEl.currentTime = idx / actualFps; }
-        catch (e) { reject(new Error('Seek init failed: ' + e.message)); }
-      }, 100);
+        finished = true;
+        videoEl.removeEventListener('seeked', onSeeked);
+        reject(new Error('Frame extraction timeout (30s, captured ' + frames.length + ' frames, videoWidth=' + (videoEl.videoWidth || 0) + ')'));
+      }, 30000);
+
+      // 先强制视频解码首帧 (上传视频常见 videoWidth=0 问题)
+      forceDecodeFirstFrame(videoEl, 3000).then(function () {
+        if (finished) return;
+        if (videoEl.videoWidth === 0 || videoEl.videoHeight === 0) {
+          // 解码后仍为 0 — 视频格式可能不支持
+          finished = true;
+          if (globalTimeout) clearTimeout(globalTimeout);
+          videoEl.removeEventListener('seeked', onSeeked);
+          reject(new Error('视频解码失败 — videoWidth=0。请尝试用 Chrome 重新录制或转码 (推荐 H.264/MP4)。'));
+          return;
+        }
+        // 启动 seek 循环
+        setTimeout(function () {
+          if (finished) return;
+          try {
+            var target = idx / actualFps;
+            if (Math.abs((videoEl.currentTime || 0) - target) < 0.005) {
+              target = target > 0 ? target - 0.005 : target + 0.005;
+            }
+            videoEl.currentTime = target;
+          } catch (e) { reject(new Error('Seek init failed: ' + e.message)); }
+        }, 100);
+      });
     });
   }
 
