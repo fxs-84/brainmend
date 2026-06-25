@@ -522,31 +522,15 @@
     }
   }
 
-  // 强制视频元素解码首帧 (某些上传视频 metadata ready 但首帧未解码, videoWidth=0)
-  function forceDecodeFirstFrame(videoEl, timeoutMs) {
+  // 等待视频首帧解码完成 (loadeddata 事件 = 元数据 + 首帧均 ready)
+  function waitForLoadedData(videoEl, timeoutMs) {
     return new Promise(function (resolve) {
-      if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) { resolve(); return; }
+      if (videoEl.readyState >= 2) { resolve(); return; }
       var done = false;
-      function finish() { if (!done) { done = true; resolve(); } }
-      var t = setTimeout(finish, timeoutMs || 3000);
-      function onLoaded() {
-        if (videoEl.videoWidth > 0) {
-          videoEl.removeEventListener('loadeddata', onLoaded);
-          clearTimeout(t);
-          finish();
-        }
-      }
+      function finish() { if (!done) { done = true; videoEl.removeEventListener('loadeddata', onLoaded); resolve(); } }
+      function onLoaded() { finish(); }
       videoEl.addEventListener('loadeddata', onLoaded);
-      try {
-        videoEl.muted = true;
-        var p = videoEl.play();
-        if (p && p.then) {
-          p.then(function () { setTimeout(function () { try { videoEl.pause(); videoEl.currentTime = 0; } catch (e) {} finish(); }, 100); })
-           .catch(function () { finish(); });
-        } else {
-          setTimeout(function () { try { videoEl.pause(); } catch (e) {} finish(); }, 200);
-        }
-      } catch (e) { finish(); }
+      setTimeout(finish, timeoutMs || 5000);
     });
   }
 
@@ -565,7 +549,6 @@
       var ctx = canvas.getContext('2d');
       var idx = 0;
       var finished = false;
-      var noProgressFrames = 0;  // 连续 videoWidth=0 计数
       var globalTimeout = null;
 
       function captureCurrentFrame() {
@@ -585,9 +568,6 @@
             ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
             var dataUrl = canvas.toDataURL('image/jpeg', 0.5);
             frames.push({ t: idx / actualFps, imageData: dataUrl, w: canvas.width, h: canvas.height });
-            noProgressFrames = 0;
-          } else {
-            noProgressFrames++;
           }
         } catch (e) {
           console.warn('[gait] frame capture error at', idx, e.message);
@@ -628,37 +608,22 @@
         reject(new Error('Video error during frame extraction'));
       });
 
-      // 全局超时: 30s 内拿不到任何帧就 reject (避免上传格式不支持/解码失败时永久挂起)
+      // 全局超时: 60s 内拿不到所有帧就 reject
       globalTimeout = setTimeout(function () {
         if (finished) return;
         finished = true;
         videoEl.removeEventListener('seeked', onSeeked);
-        reject(new Error('Frame extraction timeout (30s, captured ' + frames.length + ' frames, videoWidth=' + (videoEl.videoWidth || 0) + ')'));
-      }, 30000);
+        reject(new Error('Frame extraction timeout (60s, captured ' + frames.length + '/' + frameCount + ' frames)'));
+      }, 60000);
 
-      // 先强制视频解码首帧 (上传视频常见 videoWidth=0 问题)
-      forceDecodeFirstFrame(videoEl, 3000).then(function () {
+      // 启动 seek 循环 (currentTime=0 nudge 强制触发首次 seeked)
+      setTimeout(function () {
         if (finished) return;
-        if (videoEl.videoWidth === 0 || videoEl.videoHeight === 0) {
-          // 解码后仍为 0 — 视频格式可能不支持
-          finished = true;
-          if (globalTimeout) clearTimeout(globalTimeout);
-          videoEl.removeEventListener('seeked', onSeeked);
-          reject(new Error('视频解码失败 — videoWidth=0。请尝试用 Chrome 重新录制或转码 (推荐 H.264/MP4)。'));
-          return;
-        }
-        // 启动 seek 循环
-        setTimeout(function () {
-          if (finished) return;
-          try {
-            var target = idx / actualFps;
-            if (Math.abs((videoEl.currentTime || 0) - target) < 0.005) {
-              target = target > 0 ? target - 0.005 : target + 0.005;
-            }
-            videoEl.currentTime = target;
-          } catch (e) { reject(new Error('Seek init failed: ' + e.message)); }
-        }, 100);
-      });
+        try {
+          var target = idx / actualFps + 0.005;  // nudge +5ms 强制 seeked 触发
+          videoEl.currentTime = target;
+        } catch (e) { reject(new Error('Seek init failed: ' + e.message)); }
+      }, 50);
     });
   }
 
@@ -735,6 +700,12 @@
       });
       state.videoDuration = v.duration;
       updateProcessingProgress(0.10);
+
+      // 等首帧 ready (上传视频常见 metadata 已加载但首帧未解码, videoWidth=0)
+      await waitForLoadedData(v, 5000);
+      if (v.videoWidth === 0 || v.videoHeight === 0) {
+        throw new Error('视频首帧未解码 (videoWidth=' + (v.videoWidth || 0) + '), 请稍候或重新上传');
+      }
 
       // 2. 提取帧 (同时开始预热 AI 模型)
       $('#gait-progress-title').textContent = '提取视频帧...';
