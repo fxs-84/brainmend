@@ -999,13 +999,14 @@
   function clearError() { state.errorMessage = null; }
 
   function renderIntro() {
+    var errHtml = renderError();
     clearError();
     setBody(
       '<div style="background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;padding:30px;border-radius:16px;margin-bottom:20px;">' +
         '<h2 style="margin:0 0 8px 0;font-size:24px;">🚶 步态分析系统</h2>' +
         '<p style="margin:0;font-size:14px;opacity:0.95;">基于 ANRM 肌骨神经康复体系的临床步态评估工具</p>' +
       '</div>' +
-      renderError() +
+      errHtml +
       '<div style="background:#fff;padding:24px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);margin-bottom:16px;">' +
         '<h3 style="margin:0 0 12px 0;color:#1a1a2e;">📋 评估流程</h3>' +
         '<ol style="line-height:1.9;color:#444;padding-left:24px;margin:0;">' +
@@ -1035,9 +1036,10 @@
   }
 
   function renderCalibration() {
+    var errHtml = renderError();
     clearError();
     setBody(
-      renderError() +
+      errHtml +
       renderCameraSelector() +
       renderCameraSideSelector() +
       '<div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;">' +
@@ -1237,9 +1239,10 @@
   }
 
   function renderCapture() {
+    var errHtml = renderError();
     clearError();
     setBody(
-      renderError() +
+      errHtml +
       renderCameraSelector() +
       renderCameraSideSelector() +
       '<div style="display:flex;gap:6px;margin-bottom:8px;">' +
