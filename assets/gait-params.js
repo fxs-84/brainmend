@@ -769,6 +769,16 @@
   }
 
   // ============================================================
+  // 脚跟着地检测 (HS) — 抗噪声 v2
+  //
+  // 旧算法找 y 局部极小值 (= 摆动顶点 = 脚最高), 与 HS 概念错位;
+  //                  干净数据下偏移抵消能用, 有噪声时被噪声尖峰淹没
+  // 新算法:
+  //   1) 中值滤波 (window=5) + 二次滑动平均 — 抗 ±5px MoveNet 抖动
+  //   2) 计算 stance 基线 (y 70% 分位数 — 多数时间脚在地)
+  //   3) 检测摆动顶点 (y < 基线 - 8px, 局部极小值)
+  //   4) HS = 摆动顶点之后, y 上升回到 (基线 - 5px) 以内的**第一个点**
+  //   5) 起点/终点特殊处理 + 最小间隔 0.40s
   function detectHeelStrikes(frames, side) {
     var kpName = side + '_ankle';
     var points = [];
@@ -778,88 +788,143 @@
         points.push({ frame: i, t: frames[i].t, y: kp.y, x: kp.x, score: kp.score });
       }
     }
-    if (points.length < 3) return [];
+    if (points.length < 5) return [];
 
-    // 平滑 y 序列 (3 帧滑动平均)
-    var smoothed = [];
-    var win = 1;
-    for (var p = 0; p < points.length; p++) {
-      var sum = 0, count = 0;
-      for (var q = -win; q <= win; q++) {
-        if (p + q >= 0 && p + q < points.length) {
-          sum += points[p + q].y;
-          count++;
+    // ---------- 1. 中值滤波 (window=5) 抗脉冲噪声 ----------
+    function medianFilter(pts, win) {
+      var half = Math.floor(win / 2);
+      var result = [];
+      for (var p = 0; p < pts.length; p++) {
+        var ys = [];
+        for (var q = -half; q <= half; q++) {
+          if (p + q >= 0 && p + q < pts.length) ys.push(pts[p + q].y);
+        }
+        ys.sort(function (a, b) { return a - b; });
+        result.push({
+          y: ys[Math.floor(ys.length / 2)],
+          x: pts[p].x,
+          frame: pts[p].frame,
+          t: pts[p].t,
+          score: pts[p].score
+        });
+      }
+      return result;
+    }
+    var smoothed = medianFilter(points, 5);
+
+    // ---------- 1b. 二次 5 帧滑动平均 — 平滑残余抖动 ----------
+    smoothed = smoothed.map(function (s, idx) {
+      var sumY = 0, cnt = 0;
+      for (var q = -2; q <= 2; q++) {
+        if (idx + q >= 0 && idx + q < smoothed.length) {
+          sumY += smoothed[idx + q].y;
+          cnt++;
         }
       }
-      smoothed.push({ y: sum / count, x: points[p].x, frame: points[p].frame, t: points[p].t, score: points[p].score });
-    }
+      return { y: sumY / cnt, x: s.x, frame: s.frame, t: s.t, score: s.score };
+    });
 
-    // 候选检测: 3 类信号
-    //  1) 内部局部极小值: 1 步邻域内最小
-    //  2) 起点: 起点 y < 后 3 帧平均 → 起点即极小值
-    //  3) 终点: 终点 y < 前 3 帧平均 → 终点即极小值
-    //  4) 速度反转: 下降→上升 的零点
+    // ---------- 2. 计算 stance 基线 (y 70% 分位数) ----------
+    var allY = smoothed.map(function (s) { return s.y; }).slice().sort(function (a, b) { return a - b; });
+    var baseline = allY[Math.floor(allY.length * 0.70)];
+
+    // ---------- 3. 摆动顶点检测 + 4. HS = 上升回基线 ----------
+    var SWING_DEPTH = 8;          // y 必须低于 baseline 至少 8px 才算摆动 (抗噪声)
+    var HS_RECOVERY_TOL = 5;      // HS = y 上升到 baseline - 5 以内
+    var HS_RECOVERY_WIN = 0.70;   // 摆动顶点后 0.70s 内必须恢复 (覆盖慢走 60 SPM: cycle=2s, swing≈0.6s)
+    var PEAK_SEARCH_WIN = 5;      // 摆动顶点局部最小值搜索窗口 (10 帧 = 0.33s)
+
     var candidates = [];
 
-    // 起点检测
-    if (smoothed.length >= 4) {
-      var avgNext = (smoothed[1].y + smoothed[2].y + smoothed[3].y) / 3;
-      if (smoothed[0].y < avgNext - 0.3) {
-        candidates.push(smoothed[0]);
+    // 从前往后扫描, 找每个摆动顶点, 然后找其后第一个恢复点
+    for (var k = PEAK_SEARCH_WIN; k < smoothed.length - PEAK_SEARCH_WIN; k++) {
+      // 必须是局部极小值 (在 ±PEAK_SEARCH_WIN 窗口内)
+      var isLocalMin = true;
+      for (var q = -PEAK_SEARCH_WIN; q <= PEAK_SEARCH_WIN; q++) {
+        if (q === 0) continue;
+        if (smoothed[k + q].y < smoothed[k].y) { isLocalMin = false; break; }
+      }
+      if (!isLocalMin) continue;
+      // 必须低于 stance 基线至少 SWING_DEPTH
+      if (smoothed[k].y >= baseline - SWING_DEPTH) continue;
+
+      // 找恢复点: k 之后, y 上升到 ≥ (baseline - HS_RECOVERY_TOL) 的第一个点
+      var recoveryTarget = baseline - HS_RECOVERY_TOL;
+      for (var j = k + 1; j < smoothed.length; j++) {
+        if (smoothed[j].t - smoothed[k].t > HS_RECOVERY_WIN) break;  // 超时未恢复 → 跳过
+        if (smoothed[j].y >= recoveryTarget) {
+          candidates.push({
+            frameIndex: smoothed[j].frame,
+            time: smoothed[j].t,
+            x: smoothed[j].x,
+            y: smoothed[j].y,
+            confidence: smoothed[j].score
+          });
+          break;  // 每个摆动顶点只产生一个 HS
+        }
       }
     }
 
-    // 内部局部极小值 (1 步邻域, 允许平坦底部)
-    for (var k = 1; k < smoothed.length - 1; k++) {
-      if (smoothed[k].y <= smoothed[k - 1].y && smoothed[k].y < smoothed[k + 1].y) {
-        candidates.push(smoothed[k]);
+    // ---------- 4b. 起点/终点补点 ----------
+    // 用户可能在周期中段开始录制 → 序列开始/结束时脚正好处于 stance
+    // 在前 SEARCH_WIN*2 帧内, 若 y 接近基线, 视为 HS 候选
+    var headSearch = Math.min(PEAK_SEARCH_WIN * 2, smoothed.length - 1);
+    for (var j = 0; j < headSearch; j++) {
+      if (smoothed[j].y >= baseline - HS_RECOVERY_TOL && smoothed[j].y <= baseline + HS_RECOVERY_TOL) {
+        candidates.unshift({
+          frameIndex: smoothed[j].frame,
+          time: smoothed[j].t,
+          x: smoothed[j].x,
+          y: smoothed[j].y,
+          confidence: smoothed[j].score
+        });
+        break;
       }
-      // 处理左侧平坦: 当前点等于左, 但严格小于右 → 此点为左端点
-      if (smoothed[k].y === smoothed[k - 1].y && smoothed[k].y < smoothed[k + 1].y &&
-          (k === 1 || smoothed[k - 1].y < smoothed[k - 2].y)) {
-        if (candidates.indexOf(smoothed[k]) === -1) candidates.push(smoothed[k]);
+    }
+    // 终点: 序列末尾若 y 接近基线 → HS 候选
+    var tailStart = Math.max(0, smoothed.length - headSearch);
+    for (var j = smoothed.length - 1; j >= tailStart; j--) {
+      if (smoothed[j].y >= baseline - HS_RECOVERY_TOL && smoothed[j].y <= baseline + HS_RECOVERY_TOL) {
+        candidates.push({
+          frameIndex: smoothed[j].frame,
+          time: smoothed[j].t,
+          x: smoothed[j].x,
+          y: smoothed[j].y,
+          confidence: smoothed[j].score
+        });
+        break;
       }
     }
 
-    // 终点检测
-    var n = smoothed.length;
-    if (n >= 4) {
-      var avgPrev = (smoothed[n - 2].y + smoothed[n - 3].y + smoothed[n - 4].y) / 3;
-      if (smoothed[n - 1].y < avgPrev - 0.3) {
-        candidates.push(smoothed[n - 1]);
-      }
-    }
-
-    // 最小间隔约束 (>= 0.45s, 正常人最快 ~130步/分/脚对应 0.46s)
-    // 防止踝 y 出现多个等高原地 (mid-stance 平台 + 摆动前稳定期) 误判为两次 HS
-    var minInterval = 0.45;
+    // ---------- 5. 最小间隔约束 (>= 0.40s, 防重复检测) ----------
+    var minInterval = 0.40;
     var result = [];
     var lastT = -Infinity;
-    candidates.sort(function (a, b) { return a.t - b.t; });
+    candidates.sort(function (a, b) { return a.time - b.time; });
     for (var c = 0; c < candidates.length; c++) {
       var cand = candidates[c];
-      if (cand.t - lastT < minInterval) {
-        // 间隔太短, 保留 y 更低的那一个
-        if (result.length > 0 && cand.y < result[result.length - 1].y) {
+      if (cand.time - lastT < minInterval) {
+        // 间隔太短, 保留 y 更接近 baseline 的 (即更"落地")
+        if (result.length > 0 && Math.abs(cand.y - baseline) < Math.abs(result[result.length - 1].y - baseline)) {
           result[result.length - 1] = {
             frameIndex: cand.frame,
-            time: cand.t,
+            time: cand.time,
             x: cand.x,
             y: cand.y,
             confidence: cand.score
           };
-          lastT = cand.t;
+          lastT = cand.time;
         }
         continue;
       }
       result.push({
         frameIndex: cand.frame,
-        time: cand.t,
+        time: cand.time,
         x: cand.x,
         y: cand.y,
         confidence: cand.score
       });
-      lastT = cand.t;
+      lastT = cand.time;
     }
     return result;
   }
@@ -959,6 +1024,44 @@
    * 实现: 用 HS + TO 时间戳确定支撑相 (HS → TO) 和摆动相 (TO → next HS),
    *       然后按比例切片 8 时相
    */
+  // 从 HS/TO 事件推算 8 时相的绝对时间戳 (用于报告时相截图)
+  // 每个完整周期 (HS[i] → HS[i+1]) 切 8 片, IC/LR/MSt/TSt/PSw/ISw/MSw/TSw
+  function computePhaseTimestamps(leftHS, leftTO, rightHS, rightTO) {
+    var out = [];
+    var PHASE_LABELS = {
+      IC:  '初始着地', LR:  '承重反应', MSt: '支撑中期', TSt: '支撑末期',
+      PSw: '摆动前期', ISw: '摆动初期', MSw: '摆动中期', TSw: '摆动末期'
+    };
+    var PHASE_PCTS = {
+      IC: 0.00, LR: 0.10, MSt: 0.22, TSt: 0.42,
+      PSw: 0.52, ISw: 0.65, MSw: 0.78, TSw: 0.92
+    };
+    function build(HS, TO, side) {
+      if (!HS || HS.length < 2) return;
+      var toByCycle = {};
+      (TO || []).forEach(function (t) { toByCycle[t.cycleIndex || 0] = t; });
+      for (var i = 0; i < HS.length - 1; i++) {
+        var cycle = HS[i + 1].time - HS[i].time;
+        if (cycle <= 0.2 || cycle >= 3.0) continue;
+        var to = toByCycle[i];
+        Object.keys(PHASE_PCTS).forEach(function (ph) {
+          var t = HS[i].time + cycle * PHASE_PCTS[ph];
+          out.push({
+            cycleIndex: i + 1,
+            side: side,
+            phase: ph,
+            label: PHASE_LABELS[ph],
+            time: t,
+            stance: ph === 'IC' || ph === 'LR' || ph === 'MSt' || ph === 'TSt' || ph === 'PSw'
+          });
+        });
+      }
+    }
+    build(leftHS || [], leftTO || [], 'left');
+    build(rightHS || [], rightTO || [], 'right');
+    return out;
+  }
+
   function computeGaitCyclePhases(frames, leftHS, leftTO, rightHS, rightTO) {
     var phaseStats = {
       totalCycles: 0,
@@ -1888,6 +1991,7 @@
     detectHeelStrikes: detectHeelStrikes,
     detectToeOffs: detectToeOffs,
     computeGaitCyclePhases: computeGaitCyclePhases,
+    computePhaseTimestamps: computePhaseTimestamps,
     computeStepLengths: computeStepLengths,
     computeStrideLengths: computeStrideLengths,
     computeStepWidths: computeStepWidths,
