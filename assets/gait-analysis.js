@@ -439,10 +439,22 @@
   // 帧提取
   // ============================================================
   // 在视频元素上 seek 到指定时间, 截取缩略图 (小尺寸 JPEG dataURL)
+  // 防御性: 任何异常/超时都 resolve(null), 永远不挂起
   function captureSnapshot(videoEl, timeSec) {
     return new Promise(function (resolve) {
-      var onSeeked = function () {
+      if (!videoEl || !videoEl.duration || videoEl.duration <= 0) {
+        resolve(null);
+        return;
+      }
+      var done = false;
+      function finish(val) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
         videoEl.removeEventListener('seeked', onSeeked);
+        resolve(val);
+      }
+      function onSeeked() {
         try {
           var w = videoEl.videoWidth || 320;
           var h = videoEl.videoHeight || 240;
@@ -453,49 +465,61 @@
           var c = document.createElement('canvas');
           c.width = cw; c.height = ch;
           c.getContext('2d').drawImage(videoEl, 0, 0, cw, ch);
-          resolve({
-            dataUrl: c.toDataURL('image/jpeg', 0.6),
-            w: cw, h: ch
-          });
+          finish({ dataUrl: c.toDataURL('image/jpeg', 0.6), w: cw, h: ch });
         } catch (e) {
-          resolve(null);
+          finish(null);
         }
-      };
+      }
       videoEl.addEventListener('seeked', onSeeked);
-      try { videoEl.currentTime = Math.max(0, Math.min(timeSec, videoEl.duration || timeSec)); }
-      catch (e) { resolve(null); }
+      var timer = setTimeout(function () { finish(null); }, 800);
+      try {
+        var target = Math.max(0, Math.min(timeSec, (videoEl.duration || 1) - 0.001));
+        // 微调 ±0.001s 强制触发 seeked 事件 (currentTime 未变化时不触发)
+        if (Math.abs((videoEl.currentTime || 0) - target) < 0.001) {
+          target = target > 0 ? target - 0.001 : target + 0.001;
+        }
+        videoEl.currentTime = target;
+      } catch (e) {
+        finish(null);
+      }
     });
   }
 
   // 从 phaseTimestamps 选出每脚首个完整周期, 逐个 seek 截帧
+  // 永远不抛错, 失败返回 [] 不阻塞主流程
   async function capturePhaseSnapshots(videoEl, phaseList) {
-    if (!phaseList || !phaseList.length || !videoEl) return [];
-    var firstBySide = { left: null, right: null };
-    for (var i = 0; i < phaseList.length; i++) {
-      var side = phaseList[i].side;
-      if (!firstBySide[side]) firstBySide[side] = phaseList[i].cycleIndex;
-    }
-    var targets = phaseList.filter(function (p) {
-      return p.cycleIndex === firstBySide[p.side];
-    });
-    var snapshots = [];
-    for (var i = 0; i < targets.length; i++) {
-      var p = targets[i];
-      var snap = await captureSnapshot(videoEl, p.time);
-      if (snap) {
-        snapshots.push({
-          cycleIndex: p.cycleIndex,
-          side: p.side,
-          phase: p.phase,
-          label: p.label,
-          time: p.time,
-          stance: p.stance,
-          imageData: snap.dataUrl,
-          w: snap.w, h: snap.h
-        });
+    try {
+      if (!phaseList || !phaseList.length || !videoEl) return [];
+      var firstBySide = { left: null, right: null };
+      for (var i = 0; i < phaseList.length; i++) {
+        var side = phaseList[i].side;
+        if (!firstBySide[side]) firstBySide[side] = phaseList[i].cycleIndex;
       }
+      var targets = phaseList.filter(function (p) {
+        return p.cycleIndex === firstBySide[p.side];
+      });
+      var snapshots = [];
+      for (var i = 0; i < targets.length; i++) {
+        var p = targets[i];
+        var snap = await captureSnapshot(videoEl, p.time);
+        if (snap) {
+          snapshots.push({
+            cycleIndex: p.cycleIndex,
+            side: p.side,
+            phase: p.phase,
+            label: p.label,
+            time: p.time,
+            stance: p.stance,
+            imageData: snap.dataUrl,
+            w: snap.w, h: snap.h
+          });
+        }
+      }
+      return snapshots;
+    } catch (e) {
+      console.warn('[gait] capturePhaseSnapshots error (non-fatal):', e.message);
+      return [];
     }
-    return snapshots;
   }
 
   function extractFrames(videoEl, fps) {
@@ -680,7 +704,13 @@
       // 4c. 时相截图 — 从 HS/TO 推算 8 时相时间戳, 截取视频帧供报告可视化验证
       $('#gait-progress-title').textContent = '提取时相截图...';
       var phaseTimestamps = window.__gaitParams.computePhaseTimestamps(leftHS, leftTO, rightHS, rightTO);
-      var phaseSnapshots = await capturePhaseSnapshots(v, phaseTimestamps);
+      var phaseSnapshots = [];
+      try {
+        phaseSnapshots = await capturePhaseSnapshots(v, phaseTimestamps);
+      } catch (e) {
+        console.warn('[gait] phase snapshots failed (non-fatal):', e.message);
+        phaseSnapshots = [];
+      }
       updateProcessingProgress(0.96);
 
       var classification = window.__gaitParams.classifyGait(params);
