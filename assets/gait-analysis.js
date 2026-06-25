@@ -412,109 +412,34 @@
   // ============================================================
   // 文件上传
   // ============================================================
-  // 检测浏览器是否支持指定 MIME/codec 组合 (用来判断手机 HEVC/MOV 在桌面 Chrome 是否可播)
-  function checkCodecSupport(file) {
-    return new Promise(function (resolve) {
-      var v = document.createElement('video');
-      v.muted = true;
-      v.preload = 'metadata';
-      var mime = (file.type || '').toLowerCase();
-      // 构造多个候选 canPlayType 测试
-      var tests = [];
-      if (mime.indexOf('mp4') !== -1 || mime.indexOf('quicktime') !== -1 || mime.indexOf('mov') !== -1) {
-        tests.push('video/mp4; codecs="avc1.42E01E"');   // H.264 baseline
-        tests.push('video/mp4; codecs="hvc1"');           // HEVC (iPhone 7+ 默认)
-        tests.push('video/quicktime; codecs="hvc1"');     // iOS MOV + HEVC
-        tests.push('video/mp4');
-        tests.push('video/quicktime');
-      } else if (mime.indexOf('webm') !== -1) {
-        tests.push('video/webm; codecs="vp8"');
-        tests.push('video/webm; codecs="vp9"');
-        tests.push('video/webm');
-      }
-      var lastResult = '';
-      var i = 0;
-      function tryNext() {
-        if (i >= tests.length) {
-          v.remove();
-          resolve({ supported: true, codec: lastResult || 'unknown' });
-          return;
-        }
-        var r = v.canPlayType(tests[i]);
-        if (r === 'probably' || r === 'maybe') {
-          v.remove();
-          resolve({ supported: true, codec: tests[i] + ' (' + r + ')' });
-        } else {
-          lastResult = tests[i] + '=' + r;
-          i++;
-          tryNext();
-        }
-      }
-      tryNext();
-    });
-  }
-
-  function showUploadError(msg) {
-    // 把错误信息显示到 upload-panel 上, 不依赖全局 state.errorMessage 渲染
-    var panel = $('#gait-upload-panel');
-    if (!panel) return;
-    var existing = panel.querySelector('.gait-upload-err');
-    if (existing) existing.remove();
-    var div = document.createElement('div');
-    div.className = 'gait-upload-err';
-    div.style.cssText = 'margin-top:16px;padding:14px;background:#fee;border:1px solid #fcc;border-radius:8px;color:#991b1b;font-size:13px;line-height:1.6;';
-    div.innerHTML = msg;
-    panel.appendChild(div);
-    setTimeout(function () { if (div.parentNode) div.remove(); }, 15000);
-  }
-
   function handleFileUpload(file) {
-    if (!file || !file.type.startsWith('video/')) {
-      showUploadError('请上传有效的视频文件 (mp4, webm, mov)');
+    // 放宽类型检查: file.type 可能为空或非标准 (某些设备/浏览器)
+    var ext = (file.name || '').split('.').pop().toLowerCase();
+    var validExts = ['mp4', 'webm', 'mov', 'mkv', 'avi', '3gp'];
+    var typeOK = file.type && file.type.startsWith('video/');
+    var extOK = validExts.indexOf(ext) !== -1;
+    if (!typeOK && !extOK) {
+      state.errorMessage = '请上传有效的视频文件 (mp4, webm, mov 等) — 当前类型: ' + (file.type || '(空)') + ', 扩展名: ' + (ext || '(空)');
+      setPhase(PHASE.CAPTURE);
       return;
     }
     if (file.size > 100 * 1024 * 1024) {
-      showUploadError('视频文件过大 (>100MB), 请压缩后重试');
+      state.errorMessage = '视频文件过大 (>100MB), 请压缩后重试';
+      setPhase(PHASE.CAPTURE);
       return;
     }
-    // 检查浏览器是否支持这个视频的编解码器 (iPhone HEVC/MOV 在桌面 Chrome 经常不能解码)
-    checkCodecSupport(file).then(function (probe) {
-      if (!probe.supported) {
-        var ext = (file.name.split('.').pop() || '').toLowerCase();
-        var hint = '';
-        if (ext === 'mov' || /iphone|ipados|ios/i.test(file.type) || /hvc1|hev1|h265/i.test(file.type)) {
-          hint = '<br><br><b>💡 解决方案</b>:<br>' +
-                 '1. 在 <b>手机端直接录制并分析</b> (iPhone Safari 完整支持 HEVC)<br>' +
-                 '2. 用 FFmpeg 转码: <code>ffmpeg -i input.mov -c:v libx264 -c:a aac output.mp4</code><br>' +
-                 '3. 在 iPhone 设置 → 相机 → 格式 → 选<b>兼容性最佳</b> (录成 H.264/MP4)<br>' +
-                 '4. 上传前用 HandBrake / 微信"文件传输助手"压缩转码';
-        } else {
-          hint = '<br><br>当前浏览器不支持该视频的编码格式, 请换浏览器或转码后重试';
-        }
-        showUploadError('<b>视频格式不被当前浏览器支持</b><br>' +
-                        '文件: ' + file.name + ' (' + Math.round(file.size / 1024 / 1024) + ' MB, ' + (file.type || 'unknown') + ')<br>' +
-                        '浏览器测试结果: ' + (probe.codec || 'unsupported') + hint);
-        return;
-      }
-      if (state.recordedURL) URL.revokeObjectURL(state.recordedURL);
-      state.recordedURL = URL.createObjectURL(file);
-      state.recordedBlob = file;
-      var v = $('#gait-preview-video');
-      if (v) {
-        v.src = state.recordedURL;
-        v.muted = true;
-        v.onloadedmetadata = function () {
-          state.videoDuration = v.duration;
-          renderCaptureComplete();
-        };
-        v.onerror = function () {
-          // 浏览器能识别 MIME 但实际解码失败 (常见: HEVC 标记为 mp4 但内容是 hvc1)
-          showUploadError('<b>视频解码失败</b> — ' + file.name + '<br>' +
-                          '浏览器识别了格式但实际解码报错, 很可能是 <b>HEVC/H.265</b> 编码<br>' +
-                          '在桌面 Chrome 不支持, 请在手机上直接分析, 或转码为 H.264/MP4 后重试');
-        };
-      }
-    });
+    if (state.recordedURL) URL.revokeObjectURL(state.recordedURL);
+    state.recordedURL = URL.createObjectURL(file);
+    state.recordedBlob = file;
+    var v = $('#gait-preview-video');
+    if (v) {
+      v.src = state.recordedURL;
+      v.muted = true;
+      v.onloadedmetadata = function () {
+        state.videoDuration = v.duration;
+        renderCaptureComplete();
+      };
+    }
   }
 
   // ============================================================
