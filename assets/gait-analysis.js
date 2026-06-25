@@ -885,12 +885,25 @@
     } catch (e) {
       console.error('[gait] process error', e);
       var msg = e.message || String(e);
+      // 按失败类型给出具体可操作的提示
       if (msg.indexOf('CDN') !== -1 || msg.indexOf('Failed') !== -1 || msg.indexOf('timeout') !== -1) {
-        state.errorMessage = 'AI 模型加载失败 — 网络不通或 CDN 超时。请检查网络后刷新重试。(' + msg.substring(0, 40) + ')';
+        state.errorMessage = 'AI 模型加载失败 — 网络不通或 CDN 超时。请检查网络后刷新重试。';
       } else if (msg.indexOf('TF.js') !== -1 || msg.indexOf('poseDetection') !== -1) {
-        state.errorMessage = 'AI 模型未就绪 — 请刷新页面后重试。(' + msg.substring(0, 40) + ')';
+        state.errorMessage = 'AI 姿势识别模型未就绪 — 请刷新页面后重试。';
+      } else if (msg.indexOf('insufficient_steps') !== -1) {
+        state.errorMessage = '未检测到足够的步态周期。<br><br><b>可能原因 & 解决方法</b>:<br>' +
+          '1. 视频中人物不全 — 请确保从头到脚都入镜<br>' +
+          '2. 拍摄角度偏 — 摄像头应在斜前方约45°（非正侧面）<br>' +
+          '3. 光线不足 — 请在明亮环境下拍摄<br>' +
+          '4. 行走步数不足 — 至少走3步以上<br>' +
+          '5. 人物太小 — 离摄像头再近一些 (2-4米)';
+      } else if (msg.indexOf('首帧未解码') !== -1) {
+        state.errorMessage = '无法解码视频。<br><br>手机录制的 HEVC/MOV 视频在桌面 Chrome 可能不兼容。<br>' +
+          '<b>解决方案</b>: 在手机上直接打开此页面分析, 或转码为 H.264/MP4 后再上传。';
+      } else if (msg.indexOf('帧数过少') !== -1) {
+        state.errorMessage = '视频帧数不足, 请确保视频 > 2 秒且人物在画面中行走。';
       } else {
-        state.errorMessage = '处理失败: ' + msg;
+        state.errorMessage = '分析失败: ' + msg + '<br><br>请确认视频中有人行走, 且拍摄角度为斜前方约45°。如持续失败, 请尝试重录。';
       }
       setPhase(PHASE.CAPTURE);
     }
