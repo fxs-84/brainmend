@@ -688,12 +688,14 @@
     $('#gait-progress-title').textContent = '加载视频...';
 
     try {
-      // 1. 加载视频
+      // 1. 加载视频 — 必须挂到 DOM (隐藏), 浏览器才会解码 detached video 不解码
       var v = document.createElement('video');
       v.muted = true;
       v.playsInline = true;
       v.preload = 'auto';
+      v.style.cssText = 'position:fixed;left:-99999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;';
       v.src = state.recordedURL;
+      document.body.appendChild(v);
       await new Promise(function (resolve, reject) {
         v.onloadedmetadata = resolve;
         v.onerror = function () { reject(new Error('Video load failed')); };
@@ -701,10 +703,10 @@
       state.videoDuration = v.duration;
       updateProcessingProgress(0.10);
 
-      // 等首帧 ready (上传视频常见 metadata 已加载但首帧未解码, videoWidth=0)
+      // 等首帧 ready (loadeddata 事件 = 元数据 + 首帧均解码)
       await waitForLoadedData(v, 5000);
       if (v.videoWidth === 0 || v.videoHeight === 0) {
-        throw new Error('视频首帧未解码 (videoWidth=' + (v.videoWidth || 0) + '), 请稍候或重新上传');
+        throw new Error('视频首帧未解码 (videoWidth=' + (v.videoWidth || 0) + '), 请重新上传或换视频');
       }
 
       // 2. 提取帧 (同时开始预热 AI 模型)
@@ -794,6 +796,10 @@
 
       updateProcessingProgress(1.0);
       setPhase(PHASE.RESULTS);
+
+      // 6. 清理 DOM 中的临时 video 元素
+      try { if (v.parentNode) v.parentNode.removeChild(v); } catch (e) {}
+      try { URL.revokeObjectURL(v.src); } catch (e) {}
     } catch (e) {
       console.error('[gait] process error', e);
       var msg = e.message || String(e);
