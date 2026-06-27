@@ -286,6 +286,7 @@
     '</div>';
 
     // 概览卡片
+    var sr = r.sideResolution || {};
     html += '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;">' +
       '<h3 style="margin:0 0 12px 0;font-size:16px;">📋 概览</h3>' +
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;">' +
@@ -293,6 +294,14 @@
         summaryCard('步频', fmtNum((p.cadence && p.cadence.value) || 0, 0), '步/分', (p.cadence && colorMap[p.cadence.status]) || '#9ca3af') +
         summaryCard('步长', fmtNum((p.stepLength && p.stepLength.value) || 0, 2), 'm', (p.stepLength && colorMap[p.stepLength.status]) || '#9ca3af') +
         summaryCard('分类', c.primaryLabel || '—', '', '#0f7b6c') +
+      '</div>' +
+      // 左右标签诊断 + 手动交换
+      '<div style="margin-top:8px;font-size:11px;color:#888;">' +
+        '摄像头侧: <b>' + ((r.calibration && r.calibration.cameraSide) || '右') + '</b>' +
+        ' | 步行方向: <b>' + (r.walkingDirection || '?') + '</b>' +
+        ' | 算法交换: <b>' + (sr.swapNeeded ? '是' : '否') + '</b>' +
+        (sr.reason ? ' (' + sr.reason + ')' : '') +
+        ' | <span onclick="window.__gaitReport.manualSwap()" style="cursor:pointer;color:' + (r.swapped ? '#dc2626' : '#0f7b6c') + ';text-decoration:underline;">' + (r.swapped ? '恢复左右' : '手动交换左右') + '</span>' +
       '</div>' +
     '</div>';
 
@@ -382,7 +391,9 @@
       var phaseOrder = ['IC', 'LR', 'MSt', 'TSt', 'PSw', 'ISw', 'MSw', 'TSw'];
       html += '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;">' +
         '<h3 style="margin:0 0 6px 0;font-size:16px;">📸 时相截图 (可视化算法验证)</h3>' +
-        '<div style="font-size:12px;color:#666;margin-bottom:14px;">从视频中按检测到的 HS/TO 时间戳精确定位每个时相帧。请核对: <b>IC</b> 应为足跟刚触地; <b>PSw</b> 应为足趾即将离地; <b>MSw</b> 应为摆动中点脚离地最高。</div>';
+        '<div style="font-size:12px;color:#666;margin-bottom:14px;">从视频中按检测到的 HS/TO 时间戳精确定位每个时相帧。请核对: <b>IC</b> 应为足跟刚触地; <b>PSw</b> 应为足趾即将离地; <b>MSw</b> 应为摆动中点脚离地最高。' +
+          (r.segments && r.segments > 1 ? ' <span style="color:#10b981;font-weight:600;">已合并 ' + r.segments + ' 段视频</span>' : '') +
+        '</div>';
       ['left', 'right'].forEach(function (side) {
         var snaps = bySide[side];
         if (!snaps || !snaps.length) return;
@@ -406,6 +417,94 @@
         });
         html += '</div></div>';
       });
+      html += '</div>';
+      // 缺另一侧 → "补录" 按钮 (两条路径: 重录 / 上传)
+      var missingSide = null;
+      if (!bySide.left || bySide.left.length === 0) missingSide = 'left';
+      else if (!bySide.right || bySide.right.length === 0) missingSide = 'right';
+      if (missingSide) {
+        var sideLabel2 = missingSide === 'left' ? '左脚' : '右脚';
+        var dirHint = missingSide === 'left' ? '从右向左' : '从左向右';
+        var otherSide = missingSide === 'left' ? '右脚' : '左脚';
+        html += '<div id="gait-add-segment" data-missing="' + missingSide + '" ' +
+          'style="background:linear-gradient(135deg,#fff7ed,#fef3c7);border:2px dashed #f59e0b;border-radius:12px;padding:16px;margin-bottom:14px;">' +
+          '<div style="font-size:15px;font-weight:700;color:#92400e;margin-bottom:8px;">⚠️ ' + sideLabel2 + ' 时相缺失 — ' + (r.segments && r.segments > 1 ? '本次视频仍未检测到' : '当前视频未检测到') + '</div>' +
+          '<div style="font-size:13px;color:#78350f;line-height:1.7;margin-bottom:12px;">' +
+            '只能看到 ' + otherSide + ' 时相, 因为 ' + sideLabel2 + ' 没面向摄像头。要补全, 可以二选一: ' +
+            '<b>(A)</b> 再录一段 <b>' + dirHint + '</b> 走路的视频 (让 ' + sideLabel2 + ' 面向摄像头); ' +
+            '或 <b>(B)</b> 直接上传你之前录好的另一方向视频文件。' +
+          '</div>' +
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
+            '<button id="gait-add-segment-record" ' +
+              'style="flex:1;min-width:200px;padding:12px 20px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;box-shadow:0 4px 12px rgba(245,158,11,0.3);">' +
+              '📷 重录一段 (走 ' + dirHint + ')</button>' +
+            '<button id="gait-add-segment-upload" ' +
+              'style="flex:1;min-width:200px;padding:12px 20px;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;box-shadow:0 4px 12px rgba(99,102,241,0.3);">' +
+              '📁 上传另一段视频</button>' +
+          '</div>' +
+        '</div>';
+      }
+    } else {
+      // 无时相截图 — 可能视频太短或 HS 周期不足
+      html += '<div style="background:#fff;padding:20px;border-radius:12px;margin-bottom:14px;">' +
+        '<h3 style="margin:0 0 6px 0;font-size:16px;">📸 时相截图</h3>' +
+        '<div style="font-size:13px;color:#999;">未生成时相截图 — ' +
+        (r.degraded ? '降级模式下不包含时相分析' : '可能需要较长视频 (≥5秒) 且包含至少 2 个完整步态周期') +
+        '。<br>控制台输入 <b>__gaitState.results.phaseSnapshots</b> 可查看截图数组。</div>' +
+      '</div>';
+    }
+
+    // 脑功能步态画像 (ANRM 脑优化 §3.2)
+    var bp = r.brainProfile;
+    if (bp && !bp.error) {
+      html += '<h3 style="margin:20px 0 10px 0;font-size:16px;">🧠 脑功能步态画像</h3>' +
+        '<div style="background:#fff;padding:16px;border-radius:10px;margin-bottom:14px;">' +
+          '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:12px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:8px;">' +
+            '<div style="font-size:36px;">🧠</div>' +
+            '<div style="flex:1;">' +
+              '<div style="font-size:16px;font-weight:700;">' + (bp.brainGrade || '—') + '</div>' +
+              '<div style="font-size:12px;opacity:0.85;">脑功能综合评分: ' + (bp.overallBrainScore || 50) + '/100</div>' +
+            '</div>' +
+            '<div style="text-align:center;"><div style="font-size:11px;opacity:0.8;">左脑</div><div style="font-size:18px;font-weight:700;">' + (bp.lateralization ? bp.lateralization.leftBrain : '—') + '</div></div>' +
+            '<div style="text-align:center;"><div style="font-size:11px;opacity:0.8;">右脑</div><div style="font-size:18px;font-weight:700;">' + (bp.lateralization ? bp.lateralization.rightBrain : '—') + '</div></div>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;">';
+      var d = bp.domains || {};
+      if (d.contralateral) {
+        html += '<div style="padding:10px;background:#f8f9fa;border-radius:6px;border-left:3px solid #667eea;">' +
+          '<div style="font-size:12px;font-weight:600;">↔ 对侧脑功能</div><div style="font-size:11px;color:#888;">肩膀甩动 → 对侧脑</div>' +
+          '<div style="font-size:10px;">左脑(右肩): <b>' + d.contralateral.leftBrainScore + '</b> | 右脑(左肩): <b>' + d.contralateral.rightBrainScore + '</b></div>' +
+          (d.contralateral.flags || []).map(function(f){return '<div style="font-size:10px;color:#92400e;">⚠ '+f+'</div>';}).join('') + '</div>';
+      }
+      if (d.cerebellum) {
+        html += '<div style="padding:10px;background:#f8f9fa;border-radius:6px;border-left:3px solid #f59e0b;">' +
+          '<div style="font-size:12px;font-weight:600;">🎯 小脑功能</div><div style="font-size:11px;color:#888;">肘关节摆动 → 小脑</div>' +
+          '<div style="font-size:10px;">评分: <b>' + d.cerebellum.score + '</b> | 肘摆: ' + (d.cerebellum.avgElbowAmplitude || 0).toFixed(1) + 'cm</div>' +
+          (d.cerebellum.flags || []).map(function(f){return '<div style="font-size:10px;color:#92400e;">⚠ '+f+'</div>';}).join('') + '</div>';
+      }
+      if (d.ipsilateral) {
+        html += '<div style="padding:10px;background:#f8f9fa;border-radius:6px;border-left:3px solid #10b981;">' +
+          '<div style="font-size:12px;font-weight:600;">📏 同侧脑功能</div><div style="font-size:11px;color:#888;">宽深角度 → 同侧脑</div>' +
+          '<div style="font-size:10px;">步宽: ' + (d.ipsilateral.stepWidth || 0).toFixed(2) + 'm | 对称: ' + ((d.ipsilateral.stepLengthSymmetry || 0)*100).toFixed(0) + '%</div>' +
+          (d.ipsilateral.flags || []).map(function(f){return '<div style="font-size:10px;color:#92400e;">⚠ '+f+'</div>';}).join('') + '</div>';
+      }
+      if (d.emotion) {
+        html += '<div style="padding:10px;background:#f8f9fa;border-radius:6px;border-left:3px solid #ec4899;">' +
+          '<div style="font-size:12px;font-weight:600;">💭 性格与情绪</div><div style="font-size:11px;color:#888;">膝关节刹车 → 情绪</div>' +
+          '<div style="font-size:10px;">评分: <b>' + d.emotion.score + '</b> | ' + (d.emotion.quality || '') + '</div>' +
+          (d.emotion.flags || []).map(function(f){return '<div style="font-size:10px;color:#dc2626;">⚠ '+f+'</div>';}).join('') + '</div>';
+      }
+      if (d.automaticity) {
+        html += '<div style="padding:10px;background:#f8f9fa;border-radius:6px;border-left:3px solid #8b5cf6;">' +
+          '<div style="font-size:12px;font-weight:600;">🔄 步态自动化</div><div style="font-size:11px;color:#888;">节律变异 → 皮层依赖</div>' +
+          '<div style="font-size:10px;">评分: <b>' + d.automaticity.score + '</b> | CV: ' + ((d.automaticity.rhythmCV || 0)*100).toFixed(1) + '%</div>' +
+          (d.automaticity.flags || []).map(function(f){return '<div style="font-size:10px;color:#92400e;">⚠ '+f+'</div>';}).join('') + '</div>';
+      }
+      html += '</div>';
+      if (bp.subhealthFlags && bp.subhealthFlags.length > 0) {
+        html += '<div style="margin-top:10px;padding:8px;background:#fef3c7;border-radius:6px;font-size:11px;color:#92400e;">' +
+          '<b>亚健康标记:</b> ' + bp.subhealthFlags.join(' / ') + '</div>';
+      }
       html += '</div>';
     }
 
@@ -508,6 +607,58 @@
     renderReport(record, containerEl);
   }
 
+  // 手动交换左右标签 — 重新计算并重新渲染
+  function manualSwapLeftRight() {
+    var st = window.__gaitAnalysis && window.__gaitAnalysis.getState();
+    if (!st || !st.results || !st.capturedFrames) return;
+    var kfs = st.capturedFrames;
+    // 交换关键点标签
+    kfs = window.__gaitParams.swapKeypointLabels(kfs);
+    st.capturedFrames = kfs;
+    // 重新计算参数
+    var params = window.__gaitParams.computeAllParams(kfs, st.calibration.scale);
+    var classification = params.degraded ? { primary: 'limited' }
+      : window.__gaitParams.classifyGait(params);
+    var neuro = params.degraded ? {}
+      : window.__gaitParams.getNeuroLocalization(classification.primary);
+    var rehab = params.degraded ? []
+      : window.__gaitParams.getRehabSuggestions(classification.primary);
+    // 交换时相截图的左右标签
+    var pss = st.results.phaseSnapshots || [];
+    pss.forEach(function (s) { s.side = s.side === 'left' ? 'right' : 'left'; });
+    // 交换 events 的左右
+    var oldEvents = st.results.events || {};
+    var tmpHS = oldEvents.leftHeelStrikes;
+    var tmpTO = oldEvents.leftToeOffs;
+    Object.assign(st.results, {
+      swapped: !st.results.swapped,
+      parameters: params.parameters,
+      asymmetries: params.asymmetries,
+      extras: params.extras,
+      armSwing: params.armSwing,
+      elbowSwing: params.elbowSwing,
+      kneeBraking: { left: params.kneeLeft, right: params.kneeRight },
+      ankleKinematics: { left: params.ankleLeft, right: params.ankleRight },
+      brainProfile: window.__gaitParams.computeBrainGaitProfile(
+        params.armSwing, params.elbowSwing, params.kneeLeft, params.kneeRight, params
+      ),
+      events: {
+        leftHeelStrikes: oldEvents.rightHeelStrikes || [],
+        rightHeelStrikes: oldEvents.leftHeelStrikes || [],
+        leftToeOffs: oldEvents.rightToeOffs || [],
+        rightToeOffs: oldEvents.leftToeOffs || []
+      },
+      phaseSnapshots: pss,
+      classification: classification,
+      neuro: neuro,
+      rehab: rehab
+    });
+    // 重新渲染
+    var body = document.querySelector('#gait-body');
+    if (body) renderReport(st.results, body);
+    console.log('[gait] manual LR swap done, swapped=' + st.results.swapped);
+  }
+
   // ============================================================
   // 暴露 API
   // ============================================================
@@ -517,6 +668,7 @@
     renderParamBarChart: renderParamBarChart,
     renderAsymmetryChart: renderAsymmetryChart,
     renderPhasePieChart: renderPhasePieChart,
-    showHistoryDetail: showHistoryDetail
+    showHistoryDetail: showHistoryDetail,
+    manualSwap: manualSwapLeftRight
   };
 })();

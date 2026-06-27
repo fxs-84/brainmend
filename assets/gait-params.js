@@ -717,27 +717,44 @@
     leftConf /= leftCount; rightConf /= rightCount;
     leftY /= leftCount; rightY /= rightCount;
 
-    // 靠近摄像头的腿: 画面中 Y 更大 (更低), 置信度更高
+    // 核心逻辑: 来回走时不同方向近摄像头的腿不同
+    // - 摄像头在右侧, 走左→右: 右腿离摄像头更近 → rightY > leftY
+    // - 摄像头在右侧, 走右→左: 左腿离摄像头更近 → leftY > rightY
+    // - 摄像头在左侧, 则相反
+    // 用 walking direction 来判断哪条腿应该更靠近镜头
+    var expectedCloser = null;
+    if (walkDir === 'left_to_right') {
+      // X 增加: 如果摄像头在右侧, 右腿近; 在左侧, 左腿近
+      expectedCloser = cameraSide;  // 走左→右时, cameraSide 侧腿更近
+    } else if (walkDir === 'right_to_left') {
+      // X 减少: cameraSide 的对侧腿更近
+      expectedCloser = cameraSide === 'left' ? 'right' : 'left';
+    }
+    // stationary / unknown: 用原 Y 位置判断
+
     var leftCloser = (leftY > rightY) && (leftConf >= rightConf * 0.8);
     var rightCloser = (rightY > leftY) && (rightConf >= leftConf * 0.8);
-
-    // 如果无法判断 (正面而非侧面), 信任 MoveNet 标签
-    if (!leftCloser && !rightCloser) {
-      return { swapNeeded: false, reason: 'frontal_view_or_ambiguous', leftConf: leftConf, rightConf: rightConf, leftY: leftY, rightY: rightY };
+    var yCloser = leftCloser ? 'left' : (rightCloser ? 'right' : null);
+    // 优先信任 Y 位置 (近摄像头脚在画面更低 = "哪只脚近镜头"的直接物理证据);
+    // walkDir 推导的 expectedCloser 仅作 fallback — 其"走向→近脚侧"映射在来回走/转身时
+    // 不成立。矛盾时强信 expectedCloser 会错误交换: 近脚被标成对侧 → 该侧 HS 检测跟踪
+    // 远脚失败 → 步态时相截图缺失 (表现为右脚对摄像头时识别不到, 左脚正常)。
+    var closerSide = yCloser || expectedCloser;
+    if (!closerSide) {
+      return { swapNeeded: false, reason: 'ambiguous', yCloser: yCloser, expected: expectedCloser };
     }
 
-    var closerSide = leftCloser ? 'left' : 'right';
-    // 如果靠近摄像头的 MoveNet 标签 == cameraSide, 说明标签正确, 无需交换
-    // 如果靠近摄像头的 MoveNet 标签 != cameraSide, 需要交换
     var swapNeeded = (closerSide !== cameraSide);
 
     return {
       swapNeeded: swapNeeded,
       closerSide: closerSide,
       cameraSide: cameraSide,
-      confidenceDiff: Math.abs(leftConf - rightConf),
+      walkDir: walkDir,
+      expectedCloser: expectedCloser,
+      yCloser: yCloser,
       yDiff: Math.abs(leftY - rightY),
-      reason: swapNeeded ? 'closer_leg_mismatch' : 'labels_correct',
+      reason: expectedCloser ? ('walkdir_' + walkDir) : (swapNeeded ? 'y_only_mismatch' : 'y_only_ok'),
       leftConf: leftConf, rightConf: rightConf,
       leftY: leftY, rightY: rightY
     };
@@ -769,6 +786,148 @@
   }
 
   // ============================================================
+  // 逐帧分段左右归侧 — 来回走专用
+  //
+  // 问题: 来回走时去程和回程各自近摄像头的脚不同 (去程右脚近, 回程左脚近)。
+  //       MoveNet 在不同方向下对近/远脚的 left_/right_ 标注可能不一致,
+  //       一个全局 swap 决策不可能同时让两段都正确 → 某段 detectHeelStrikes
+  //       跟踪到对侧脚 → 该侧时相数据实为另一只脚的内容 (如右脚时相显示左脚)。
+  //
+  // 方案: 用滑动窗口对每一帧判断哪只脚离镜头更近 (近脚 y 更大=画面更低, 且
+  //       置信度更高)。对 closerSide !== cameraSide 的帧就地交换该帧左右关键点
+  //       标签。去程/回程各自得到正确校正, 不再互相干扰。
+  // ============================================================
+  var LR_SWAP_MAP = {
+    'left_ankle': 'right_ankle', 'right_ankle': 'left_ankle',
+    'left_knee': 'right_knee', 'right_knee': 'left_knee',
+    'left_hip': 'right_hip', 'right_hip': 'left_hip',
+    'left_shoulder': 'right_shoulder', 'right_shoulder': 'left_shoulder',
+    'left_elbow': 'right_elbow', 'right_elbow': 'left_elbow',
+    'left_wrist': 'right_wrist', 'right_wrist': 'left_wrist',
+    'left_eye': 'right_eye', 'right_eye': 'left_eye',
+    'left_ear': 'right_ear', 'right_ear': 'left_ear'
+  };
+
+  function resolveAndSwapSidesByFrame(frames, cameraSide) {
+    var result = { frames: frames, swapNeeded: false, swapRatio: 0,
+                   cameraSide: cameraSide, reason: 'per_frame_dir_aware' };
+    if (!frames || frames.length < 10) { result.reason = 'insufficient_frames'; return result; }
+    var cs = (!cameraSide || (cameraSide !== 'left' && cameraSide !== 'right')) ? 'right' : cameraSide;
+    result.cameraSide = cs;
+    var opposite = cs === 'left' ? 'right' : 'left';
+
+    var n = frames.length;
+    // 滑动窗口 ~1.5s (30fps≈45帧); 短视频自适应, 最小15帧
+    var win = Math.min(45, Math.max(15, Math.floor(n * 0.12)));
+    var half = Math.floor(win / 2);
+
+    // === 1. 每帧 closerSide: 窗口内左右踝 "y*置信度" 加权平均, 近脚 y 更大 ===
+    var closer = new Array(n).fill(null);
+    for (var i = 0; i < n; i++) {
+      var lWY = 0, lW = 0, rWY = 0, rW = 0;
+      for (var j = Math.max(0, i - half); j <= Math.min(n - 1, i + half); j++) {
+        var la = getKp(frames[j], 'left_ankle');
+        var ra = getKp(frames[j], 'right_ankle');
+        if (la && la.score >= 0.2) { lWY += la.y * la.score; lW += la.score; }
+        if (ra && ra.score >= 0.2) { rWY += ra.y * ra.score; rW += ra.score; }
+      }
+      if (lW > 0 && rW > 0) {
+        var lAvg = lWY / lW, rAvg = rWY / rW;
+        if (lAvg > rAvg * 1.05) closer[i] = 'left';
+        else if (rAvg > lAvg * 1.05) closer[i] = 'right';
+      }
+    }
+
+    // === 2. 每帧局部走动方向: 窗口内髋中心 X 对 t 线性回归斜率 ===
+    // 来回走的关键: 去程(X增)和回程(X减)各自近摄像头的脚不同, 必须按方向区分
+    //   摄像头在右 + X增(去程) → 患者右脚近 → 期望 right_ankle = 近脚
+    //   摄像头在右 + X减(回程) → 患者左脚近 → 期望 left_ankle = 近脚
+    var dirArr = new Array(n).fill(0); // 1=l2r, -1=r2l, 0=未定
+    for (var i = 0; i < n; i++) {
+      var xs = [], ts = [];
+      for (var j = Math.max(0, i - half); j <= Math.min(n - 1, i + half); j++) {
+        var lh = getKp(frames[j], 'left_hip');
+        var rh = getKp(frames[j], 'right_hip');
+        var hx = null;
+        if (lh && rh && lh.score >= 0.2 && rh.score >= 0.2) hx = (lh.x + rh.x) / 2;
+        else if (lh && lh.score >= 0.2) hx = lh.x;
+        else if (rh && rh.score >= 0.2) hx = rh.x;
+        if (hx != null) { xs.push(hx); ts.push(frames[j].t); }
+      }
+      if (xs.length >= 5) {
+        var m = xs.length, sx = 0, sy = 0, sxy = 0, sx2 = 0;
+        for (var k = 0; k < m; k++) { sx += ts[k]; sy += xs[k]; sxy += ts[k] * xs[k]; sx2 += ts[k] * ts[k]; }
+        var denom = m * sx2 - sx * sx;
+        if (Math.abs(denom) > 1e-9) {
+          var slope = (m * sxy - sx * sy) / denom;
+          if (slope > 3) dirArr[i] = 1;
+          else if (slope < -3) dirArr[i] = -1;
+        }
+      }
+    }
+
+    // === 3. 前向填充 closer 和 dir 的空缺 (转身/不确定区沿用上一判定) ===
+    var hasAny = false;
+    for (var i = 0; i < n; i++) { if (closer[i]) { hasAny = true; break; } }
+    if (!hasAny) {
+      // closer 全 null → 全局 fallback
+      var gLY = 0, gLW = 0, gRY = 0, gRW = 0;
+      for (var i = 0; i < n; i++) {
+        var la = getKp(frames[i], 'left_ankle');
+        var ra = getKp(frames[i], 'right_ankle');
+        if (la && la.score >= 0.2) { gLY += la.y * la.score; gLW += la.score; }
+        if (ra && ra.score >= 0.2) { gRY += ra.y * ra.score; gRW += ra.score; }
+      }
+      var gCloser = null;
+      if (gLW > 0 && gRW > 0) { if (gLY / gLW > gRY / gRW) gCloser = 'left'; else gCloser = 'right'; }
+      for (var i = 0; i < n; i++) closer[i] = gCloser;
+      result.reason = 'global_fallback';
+    } else {
+      var lastC = null;
+      for (var i = 0; i < n; i++) { if (closer[i]) lastC = closer[i]; else closer[i] = lastC; }
+      if (!closer[0]) {
+        var firstC = null;
+        for (var i = 0; i < n; i++) { if (closer[i]) { firstC = closer[i]; break; } }
+        for (var i = 0; i < n; i++) { if (closer[i]) break; closer[i] = firstC; }
+      }
+    }
+    // dir 前向填充
+    var lastD = 0;
+    for (var i = 0; i < n; i++) { if (dirArr[i] !== 0) lastD = dirArr[i]; else dirArr[i] = lastD; }
+    if (dirArr[0] === 0) {
+      var firstD = 0;
+      for (var i = 0; i < n; i++) { if (dirArr[i] !== 0) { firstD = dirArr[i]; break; } }
+      for (var i = 0; i < n; i++) { if (dirArr[i] !== 0) break; dirArr[i] = firstD; }
+    }
+
+    // === 4. 逐帧 swap: expectedSide 由局部方向+cameraSide 决定 ===
+    // dir=l2r → expected=cameraSide; dir=r2l → expected=opposite
+    // swap 当 closerSide(近脚的MoveNet标签) !== expectedSide(近脚应是的患者侧)
+    var swapCount = 0;
+    for (var i = 0; i < n; i++) {
+      var c = closer[i];
+      if (!c) continue;
+      var expected = dirArr[i] === -1 ? opposite : cs;
+      if (c !== expected) {
+        var kps = frames[i].keypoints;
+        if (kps) {
+          for (var j = 0; j < kps.length; j++) {
+            var nm = kps[j].name;
+            if (LR_SWAP_MAP[nm]) {
+              kps[j] = Object.assign({}, kps[j], { name: LR_SWAP_MAP[nm] });
+            }
+          }
+          swapCount++;
+        }
+      }
+    }
+
+    result.swapRatio = n > 0 ? swapCount / n : 0;
+    result.swapNeeded = result.swapRatio > 0.5;
+    return result;
+  }
+
+  // ============================================================
   // 脚跟着地检测 (HS) — 抗噪声 v2
   //
   // 旧算法找 y 局部极小值 (= 摆动顶点 = 脚最高), 与 HS 概念错位;
@@ -780,7 +939,8 @@
   //   4) HS = 摆动顶点之后, y 上升回到 (基线 - 5px) 以内的**第一个点**
   //   5) 起点/终点特殊处理 + 最小间隔 0.40s
   function detectHeelStrikes(frames, side) {
-    var kpName = side + '_ankle';
+    // 优先用真实脚跟关键点 (MediaPipe 33点), fallback 到踝
+    var kpName = side + '_heel';
     var points = [];
     for (var i = 0; i < frames.length; i++) {
       var kp = getKp(frames[i], kpName);
@@ -788,28 +948,63 @@
         points.push({ frame: i, t: frames[i].t, y: kp.y, x: kp.x, score: kp.score });
       }
     }
+    // 脚跟点不足 → 退回踝
+    if (points.length < 5) {
+      kpName = side + '_ankle';
+      points = [];
+      for (var i = 0; i < frames.length; i++) {
+        var kp = getKp(frames[i], kpName);
+        if (kp && kp.score >= 0.3) {
+          points.push({ frame: i, t: frames[i].t, y: kp.y, x: kp.x, score: kp.score });
+        }
+      }
+    }
     if (points.length < 5) return [];
 
-    // ---------- 0. 从全部关键点估算人体像素身高 (nose→ankle 中位数) ----------
+    // ---------- 0. 从全部关键点估算人体像素身高 (nose/shoulder→ankle 中位数) ----------
     function calcBodyHeightPx() {
       var heights = [];
       for (var i = 0; i < frames.length; i++) {
+        // 尝试 nose 作为上端点, 肩部作为 fallback (侧方45°拍摄时肩膀更可见)
         var nose = getKp(frames[i], 'nose');
+        var ls = getKp(frames[i], 'left_shoulder');
+        var rs = getKp(frames[i], 'right_shoulder');
         var la = getKp(frames[i], 'left_ankle');
         var ra = getKp(frames[i], 'right_ankle');
-        if (nose && la && ra && nose.score >= 0.3 && la.score >= 0.3 && ra.score >= 0.3) {
-          heights.push(((la.y + ra.y) / 2) - nose.y);
+        if (!la || !ra || la.score < 0.25 || ra.score < 0.25) continue;
+        var ankleY = (la.y + ra.y) / 2;
+        var upperY = null;
+        var scale = 1;
+        if (nose && nose.score >= 0.25) {
+          upperY = nose.y;
+          scale = 1;  // nose = 头顶附近, 1:1
+        } else if (ls && rs && ls.score >= 0.25 && rs.score >= 0.25) {
+          upperY = (ls.y + rs.y) / 2;
+          scale = 1.22;  // 肩位 ≈ 82% 身高, scale up
+        } else if (ls && ls.score >= 0.25) {
+          upperY = ls.y;
+          scale = 1.22;
+        } else if (rs && rs.score >= 0.25) {
+          upperY = rs.y;
+          scale = 1.22;
         }
+        if (upperY === null) continue;
+        var h = (ankleY - upperY) * scale;
+        if (h > 30 && h < 2000) heights.push(h);  // 合理范围: 30-2000px
       }
       if (heights.length < 5) return null;
       heights.sort(function (a, b) { return a - b; });
       return heights[Math.floor(heights.length * 0.5)]; // median
     }
     var bodyH = calcBodyHeightPx();
-    // 摆动深度 = 身体像素 3% (正常人步态踝关节垂直位移 ~5cm, 身高 ~170cm → 3%)
-    // min 3px (手机远距离), max 25px (近距离), 默认 8px (无身高信息时)
-    var SWING_DEPTH = bodyH ? Math.max(3, Math.min(25, bodyH * 0.03)) : 8;
-    var HS_RECOVERY_TOL = bodyH ? Math.max(2, Math.min(12, bodyH * 0.015)) : 5;
+    var anklePts = points.length;
+    // 摆动深度 = 身体像素 2.5% (放宽到 2% 抗低 fps 抖动, 正常步态踝垂直位移 ~5cm/170cm)
+    // min 2px (远距手机), max 25px (近距), 默认 6px (无身高信息 — 从 8 降, 抗噪)
+    var SWING_DEPTH = bodyH ? Math.max(2, Math.min(25, bodyH * 0.025)) : 6;
+    // 恢复容差: min 1px, max 12px, 无身高信息 fallback 4px (从 5 降, 抗噪)
+    var HS_RECOVERY_TOL = bodyH ? Math.max(1, Math.min(12, bodyH * 0.012)) : 4;
+    console.log('[gait] HS ' + side + ': ankle=' + anklePts + ' bodyH=' + (bodyH ? bodyH.toFixed(0) : 'N/A') +
+                ' swingDepth=' + SWING_DEPTH.toFixed(1) + ' tol=' + HS_RECOVERY_TOL.toFixed(1));
 
     // ---------- 1. 中值滤波 (window=5) 抗脉冲噪声 ----------
     function medianFilter(pts, win) {
@@ -927,7 +1122,7 @@
         // 间隔太短, 保留 y 更接近 baseline 的 (即更"落地")
         if (result.length > 0 && Math.abs(cand.y - baseline) < Math.abs(result[result.length - 1].y - baseline)) {
           result[result.length - 1] = {
-            frameIndex: cand.frame,
+            frameIndex: cand.frameIndex,
             time: cand.time,
             x: cand.x,
             y: cand.y,
@@ -938,7 +1133,7 @@
         continue;
       }
       result.push({
-        frameIndex: cand.frame,
+        frameIndex: cand.frameIndex,
         time: cand.time,
         x: cand.x,
         y: cand.y,
@@ -960,11 +1155,20 @@
    */
   function detectToeOffs(frames, side, heelStrikes) {
     if (!frames || frames.length < 3 || heelStrikes.length < 2) return [];
-    var kpName = side + '_ankle';
+    // 优先用真实脚尖关键点 (MediaPipe foot_index), fallback 到踝
+    var kpName = side + '_foot_index';
     var points = [];
     for (var i = 0; i < frames.length; i++) {
       var kp = getKp(frames[i], kpName);
       if (kp && kp.score >= 0.3) points.push({ frame: i, t: frames[i].t, y: kp.y, x: kp.x, score: kp.score });
+    }
+    if (points.length < 3) {
+      kpName = side + '_ankle';
+      points = [];
+      for (var i = 0; i < frames.length; i++) {
+        var kp = getKp(frames[i], kpName);
+        if (kp && kp.score >= 0.3) points.push({ frame: i, t: frames[i].t, y: kp.y, x: kp.x, score: kp.score });
+      }
     }
     if (points.length < 3) return [];
     // 平滑
@@ -1025,6 +1229,7 @@
         });
       }
     }
+    console.log('[gait] HS ' + side + ': found ' + results.length + ' heel strikes');
     return results;
   }
 
@@ -1044,41 +1249,502 @@
    * 实现: 用 HS + TO 时间戳确定支撑相 (HS → TO) 和摆动相 (TO → next HS),
    *       然后按比例切片 8 时相
    */
-  // 从 HS/TO 事件推算 8 时相的绝对时间戳 (用于报告时相截图)
-  // 每个完整周期 (HS[i] → HS[i+1]) 切 8 片, IC/LR/MSt/TSt/PSw/ISw/MSw/TSw
-  function computePhaseTimestamps(leftHS, leftTO, rightHS, rightTO) {
+  // 从关键点帧数据 + HS 事件, 在实际踝关节 Y 轨迹中检测真实 IC 和 TO
+  // 不再用固定百分比推算 — 而是从 Y 轨迹形态找到各时相的实际时间戳
+  function computePhaseTimestamps(keypointFrames, leftHS, leftTO, rightHS, rightTO) {
     var out = [];
     var PHASE_LABELS = {
       IC:  '初始着地', LR:  '承重反应', MSt: '支撑中期', TSt: '支撑末期',
       PSw: '摆动前期', ISw: '摆动初期', MSw: '摆动中期', TSw: '摆动末期'
     };
-    var PHASE_PCTS = {
-      IC: 0.00, LR: 0.10, MSt: 0.22, TSt: 0.42,
-      PSw: 0.52, ISw: 0.65, MSw: 0.78, TSw: 0.92
-    };
-    function build(HS, TO, side) {
+
+    function getAnkleY(frame, side) {
+      var kp = getKp(frame, side + '_ankle');
+      return (kp && kp.score >= 0.25) ? kp.y : null;
+    }
+
+    // 对每段 HS 周期, 从踝 Y 轨迹中找真实 IC (HS 之前触地) 和真实 TO (HS 之后离地)
+    // 找不到时 fallback 到 HS 比例推算 — 任何情况都要保证出 8 个时相
+    function build(HS, side, TO) {
       if (!HS || HS.length < 2) return;
-      var toByCycle = {};
-      (TO || []).forEach(function (t) { toByCycle[t.cycleIndex || 0] = t; });
       for (var i = 0; i < HS.length - 1; i++) {
-        var cycle = HS[i + 1].time - HS[i].time;
-        if (cycle <= 0.2 || cycle >= 3.0) continue;
-        var to = toByCycle[i];
-        Object.keys(PHASE_PCTS).forEach(function (ph) {
-          var t = HS[i].time + cycle * PHASE_PCTS[ph];
-          out.push({
-            cycleIndex: i + 1,
-            side: side,
-            phase: ph,
-            label: PHASE_LABELS[ph],
-            time: t,
-            stance: ph === 'IC' || ph === 'LR' || ph === 'MSt' || ph === 'TSt' || ph === 'PSw'
-          });
+        var hs = HS[i], nextHs = HS[i + 1];
+        var cycle = nextHs.time - hs.time;
+        var dx = nextHs.x - hs.x;
+        var cycleDir = dx > 1 ? 'l2r' : (dx < -1 ? 'r2l' : 'stationary');
+        if (cycle < 0.2 || cycle > 3.0) continue;  // 放宽: 0.2-3.0s (远脚HS可能间距异常)
+        if (hs.frameIndex == null || nextHs.frameIndex == null) continue;
+        if (hs.frameIndex < 0 || nextHs.frameIndex <= hs.frameIndex) continue;
+
+        // === IC: 直接用 HS 检测点 ===
+        // HS 算法找的是"摆动顶点之后 y 回到 stance 基线"的第一帧, 这一刻就是 IC
+        // 不要再往前回溯 — 复杂逻辑带来误判
+        var icFi = hs.frameIndex;
+        var icT = hs.time;
+        var hsY = hs.y;
+        var kpName = side + '_ankle';
+
+        // === Per-cycle "近镜头侧" 检测 ===
+        // 在 hsFi → nextFi 区间统计左右踝的平均 score, 高分侧 = 离镜头更近
+        var lScore = 0, lCount = 0, rScore = 0, rCount = 0;
+        for (var fi = hs.frameIndex; fi <= nextHs.frameIndex && fi < keypointFrames.length; fi++) {
+          var la = getKp(keypointFrames[fi], 'left_ankle');
+          var ra = getKp(keypointFrames[fi], 'right_ankle');
+          if (la && la.score >= 0.2) { lScore += la.score; lCount++; }
+          if (ra && ra.score >= 0.2) { rScore += ra.score; rCount++; }
+        }
+        var closerSide = null;
+        if (lCount > 0 && rCount > 0) {
+          var lAvg = lScore / lCount, rAvg = rScore / rCount;
+          if (lAvg > rAvg * 1.08) closerSide = 'left';
+          else if (rAvg > lAvg * 1.08) closerSide = 'right';
+        }
+
+        // === TO: 优先用 detectToeOffs 结果 (更完善), 找不到才内部 fallback ===
+        var toFi = -1;
+        var toT = -1;
+        var searchFwd = Math.min(keypointFrames.length - 1, nextHs.frameIndex - 1);
+        // 1) 从传入的 TO 数组找本周期 (cycleIndex === i) 的 TO
+        if (TO && TO.length) {
+          for (var ti = 0; ti < TO.length; ti++) {
+            if (TO[ti].cycleIndex === i && TO[ti].time > icT && TO[ti].time < nextHs.time) {
+              toT = TO[ti].time; toFi = TO[ti].frameIndex; break;
+            }
+          }
+        }
+        // 2) Fallback: 内部检测 — 起点推迟到支撑相~35%后, 阈值8px, 连续2帧确认
+        if (toFi < 0) {
+          var fps = keypointFrames.length > 1
+            ? (keypointFrames.length - 1) / Math.max(0.01, keypointFrames[keypointFrames.length - 1].t - keypointFrames[0].t)
+            : 20;
+          var toStart = hs.frameIndex + Math.max(3, Math.floor(cycle * 0.35 * fps));
+          var toEnd = Math.min(keypointFrames.length - 1, nextHs.frameIndex - 1);
+          var riseThresh = hsY - 8;
+          var consec = 0;
+          for (var fi = toStart; fi <= toEnd; fi++) {
+            var fr = keypointFrames[fi];
+            if (!fr) { consec = 0; continue; }
+            var kp = getKp(fr, kpName);
+            if (!kp || kp.score < 0.2) { consec = 0; continue; }
+            if (kp.y < riseThresh) {
+              consec++;
+              if (consec >= 2) { toFi = fi - 1; toT = keypointFrames[fi - 1].t; break; }
+            } else consec = 0;
+          }
+        }
+        // 3) 仍找不到 → 比例推算 (支撑相 60%)
+        if (toFi < 0 || toT <= icT || toT >= nextHs.time) {
+          toT = hs.time + cycle * 0.60;
+          toFi = Math.min(searchFwd, hs.frameIndex + Math.floor(cycle * 0.60 * 30));
+        }
+
+        // === 用脚跟+脚尖双轨迹按姿态选时相帧 (MediaPipe 33点) ===
+        // heel.y 大=脚跟在地面低处, toe.y 大=脚尖在地面低处
+        // 支撑相内部时相由脚跟/脚尖相对高度区分:
+        //   IC: 脚跟着地 (heel.y 大, toe.y 小=脚尖翘起)
+        //   LR: 脚跟落地, 脚尖下压 (toe.y 逐渐增大接近 heel.y)
+        //   MSt: 脚掌全平 (heel.y ≈ toe.y, 都在地面)
+        //   TSt: 脚跟离地 (heel.y 减小, toe.y 仍大=脚尖着地)
+        //   PSw: 脚尖将离地 (toe.y 开始减小)
+        var heelName = side + '_heel';
+        var toeName = side + '_foot_index';
+        var cycleEndFi = Math.min(nextHs.frameIndex, keypointFrames.length - 1);
+        var cycleLen = cycleEndFi - icFi + 1;
+
+        // 重建 heelY 和 toeY 连续轨迹 (插值+平滑)
+        function buildTrajectory(kpNameStr, fallbackY) {
+          var raw = new Array(cycleLen).fill(null);
+          var known = [];
+          for (var fi = icFi; fi <= cycleEndFi; fi++) {
+            var kp = getKp(keypointFrames[fi], kpNameStr);
+            if (kp && kp.score >= 0.15) { raw[fi - icFi] = kp.y; known.push(fi - icFi); }
+          }
+          if (known.length >= 2) {
+            for (var g = 0; g < cycleLen; g++) {
+              if (raw[g] !== null) continue;
+              var pk = -1, nk = -1;
+              for (var kk = g - 1; kk >= 0; kk--) { if (raw[kk] !== null) { pk = kk; break; } }
+              for (var kk = g + 1; kk < cycleLen; kk++) { if (raw[kk] !== null) { nk = kk; break; } }
+              if (pk >= 0 && nk >= 0) raw[g] = raw[pk] + (raw[nk] - raw[pk]) * (g - pk) / (nk - pk);
+              else if (pk >= 0) raw[g] = raw[pk];
+              else if (nk >= 0) raw[g] = raw[nk];
+            }
+          } else {
+            for (var g = 0; g < cycleLen; g++) raw[g] = fallbackY;
+          }
+          var sm = new Array(cycleLen);
+          for (var g = 0; g < cycleLen; g++) {
+            var s = 0, c = 0;
+            for (var w = -2; w <= 2; w++) { if (g + w >= 0 && g + w < cycleLen) { s += raw[g + w]; c++; } }
+            sm[g] = s / c;
+          }
+          return sm;
+        }
+
+        var heelY = buildTrajectory(heelName, hsY);
+        var toeY = buildTrajectory(toeName, hsY);
+        // 脚跟脚尖都没有时 fallback 到踝
+        var hasHeel = false, hasToe = false;
+        var heelValidCnt = 0, toeValidCnt = 0, heelHighCnt = 0, toeHighCnt = 0;
+        for (var g = 0; g < cycleLen; g++) {
+          var hk = getKp(keypointFrames[icFi + g], heelName);
+          var tk = getKp(keypointFrames[icFi + g], toeName);
+          if (hk && hk.score >= 0.15) { hasHeel = true; heelValidCnt++; }
+          if (tk && tk.score >= 0.15) { hasToe = true; toeValidCnt++; }
+          if (hk && hk.score >= 0.3) heelHighCnt++;
+          if (tk && tk.score >= 0.3) toeHighCnt++;
+        }
+        // 无脚跟脚尖 → 退回踝轨迹
+        var fellBackToAnkle = false;
+        if (!hasHeel && !hasToe) {
+          heelY = buildTrajectory(side + '_ankle', hsY);
+          toeY = heelY;
+          fellBackToAnkle = true;
+        }
+
+        // 地面参考Y = 周期内 heelY 的高分位 (脚在地面时的Y值)
+        var groundY = heelY.slice().sort(function(a,b){return a-b;})[Math.floor(cycleLen * 0.80)];
+
+        // === 诊断日志: 关键点质量 + 轨迹形态 ===
+        var heelMin = Infinity, heelMax = -Infinity, toeMin = Infinity, toeMax = -Infinity;
+        for (var g = 0; g < cycleLen; g++) {
+          if (heelY[g] < heelMin) heelMin = heelY[g];
+          if (heelY[g] > heelMax) heelMax = heelY[g];
+          if (toeY[g] < toeMin) toeMin = toeY[g];
+          if (toeY[g] > toeMax) toeMax = toeY[g];
+        }
+        console.log('[gait-diag] side=' + side + ' cycle=' + (i+1) + ' len=' + cycleLen +
+          ' | heel帧=' + heelValidCnt + '/' + cycleLen + '(高=' + heelHighCnt + ')' +
+          ' toe帧=' + toeValidCnt + '/' + cycleLen + '(高=' + toeHighCnt + ')' +
+          (fellBackToAnkle ? ' [FALLBACK踝]' : '') +
+          ' | heelY[' + heelMin.toFixed(0) + '-' + heelMax.toFixed(0) + ']amp=' + (heelMax-heelMin).toFixed(0) +
+          ' toeY[' + toeMin.toFixed(0) + '-' + toeMax.toFixed(0) + ']amp=' + (toeMax-toeMin).toFixed(0) +
+          ' groundY=' + groundY.toFixed(0));
+
+        var stEnd = Math.min(cycleLen - 1, Math.floor(cycleLen * 0.65));
+
+        // === 锚点检测 (用脚跟脚尖轨迹形态特征) ===
+
+        // A0 = IC = 脚跟**触地瞬间**: 直接用 HS detection 找到的帧 (hs.frameIndex)
+        // 根因: 之前用 "heelY ≥ groundY - 4 && heelY - toeY > 6" 模式匹配, 当 MediaPipe 关键点噪声大
+        //   或 heel 帧覆盖率 < 100% 时, 模式匹配把 IC 推到周期中段 (用户日志: IC@23/51 = 45%)
+        //   导致 A1(MSt)/A2(TO)/A3(MSw) 都相对错位的 A0 计算 → 8 个时相位置全错
+        //   → 截图里 LR/MSt 时刻实际是周期后半段, 另一只脚已回 stance → "右脚画面套左脚标签"
+        // 修复: A0 直接锚定到 HS detection 找到的 hs.frameIndex (offset = 0)
+        //   其他锚点 (MSt/TO/MSw/TSw) 相对 A0 计算, 用姿态模式特征在 [A0+1, ...] 区间找
+        var a0off = 0;  // IC = hs.frameIndex (offset 0, 绝对信任 HS detection)
+
+        // A1 = MSt = 脚掌最平 (|heelY - toeY| 最小), 在 [A0, 周期60%] 找
+        var mstOff = a0off + 1, mstFlat = Infinity;
+        for (var g = a0off + 1; g <= stEnd; g++) {
+          var flatness = Math.abs(heelY[g] - toeY[g]);
+          if (flatness < mstFlat) { mstFlat = flatness; mstOff = g; }
+        }
+        var a1off = mstOff;
+
+        // A2 = TO = 脚尖离地: toeY 从地面基准开始持续上升(离地)
+        // 修复: 用 toeY 自己的基准, 不用 heelY 的 groundY (两者地面Y不同!)
+        var toeGroundY = toeY.slice().sort(function(a,b){return a-b;})[Math.floor(cycleLen * 0.70)];
+        var toeMinY = toeMin;  // 摆动最高点
+        var toeRange = toeGroundY - toeMinY;  // 脚尖总移动范围
+        if (toeRange < 8) toeRange = 8;  // 防退化
+        // TO阈值: 脚尖抬起总范围的10% = 确认离地 (脚尖刚开始离地就触发)
+        var toThreshold = toeGroundY - toeRange * 0.10;
+        // 最小支撑相长度: 至少30%周期
+        var minStanceEnd = a1off + Math.max(2, Math.floor(cycleLen * 0.15));
+        var toOff = -1;
+        var consecLift = 0;
+        for (var g = Math.max(minStanceEnd, a1off + 1); g < cycleLen; g++) {
+          if (toeY[g] < toThreshold) {  // 脚尖抬起到阈值以上
+            consecLift++;
+            if (consecLift >= 2) { toOff = g - 1; break; }  // 2帧确认(从3降)
+          } else consecLift = 0;
+        }
+        var a2off = toOff >= 0 ? toOff : Math.floor(cycleLen * 0.55);
+
+        // A3 = MSw = 脚最高 (toeY 最小), 在 [A2, 周期末] 找
+        var mswOff = a2off, mswY = Infinity;
+        for (var g = a2off; g < cycleLen; g++) {
+          if (toeY[g] < mswY) { mswY = toeY[g]; mswOff = g; }
+        }
+        var a3off = mswOff;
+
+        // A4 = 下一IC (下一周期触地) = heelY 回到地面Y
+        var a4off = cycleLen - 1;
+        for (var g = a3off + 1; g < cycleLen; g++) {
+          if (heelY[g] >= groundY - 4) { a4off = g; break; }  // 脚跟接近地面准备触地
+        }
+
+        // 兜底: 锚点顺序 + 最小间距
+        if (a1off <= a0off) a1off = a0off + Math.floor(cycleLen * 0.15);
+        if (a2off <= a1off) a2off = a0off + Math.floor(cycleLen * 0.55);
+        if (a3off <= a2off) a3off = a0off + Math.floor(cycleLen * 0.75);
+        if (a4off <= a3off) a4off = cycleLen - 1;
+        var minGap = 3;
+        if (a1off - a0off < minGap) a1off = a0off + minGap;
+        if (a2off - a1off < minGap) a2off = a1off + minGap;
+        if (a3off - a2off < minGap) a3off = a2off + minGap;
+        if (a4off - a3off < minGap) a3off = a4off - minGap;
+
+        // === 8时相定位 — 每个时相按自身姿态特征选帧，不用比例插值 ===
+        // 支撑相 [A0→A2]: IC(触地瞬间) → LR(脚尖快速下压) → MSt(全掌着地) → TSt(脚跟离地脚尖仍在) → PSw(脚尖将离最后支撑)
+        // 摆动相 [A2→A4]: ISw(脚刚离地抬升) → MSw(脚最高) → TSw(脚下落脚跟接近地面)
+
+        // 辅助函数: 在指定区间内按评分函数选最优帧
+        function pickBest(rangeStart, rangeEnd, scoreFn) {
+          var rs = Math.max(0, Math.floor(rangeStart));
+          var re = Math.min(cycleLen - 1, Math.ceil(rangeEnd));
+          if (rs > re) rs = re;
+          var bestOff = rs, bestScore = scoreFn(rs);
+          for (var g = rs + 1; g <= re; g++) {
+            var sc = scoreFn(g);
+            if (sc > bestScore) { bestScore = sc; bestOff = g; }
+          }
+          return bestOff;
+        }
+
+        // 计算帧间差分 (前向差分, 首帧用0)
+        function diff(arr) {
+          var d = new Array(cycleLen);
+          d[0] = 0;
+          for (var g = 1; g < cycleLen; g++) d[g] = arr[g] - arr[g - 1];
+          return d;
+        }
+
+        var heelDiff = diff(heelY);   // 脚跟Y变化率 (正=下降, 负=上升)
+        var toeDiff = diff(toeY);     // 脚尖Y变化率
+
+        // --- IC: 已由A0锚点保证 (脚跟触地 + 脚尖翘起) ---
+        var icOff = a0off;
+
+        // --- LR: 承重反应 — 脚尖正在快速下压向脚跟靠拢 (gap缩小最快的位置) ---
+        // 在 [IC+1, MSt] 区间找 heelY-toeY 差距收缩最快的帧
+        var lrStart = icOff + 1;
+        var lrEnd = Math.max(lrStart + 2, a1off);
+        var lrOff = pickBest(lrStart, lrEnd, function(g) {
+          if (g < 1) return 0;
+          var prevGap = Math.abs(heelY[g - 1] - toeY[g - 1]);
+          var currGap = Math.abs(heelY[g] - toeY[g]);
+          // gap缩小的速率, 越大越好 (脚尖正在下压)
+          return Math.max(0, prevGap - currGap);
         });
+
+        // --- MSt: 已由A1锚点保证 (脚掌最平) ---
+        var mstOff = a1off;
+
+        // --- TSt: 支撑末期 — 脚跟开始离地上升的阶段 ---
+        // 找脚跟首次开始持续抬起的点 (heelY从地面开始下降), 不是最快抬起
+        // 在 [MSt+1, TO-2] 找第一个 heelY 明显下降(>3px)的帧
+        var tstStart = mstOff + 1;
+        var tstEnd = Math.max(tstStart + 2, a2off - 2);
+        // heelGroundY = MSt附近heelY的平均值(脚跟在地面时的Y)
+        var heelGroundLocal = 0, heelGroundCnt = 0;
+        for (var g = Math.max(0, mstOff - 1); g <= Math.min(cycleLen - 1, mstOff + 2); g++) {
+          heelGroundLocal += heelY[g]; heelGroundCnt++;
+        }
+        heelGroundLocal = heelGroundCnt > 0 ? heelGroundLocal / heelGroundCnt : groundY;
+        // 找第一个 heelY 比 heelGroundLocal 低 3px 的帧 = 脚跟开始抬起
+        var tstOff = -1;
+        for (var g = tstStart; g <= tstEnd; g++) {
+          if (heelY[g] < heelGroundLocal - 3 && heelDiff[g] < 0) {
+            tstOff = g; break;
+          }
+        }
+        // fallback: 如果找不到首次抬起, 取 MSt→TO 的 40% 位置
+        if (tstOff < 0) {
+          tstOff = mstOff + Math.max(2, Math.floor((tstEnd - mstOff) * 0.4));
+        }
+
+        // --- PSw: 摆动前期 — 脚尖即将离地, 最后的支撑时刻 ---
+        // 在 [TSt+1, TO] 区间找, 如果区间太窄(<3帧), 扩展到 [MSt+2, TO]
+        var pswStart = Math.max(tstOff + 1, mstOff + 2);
+        var pswEnd = Math.min(cycleLen - 1, a2off);
+        var pswRange = pswEnd - pswStart;
+        var pswOff;
+        if (pswRange < 2) {
+          // 区间太窄, 直接取 TSt 和 TO 之间的中点(或TO前一帧)
+          pswOff = Math.max(pswStart, a2off - 1);
+        } else {
+          pswOff = pickBest(pswStart, pswEnd, function(g) {
+            var toeRisingSpeed = -toeDiff[g];  // 正值=脚尖上升速度
+            var toeNearGround = Math.max(0, toeY[g] - (toeGroundY - 15));
+            if (toeNearGround < -15) return 0;
+            return toeRisingSpeed * 2 + toeNearGround;
+          });
+        }
+
+        // --- ISw: 摆动初期 — 脚刚离开地面, 正在抬升 ---
+        // 在 [TO, A3] 找脚尖上升最快的帧
+        var iswStart = a2off;
+        var iswEnd = Math.max(a2off + 2, Math.floor(a3off * 0.7 + a2off * 0.3));
+        var iswOff = pickBest(iswStart, iswEnd, function(g) {
+          var toeRising = -toeDiff[g];  // 脚尖上升速度
+          var toeAboveGround = Math.max(0, toeGroundY - toeY[g]);  // 脚离地高度
+          if (toeAboveGround < 2) return 0;
+          return toeRising * 2 + toeAboveGround * 0.5;
+        });
+
+        // --- MSw: 已由A3锚点保证 (脚最高点, toeY最小) ---
+        var mswOff = a3off;
+
+        // --- TSw: 摆动末期 — 脚在下落, 脚跟接近地面准备再次触地 ---
+        // 在 [MSw+gap, A4-2] 找脚尖下降最快 (toeY增大最快) + 脚跟接近地面
+        var tswGap = Math.max(minGap, Math.floor((a4off - a3off) * 0.25));
+        var tswStart = mswOff + tswGap;
+        var tswEnd = Math.min(cycleLen - 2, a4off - 1);
+        var mswToeY = toeY[mswOff];
+        var tswOff = pickBest(tswStart, tswEnd, function(g) {
+          var toeDescending = toeDiff[g];  // 正值=脚尖在下降 (toeY增大)
+          var toeFallenFromPeak = toeY[g] - mswToeY;  // 从最高点下降了多少
+          if (toeFallenFromPeak < 3) return 0;  // 和MSw差不多高
+          var heelNearGround = Math.max(0, heelY[g] - (groundY - 8));  // 脚跟接近地面
+          return toeFallenFromPeak * 1.5 + toeDescending * 2 + heelNearGround * 2;
+        });
+
+        // 组装8个时相偏移 — 确保最小间距, 防止多时相同帧
+        var rawOffsets = [icOff, lrOff, mstOff, tstOff, pswOff, iswOff, mswOff, tswOff];
+        var phaseNames8 = ['IC', 'LR', 'MSt', 'TSt', 'PSw', 'ISw', 'MSw', 'TSw'];
+        var isStance = [true, true, true, true, true, false, false, false];
+
+        // 计算每个时相允许的区间
+        var bounds = [
+          [a0off, a1off],          // IC: [触地, 全压]
+          [a0off + 1, a1off],      // LR: (触地, 全压]
+          [a1off, a2off],          // MSt: [全压, 离地] (锚点)
+          [a1off + 1, a2off - 1],  // TSt: (全压, 离地)
+          [a1off + 2, a2off],      // PSw: (全压+2, 离地]
+          [a2off, a3off],          // ISw: [离地, 最高]
+          [a2off, a3off],          // MSw: [离地, 最高] (锚点)
+          [a3off, a4off]           // TSw: [最高, 下一触地]
+        ];
+
+        // 第一轮: 按评分选帧
+        var phaseOffsets = [];
+        for (var k = 0; k < 8; k++) {
+          phaseOffsets.push(rawOffsets[k]);
+        }
+
+        // 第二轮: 修正违反约束的帧 (超出边界 → 钳到边界)
+        for (var k = 0; k < 8; k++) {
+          if (phaseOffsets[k] < bounds[k][0]) phaseOffsets[k] = bounds[k][0];
+          if (phaseOffsets[k] > bounds[k][1]) phaseOffsets[k] = bounds[k][1];
+        }
+
+        // 第三轮: 确保最小间距 — 每对相邻时相至少隔2帧
+        // 如果空间不够, 在可用区间内均匀分布
+        var minPhaseGap = Math.max(2, Math.floor(cycleLen / 20));  // 至少2帧, 长周期适当增大
+        for (var k = 1; k < 8; k++) {
+          if (phaseOffsets[k] - phaseOffsets[k-1] < minPhaseGap) {
+            // 尝试把当前帧后移
+            var desired = phaseOffsets[k-1] + minPhaseGap;
+            if (desired <= bounds[k][1]) {
+              phaseOffsets[k] = desired;
+            } else {
+              // 当前帧无法后移 → 把前一帧前移
+              var backDesired = phaseOffsets[k] - minPhaseGap;
+              if (backDesired >= bounds[k-1][0] && k >= 2) {
+                phaseOffsets[k-1] = backDesired;
+              }
+            }
+          }
+        }
+
+        // 第四轮: 最终钳位, 确保不超范围
+        for (var k = 0; k < 8; k++) {
+          phaseOffsets[k] = Math.max(0, Math.min(cycleLen - 1, phaseOffsets[k]));
+        }
+        // 确保严格递增 (最后保障)
+        for (var k = 1; k < 8; k++) {
+          if (phaseOffsets[k] <= phaseOffsets[k-1]) {
+            phaseOffsets[k] = Math.min(cycleLen - 1, phaseOffsets[k-1] + 1);
+          }
+        }
+
+        var stanceNames = ['IC', 'LR', 'MSt', 'TSt', 'PSw'];
+        var swingNames  = ['ISw', 'MSw', 'TSw'];
+        var phaseNames8 = stanceNames.concat(swingNames);
+
+        // 诊断日志: 8时相选帧结果
+        var diagParts = [];
+        for (var k = 0; k < 8; k++) {
+          var dOff = phaseOffsets[k];
+          diagParts.push(phaseNames8[k] + '@' + dOff + '(h=' + heelY[dOff].toFixed(0) + ',t=' + toeY[dOff].toFixed(0) + ',gap=' + (heelY[dOff]-toeY[dOff]).toFixed(0) + ')');
+        }
+        console.log('[gait-diag] ' + side + ' cycle' + (i+1) + ' 时相: ' + diagParts.join(' | '));
+        console.log('[gait-diag] ' + side + ' cycle' + (i+1) + ' 锚点: A0(IC)=' + a0off + ' A1(MSt)=' + a1off + ' A2(TO)=' + a2off + ' A3(MSw)=' + a3off + ' A4(下IC)=' + a4off + ' | toeGroundY=' + toeGroundY.toFixed(0) + ' toThreshold=' + toThreshold.toFixed(0) + ' toeRange=' + toeRange.toFixed(0));
+
+        for (var k = 0; k < phaseNames8.length; k++) {
+          var off = phaseOffsets[k];
+          var gFi = icFi + off;
+          var gT = keypointFrames[gFi] ? keypointFrames[gFi].t : icT + (off / cycleLen) * cycle;
+          out.push({
+            cycleIndex: i + 1, side: side, phase: phaseNames8[k],
+            label: PHASE_LABELS[phaseNames8[k]], dir: cycleDir, stance: k < 5,
+            time: gT, frameIndex: gFi,
+            footX: hs.x, closerSide: closerSide,
+            derived: !!hs.derived  // ← 从 virtual HS 透传, picker 跳过 derived cycle
+          });
+        }
       }
     }
-    build(leftHS || [], leftTO || [], 'left');
-    build(rightHS || [], rightTO || [], 'right');
+    build(leftHS || [], 'left', leftTO || []);
+    build(rightHS || [], 'right', rightTO || []);
+
+    // === 交叉补全: 如果一侧周期太少, 用另一侧HS推算 ===
+    // 步态中左右脚交替触地, 间距约半个周期
+    var leftCycles = out.filter(function(p) { return p.side === 'left'; }).length / 8;
+    var rightCycles = out.filter(function(p) { return p.side === 'right'; }).length / 8;
+    console.log('[gait] cycles: left=' + leftCycles + ' right=' + rightCycles);
+    // === 交叉补全 (条件更严苛) ===
+    // 之前 leftCycles < 2 就会触发, 但真实场景中 (45% 姿势覆盖率) 1 个真实 left cycle + 8 个虚拟 = 9 个 cycle
+    // 虚拟 HS = 右脚 IC + 半周期 = 物理上正好是"右脚 MSt"时刻
+    // 截图虚拟 cycle 的"左脚 IC" → 画面里其实是右脚在 stance → "右脚用了左脚画面" 的来源
+    // 修复: ① 虚拟 cycle 标记 derived:true  ② picker 跳过 derived 周期 (因为截图物理上必错)
+    if (leftCycles < 2 && rightCycles >= 2 && rightHS && rightHS.length >= 3) {
+      // 清空原有left周期(太少不可靠), 用右脚HS推算全部left周期
+      out = out.filter(function(p) { return p.side !== 'left'; });
+      // 用右脚HS推算左脚IC: 左脚IC ≈ 右脚IC + 半个周期
+      // 把所有推算的IC合并成一个数组, 一次调用build, cycleIndex自然递增
+      var virtualLeftHS = [];
+      var rHS = rightHS;
+      for (var ri = 0; ri < rHS.length - 1; ri++) {
+        var halfCycle = (rHS[ri + 1].time - rHS[ri].time) / 2;
+        var estLeftIC_t = rHS[ri].time + halfCycle;
+        var estLeftIC_fi = rHS[ri].frameIndex + Math.floor((rHS[ri + 1].frameIndex - rHS[ri].frameIndex) / 2);
+        if (estLeftIC_fi >= keypointFrames.length) estLeftIC_fi = keypointFrames.length - 1;
+        // 获取推算IC处的踝Y (用于build内部)
+        var estKp = getKp(keypointFrames[estLeftIC_fi], 'left_ankle');
+        var estY = estKp ? estKp.y : rHS[ri].y;
+        virtualLeftHS.push({
+          frameIndex: estLeftIC_fi, time: estLeftIC_t,
+          x: rHS[ri].x, y: estY, confidence: 0.5,
+          derived: true  // ← 标记为虚拟, build() 会透传到 phase entry
+        });
+      }
+      console.log('[gait] cross-derive left: ' + virtualLeftHS.length + ' virtual HS from right (标记 derived:true, picker 跳过)');
+      build(virtualLeftHS, 'left', []);
+    }
+    if (rightCycles < 2 && leftCycles >= 2 && leftHS && leftHS.length >= 3) {
+      // 清空原有right周期(太少不可靠), 用左脚HS推算全部right周期
+      out = out.filter(function(p) { return p.side !== 'right'; });
+      var virtualRightHS = [];
+      var lHS = leftHS;
+      for (var li = 0; li < lHS.length - 1; li++) {
+        var halfCycleR = (lHS[li + 1].time - lHS[li].time) / 2;
+        var estRIC_t = lHS[li].time + halfCycleR;
+        var estRIC_fi = lHS[li].frameIndex + Math.floor((lHS[li + 1].frameIndex - lHS[li].frameIndex) / 2);
+        if (estRIC_fi >= keypointFrames.length) estRIC_fi = keypointFrames.length - 1;
+        var estKpR = getKp(keypointFrames[estRIC_fi], 'right_ankle');
+        var estYR = estKpR ? estKpR.y : lHS[li].y;
+        virtualRightHS.push({
+          frameIndex: estRIC_fi, time: estRIC_t,
+          x: lHS[li].x, y: estYR, confidence: 0.5,
+          derived: true  // ← 标记为虚拟
+        });
+      }
+      console.log('[gait] cross-derive right: ' + virtualRightHS.length + ' virtual HS from left (标记 derived:true, picker 跳过)');
+      build(virtualRightHS, 'right', []);
+    }
     return out;
   }
 
@@ -1107,6 +1773,7 @@
     // 踝在摆动末快速下降 → IC → 支撑相缓慢至最低点 (HS 检测点)
     // 30fps 下摆动末下降可能跨帧丢失, 用位置阈值比速度更鲁棒
     function estimateICOffset(frames, side, hsFrameIdx) {
+      if (!frames || hsFrameIdx == null || hsFrameIdx >= frames.length || !frames[hsFrameIdx]) return null;
       var kpName = side + '_ankle';
       var SEARCH_WINDOW = 0.35;
       var MIN_SEARCH_FRAMES = 3;
@@ -1169,7 +1836,8 @@
         var stancePct;
         if (to && to.time > HS[i].time && to.time < HS[i + 1].time) {
           // 自适应偏移: 用踝 Y 速度检测 IC, 失败时 fallback 到 cadence-adaptive 默认值
-          var icTime = estimateICOffset(frames, side, HS[i].frameIndex);
+          var hsFi = (HS[i] && HS[i].frameIndex != null) ? HS[i].frameIndex : -1;
+          var icTime = hsFi >= 0 ? estimateICOffset(frames, side, hsFi) : null;
           var offset;
           if (icTime !== null && icTime < HS[i].time) {
             offset = (HS[i].time - icTime) / cycle;
@@ -1628,8 +2296,46 @@
     var rightHS = detectHeelStrikes(frames, 'right');
     var allHS   = leftHS.concat(rightHS).sort(function (a, b) { return a.time - b.time; });
 
-    if (allHS.length < 3) {
-      return { error: 'insufficient_steps', heelStrikes: allHS };
+    // 降级模式: HS < 3 时无法做步态周期分析, 但仍可输出运动学参数
+    var degraded = allHS.length < 3;
+
+    // 尝试用空数组兜底计算 — 部分参数不依赖 HS
+    var noHS = [];
+
+    if (degraded) {
+      console.warn('[gait] degraded mode: only ' + allHS.length + ' heel strikes detected');
+      // 降级模式: 只输出不依赖步态周期的参数
+      // 躯干前倾
+      var trunkAngles = [];
+      for (var i = 0; i < frames.length; i++) {
+        var t = extractTrunkAngle(frames[i]);
+        if (t) trunkAngles.push(t.lean);
+      }
+      var trunkLeanFwd = mean(trunkAngles);
+      return {
+        scale: scale,
+        degraded: true,
+        heelStrikes: { left: leftHS, right: rightHS },
+        parameters: {
+          stepLength:    { value: null, unit: 'm',     normal: NORMAL.stepLength,    status: 'unknown' },
+          strideLength:  { value: null, unit: 'm',     normal: NORMAL.strideLength,  status: 'unknown' },
+          stepWidth:     { value: null, unit: 'm',     normal: NORMAL.stepWidth,     status: 'unknown' },
+          footAngle:     { value: null, unit: '°',     normal: NORMAL.footAngle,     status: 'unknown' },
+          cadence:       { value: null, unit: '步/分', normal: NORMAL.cadence,       status: 'unknown' },
+          gaitSpeed:     { value: null, unit: 'm/s',   normal: NORMAL.gaitSpeed,     status: 'unknown' },
+          stancePct:     { value: null, unit: '%',     normal: NORMAL.stancePct,     status: 'unknown' },
+          swingPct:      { value: null, unit: '%',     normal: NORMAL.swingPct,      status: 'unknown' },
+          doubleSupport: { value: null, unit: '%',     normal: NORMAL.doubleSupport, status: 'unknown' }
+        },
+        asymmetries: {},
+        extras: { trunkLeanFwd: trunkLeanFwd, rhythmCV: null, stepCount: allHS.length },
+        armSwing: computeArmSwing(frames, scale),
+        elbowSwing: computeElbowSwing(frames, scale),
+        kneeLeft: { note: '步态周期不足, 无法按周期分析' },
+        kneeRight: { note: '步态周期不足, 无法按周期分析' },
+        ankleLeft: computeAnkleKinematics(frames, noHS, 'left'),
+        ankleRight: computeAnkleKinematics(frames, noHS, 'right')
+      };
     }
 
     // 步长
@@ -1695,6 +2401,7 @@
     var rhythmCV = cv(durations);
 
     return {
+      degraded: false,
       scale: scale,
       duration: frames[frames.length - 1].t - frames[0].t,
       totalFrames: frames.length,
@@ -2008,6 +2715,7 @@
     detectWalkingDirection: detectWalkingDirection,
     resolveAnatomicalSides: resolveAnatomicalSides,
     swapKeypointLabels: swapKeypointLabels,
+    resolveAndSwapSidesByFrame: resolveAndSwapSidesByFrame,
     detectHeelStrikes: detectHeelStrikes,
     detectToeOffs: detectToeOffs,
     computeGaitCyclePhases: computeGaitCyclePhases,

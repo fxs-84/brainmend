@@ -43,23 +43,76 @@
     cameraDevices: [],    // [{deviceId, label, facingHint}]
     selectedDeviceId: null,
     cameraFacing: 'environment',  // 'environment' 后置 / 'user' 前置 (移动设备默认值)
-    cameraSide: 'right'          // 摄像头在患者哪一侧: 'left' / 'right'
+    cameraSide: 'right',         // 摄像头在患者哪一侧: 'left' / 'right'
+    videoSegments: [],    // 多段视频累积: 每段 = 一个独立 results 子集, phaseSnapshots 按 side 合并
+    nextSegmentHint: null // 'left' / 'right' / null — 下次录制时 UI 提示该走哪个方向
   };
 
   // ============================================================
-  // TF.js 懒加载
+  // MediaPipe Pose 懒加载 (33关键点, 含脚跟脚尖)
   // ============================================================
-  var TFJS_TF_URL     = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js';
-  var TFJS_TF_MIRRORS = [
-    'https://unpkg.com/@tensorflow/tfjs@4.17.0/dist/tf.min.js',
-    'https://cdn.bootcdn.net/ajax/libs/tensorflow/4.17.0/tf.min.js'
+  var TASKS_VISION_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
+  var TASKS_VISION_WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+  // 模型文件: 优先 full 版 (精度高, 脚跟脚尖关键点可靠), fallback 到 lite
+  // lite 版脚跟脚尖噪声大 → 时相识别不准的根本原因
+  var POSE_MODEL_URLS = [
+    'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task',
+    'https://cdn.jsdelivr.net/gh/google-ai-edge/mediapipe-samples@main/examples/pose_landmarker/web/pose_landmarker_full.task',
+    'https://cdn.jsdelivr.net/gh/google-ai-edge/mediapipe-samples@main/examples/pose_landmarker/web/pose_landmarker_lite.task',
+    'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task'
   ];
-  var TFJS_POSE_URL   = 'https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js';
-  var TFJS_POSE_MIRRORS = [
-    'https://unpkg.com/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js'
+
+  // MediaPipe 33 关键点索引 → 名称映射 (COCO 17 点名保持兼容, 新增脚跟脚尖)
+  var MP_LANDMARK_NAMES = [
+    'nose',              // 0
+    'left_eye_inner',    // 1
+    'left_eye',          // 2
+    'left_eye_outer',    // 3
+    'right_eye_inner',   // 4
+    'right_eye',         // 5
+    'right_eye_outer',   // 6
+    'left_ear',          // 7
+    'right_ear',         // 8
+    'mouth_left',        // 9
+    'mouth_right',       // 10
+    'left_shoulder',     // 11
+    'right_shoulder',    // 12
+    'left_elbow',        // 13
+    'right_elbow',       // 14
+    'left_wrist',        // 15
+    'right_wrist',       // 16
+    'left_pinky',        // 17
+    'right_pinky',       // 18
+    'left_index',        // 19
+    'right_index',       // 20
+    'left_thumb',        // 21
+    'right_thumb',       // 22
+    'left_hip',          // 23
+    'right_hip',         // 24
+    'left_knee',         // 25
+    'right_knee',        // 26
+    'left_ankle',        // 27
+    'right_ankle',       // 28
+    'left_heel',         // 29
+    'right_heel',        // 30
+    'left_foot_index',   // 31
+    'right_foot_index'   // 32
   ];
+
+  // MediaPipe landmarks (归一化0-1坐标+visibility) → {x,y,score,name} 像素坐标
+  function convertMPLandmarks(landmarks, w, h) {
+    if (!landmarks || !landmarks.length) return [];
+    return landmarks.map(function (lm, i) {
+      return {
+        x: lm.x * w,
+        y: lm.y * h,
+        score: lm.visibility != null ? lm.visibility : (lm.presence != null ? lm.presence : 0.5),
+        name: MP_LANDMARK_NAMES[i] || ('point_' + i)
+      };
+    });
+  }
+
   var detectorPromise = null;
-  var tfPromise       = null;
 
   var SCRIPT_LOAD_TIMEOUT = 18000;  // 18s 超时 (国内 CDN 较慢)
 
@@ -105,28 +158,51 @@
     return tryNext();
   }
 
-  function loadTensorFlow() {
-    if (tfPromise) return tfPromise;
-    var urls = [TFJS_TF_URL].concat(TFJS_TF_MIRRORS);
-    tfPromise = loadScriptWithFallback(urls, 'TF.js').then(function () {
-      if (!window.tf) throw new Error('TF.js not available after load — 请检查网络连接');
-      return window.tf;
-    });
-    return tfPromise;
-  }
-
   function loadPoseDetection() {
     if (detectorPromise) return detectorPromise;
     detectorPromise = (async function () {
-      await loadTensorFlow();
-      var poseUrls = [TFJS_POSE_URL].concat(TFJS_POSE_MIRRORS);
-      await loadScriptWithFallback(poseUrls, 'pose-detection');
-      if (!window.poseDetection) throw new Error('PoseDetection 模型未就绪 — 请刷新重试');
-      var detector = await window.poseDetection.createDetector(
-        window.poseDetection.SupportedModels.MoveNet,
-        { modelType: window.poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
-      );
-      return detector;
+      console.log('[gait] loading MediaPipe Tasks Vision from', TASKS_VISION_URL.substring(0, 60));
+      var vision = await import(TASKS_VISION_URL);
+      var filesetResolver = await vision.FilesetResolver.forVisionTasks(TASKS_VISION_WASM);
+      console.log('[gait] WASM fileset ready, creating PoseLandmarker...');
+
+      // 尝试多个模型源 + GPU/CPU fallback
+      var landmarker = null;
+      var lastErr = null;
+      for (var mi = 0; mi < POSE_MODEL_URLS.length && !landmarker; mi++) {
+        for (var di = 0; di < 2 && !landmarker; di++) {
+          var delegate = di === 0 ? 'GPU' : 'CPU';
+          try {
+            console.log('[gait] trying model ' + (mi+1) + '/' + POSE_MODEL_URLS.length + ' delegate=' + delegate);
+            landmarker = await vision.PoseLandmarker.createFromOptions(filesetResolver, {
+              baseOptions: {
+                modelAssetPath: POSE_MODEL_URLS[mi],
+                delegate: delegate
+              },
+              runningMode: 'IMAGE',
+              numPoses: 1
+            });
+            console.log('[gait] PoseLandmarker ready (model ' + (mi+1) + ' ' + POSE_MODEL_URLS[mi].split('/').pop() + ', ' + delegate + ', 33 keypoints)');
+          } catch (e) {
+            lastErr = e;
+            console.warn('[gait] model ' + (mi+1) + ' delegate=' + delegate + ' failed:', e.message);
+          }
+        }
+      }
+      if (!landmarker) {
+        throw new Error('MediaPipe 模型加载失败 (所有源/delegate均失败): ' + (lastErr ? lastErr.message : 'unknown') + ' — 请检查网络或刷新重试');
+      }
+
+      return {
+        estimatePoses: async function (image, options) {
+          var w = image.width || image.naturalWidth || image.videoWidth || 1;
+          var h = image.height || image.naturalHeight || image.videoHeight || 1;
+          var result = landmarker.detect(image);
+          if (!result.landmarks || !result.landmarks.length) return [];
+          var kps = convertMPLandmarks(result.landmarks[0], w, h);
+          return [{ keypoints: kps }];
+        }
+      };
     })();
     return detectorPromise;
   }
@@ -222,6 +298,10 @@
       // 重新枚举设备 (label 在权限授予后会更新)
       await enumerateCameras();
       var constraints = buildCameraConstraints();
+      // === 防御: navigator.mediaDevices 在某些环境 (file:// / 老浏览器 / iframe 无权限) 下是 undefined ===
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+        throw new Error('当前环境不支持摄像头 (navigator.mediaDevices 不可用). 请使用「上传视频」方式, 或在 HTTPS / localhost 打开页面');
+      }
       state.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       // 拿到实际 track 的 settings, 反查 deviceId (供 UI 高亮)
       var track = state.mediaStream.getVideoTracks()[0];
@@ -478,7 +558,7 @@
         }
       }
       videoEl.addEventListener('seeked', onSeeked);
-      var timer = setTimeout(function () { finish(null); }, 800);
+      var timer = setTimeout(function () { finish(null); }, 2000);
       try {
         var target = Math.max(0, Math.min(timeSec, (videoEl.duration || 1) - 0.001));
         // 微调 ±0.001s 强制触发 seeked 事件 (currentTime 未变化时不触发)
@@ -492,33 +572,287 @@
     });
   }
 
-  // 从 phaseTimestamps 选出每脚首个完整周期, 逐个 seek 截帧
+  // 从 phaseTimestamps 选出每脚最合适的周期, 逐个 seek 截帧
   // 永远不抛错, 失败返回 [] 不阻塞主流程
-  async function capturePhaseSnapshots(videoEl, phaseList) {
-    try {
-      if (!phaseList || !phaseList.length || !videoEl) return [];
-      var firstBySide = { left: null, right: null };
-      for (var i = 0; i < phaseList.length; i++) {
-        var side = phaseList[i].side;
-        if (!firstBySide[side]) firstBySide[side] = phaseList[i].cycleIndex;
+  // 时间几何 picker: 用户洞察 — 来回走动时两脚时相必然间隔 ≥3s (转身+重新启动+入画)
+//   第一脚: 两只脚各自的 foreground cycles (closerSide === side) 中, 谁最早
+//   第二脚: 另一侧的 foreground cycle, 时间距第一脚 ≥3.0s
+// 优势: 不依赖方向检测, 只信 closerSide + 时间 — 因为转身是物理上必须发生的
+  var MIN_TIME_GAP = 3.0;  // 两脚 IC 最小时间间隔 (秒)
+  async function capturePhaseSnapshots(capturedFrames, phaseList, keypointFrames) {
+    // === 帧级 pose 验证器 ===
+    // 目的: build() 的 A0(IC) 检测可能在周期中段才锁定 (heelY 轨迹噪声),
+    //       MediaPipe 在 45% 帧上没识别到人, 但 HS detection 仍把 frameIndex 当 IC.
+    //       结果: 截图帧对应 MediaPipe 关键点为空 (背景/插值).
+    // 修复: 每张截图前, 用 keypointFrames 核对 — 该帧至少 8 个关键点 + 双踝可见 → 才允许截图.
+    //       不满足就在 ±15 帧窗口找最近的有效帧; 找不到就丢弃该时相, 不输出幻觉截图.
+    function frameHasValidPose(frameIdx) {
+      if (!keypointFrames || frameIdx == null || frameIdx < 0) return false;
+      var fr = keypointFrames[frameIdx];
+      if (!fr || !fr.keypoints || fr.keypoints.length < 5) return false;
+      var good = 0, hasLAnkle = false, hasRAnkle = false;
+      for (var ki = 0; ki < fr.keypoints.length; ki++) {
+        var kp = fr.keypoints[ki];
+        if (kp.score >= 0.3) {
+          good++;
+          if (kp.name === 'left_ankle')  hasLAnkle = true;
+          if (kp.name === 'right_ankle') hasRAnkle = true;
+        }
       }
+      return good >= 8 && hasLAnkle && hasRAnkle;
+    }
+    // 找最近的有效 pose 帧 (±15 窗口)
+    function findNearestValidFrame(centerFi) {
+      if (!keypointFrames) return centerFi;
+      for (var d = 0; d <= 15; d++) {
+        if (centerFi + d < keypointFrames.length && frameHasValidPose(centerFi + d)) return centerFi + d;
+        if (centerFi - d >= 0 && frameHasValidPose(centerFi - d)) return centerFi - d;
+      }
+      return -1;  // 找不到
+    }
+    try {
+      if (!phaseList || !phaseList.length || !capturedFrames || !capturedFrames.length) return [];
+
+      // === 周期质量评估: 按side+cycleIndex分组, 算时间跨度和帧数 ===
+      var cycleQuality = {};  // key: side_cycleIndex → {span, phaseCount, firstTime}
+      phaseList.forEach(function (p) {
+        var key = p.side + '_' + p.cycleIndex;
+        if (!cycleQuality[key]) cycleQuality[key] = { span: 0, phaseCount: 0, firstTime: p.time, lastTime: p.time, minFrame: p.frameIndex, maxFrame: p.frameIndex };
+        cycleQuality[key].phaseCount++;
+        cycleQuality[key].lastTime = p.time;
+        cycleQuality[key].span = p.time - cycleQuality[key].firstTime;
+        if (p.frameIndex < cycleQuality[key].minFrame) cycleQuality[key].minFrame = p.frameIndex;
+        if (p.frameIndex > cycleQuality[key].maxFrame) cycleQuality[key].maxFrame = p.frameIndex;
+      });
+      // 质量过滤: 放宽阈值, 只过滤极端垃圾周期
+      var MIN_CYCLE_SPAN = 0.4;
+      var MIN_CYCLE_FRAMES = 8;
+      function isGoodCycle(side, cycleIndex) {
+        var q = cycleQuality[side + '_' + cycleIndex];
+        if (!q) return false;
+        if (q.span < MIN_CYCLE_SPAN) return false;
+        if (q.phaseCount < 8) return false;
+        var frameSpan = q.maxFrame - q.minFrame;
+        if (frameSpan < MIN_CYCLE_FRAMES) return false;
+        return true;
+      }
+
+      // 收集所有候选 IC (用绝对阈值)
+      var candidatesBySide = { left: [], right: [] };
+      phaseList.forEach(function (p) {
+        if (p.phase !== 'IC') return;
+        if (p.dir === 'stationary') return;
+        // === 跳过 cross-derive 出来的虚拟周期: 截图物理上必错 (虚拟 IC = 真实另一脚 MSt) ===
+        if (p.derived === true) {
+          console.log('[gait] skip derived (cross-derive virtual) cycle: ' + p.side + ' cy' + p.cycleIndex + ' (虚拟 HS 截图会显示另一只脚)');
+          return;
+        }
+        if (!isGoodCycle(p.side, p.cycleIndex)) {
+          console.log('[gait] skip bad cycle: ' + p.side + ' cy' + p.cycleIndex + ' (span/frames too small)');
+          return;
+        }
+        candidatesBySide[p.side].push({
+          cycleIndex: p.cycleIndex, time: p.time, dir: p.dir, closerSide: p.closerSide,
+          span: cycleQuality[p.side + '_' + p.cycleIndex].span
+        });
+      });
+
+      // === 相对时长过滤: 砍掉 truncated cycle (开头/结尾被截断的废周期) ===
+      // 单一绝对阈值 (0.4s) 拦不住 0.55s 这种「HS 早触发/晚触发」造成的截断周期 —
+      //   它的 span > 0.4s 但远短于正常 1.0-1.2s 步态周期, 8 个时相被挤在短窗里,
+      //   phase 时间对应画面是另一只脚 (用户反馈: "右脚用了左脚其他来回的截图")
+      // 修复: 用该侧中位 span × 0.7 当门槛 (正常成人 1.0-1.5s 步态, 截断周期 < 0.8s 必被砍)
+      ['left', 'right'].forEach(function (sd) {
+        if (candidatesBySide[sd].length < 2) return;  // 候选 < 2 算不出中位, 跳过
+        var spans = candidatesBySide[sd].map(function (c) { return c.span; }).sort(function (a, b) { return a - b; });
+        var medianSpan = spans[Math.floor(spans.length / 2)];
+        var minAcceptableSpan = Math.max(0.7, medianSpan * 0.7);
+        console.log('[gait] ' + sd + ' candidate spans: ' + spans.map(function (s) { return s.toFixed(2); }).join(',') + ' | median=' + medianSpan.toFixed(2) + 's, minAcceptable=' + minAcceptableSpan.toFixed(2) + 's');
+        candidatesBySide[sd] = candidatesBySide[sd].filter(function (c) {
+          if (c.span < minAcceptableSpan) {
+            console.log('[gait] reject truncated ' + sd + ' cy' + c.cycleIndex + ' t=' + c.time.toFixed(2) + 's (span=' + c.span.toFixed(2) + 's < ' + minAcceptableSpan.toFixed(2) + 's)');
+            return false;
+          }
+          return true;
+        });
+      });
+
+      // 派生 fg / all (用过滤后的 candidates)
+      var fgBySide = { left: [], right: [] };
+      var allBySide = { left: [], right: [] };
+      ['left', 'right'].forEach(function (sd) {
+        candidatesBySide[sd].forEach(function (c) {
+          allBySide[sd].push(c);
+          if (c.closerSide === sd) fgBySide[sd].push(c);
+        });
+      });
+      // 打印所有候选周期的详细信息
+      ['left', 'right'].forEach(function (sd) {
+        allBySide[sd].forEach(function (c) {
+          console.log('[gait] candidate ' + sd + ' cy' + c.cycleIndex + ' t=' + c.time.toFixed(2) + 's dir=' + c.dir + ' closer=' + c.closerSide + (c.closerSide === sd ? ' [FG]' : ' [BG]') + ' span=' + c.span.toFixed(2) + 's');
+        });
+      });
+      console.log('[gait] fg cycles: left=' + fgBySide.left.length + ' right=' + fgBySide.right.length +
+                  ' | all cycles: left=' + allBySide.left.length + ' right=' + allBySide.right.length);
+      // 优先用 closerSide 过滤的; 若一边为空则回落到 allBySide
+      var useFg = { left: fgBySide.left.length > 0, right: fgBySide.right.length > 0 };
+      var pickFrom = {
+        left:  useFg.left  ? fgBySide.left  : allBySide.left,
+        right: useFg.right ? fgBySide.right : allBySide.right
+      };
+      pickFrom.left.sort(function (a, b) { return a.time - b.time; });
+      pickFrom.right.sort(function (a, b) { return a.time - b.time; });
+
+      // === 方向配对 picker (修复: 不再 time-spread 选 firstSide+otherSide, 而是按方向分别选 representative) ===
+      // 根因: 旧的 time-spread 选 "firstSide 最早的 IC + otherSide 时间间隔 ≥3s", 但这没保证 secondSide 的 cycle 在它的前景段 (closerSide === side).
+      // 后果: 选了「right cycle 在 l2r 段」→ 截图里 left 是前景 → "右脚用了左脚画面"
+      // 修复: 按 closerSide 把 candidates 分成前景/背景, 两脚各选自己的前景 cycle; 一边缺前景时退化到 all.
+      // 然后为防止两脚选了同一 round-trip (太近), 用 MIN_TIME_GAP 配对检查 (≥3s 表示不同来回)
+
+      // === Step 1: 为每只脚选自己的 representative cycle (该脚作为前景, 即 closerSide === side) ===
+      // Fallback 顺序: 该脚前景 cycle → 该脚全部 cycle 中「前景段 + 优先 earliest」→ 任何 cycle
+      function pickRep(side) {
+        var pool = pickFrom[side];
+        if (!pool.length) return null;
+        // 优先: 该脚是前景的 cycle
+        var fgCycles = pool.filter(function (c) { return c.closerSide === side; });
+        if (fgCycles.length) return fgCycles[0];  // 最早的前景 cycle
+        // 其次: 全部 cycle (用 all 兜底)
+        return pool[0];
+      }
+      var leftRep = pickRep('left');
+      var rightRep = pickRep('right');
+
+      // === Step 2: 配对检查 — 两脚 representative cycle 的时间差 ≥ MIN_TIME_GAP 才算数 ===
+      // 解释: 两只脚在同一来回内各自选 1 个 representative cycle, 但如果两个 representative 都在同一 round-trip,
+      // 时间差 < 3s, 表示同一次来回, 截图视角相似, 不能完整覆盖左右差异 → 放弃这次配对
+      var bestCycle = { left: null, right: null };
+      if (leftRep) bestCycle.left = leftRep.cycleIndex;
+      if (rightRep) bestCycle.right = rightRep.cycleIndex;
+
+      // === Step 3: 配对不满足 → 退化: 用 time-spread 找一个 ≥ MIN_TIME_GAP 间隔的另一侧 cycle ===
+      if (leftRep && rightRep) {
+        var gap = Math.abs(leftRep.time - rightRep.time);
+        if (gap < MIN_TIME_GAP) {
+          console.log('[gait] direction-paired picker: gap=' + gap.toFixed(2) + 's < MIN_TIME_GAP, retrying with time-spread on other side');
+          // 把较晚的一侧保留, 较早的一侧向后找一个 ≥ MIN_TIME_GAP 的 cycle
+          var earlierSide = leftRep.time <= rightRep.time ? 'left' : 'right';
+          var laterSide = earlierSide === 'left' ? 'right' : 'left';
+          var laterRep = earlierSide === 'left' ? rightRep : leftRep;
+          var foundAlternative = null;
+          for (var j = 0; j < pickFrom[earlierSide].length; j++) {
+            var c = pickFrom[earlierSide][j];
+            if (Math.abs(c.time - laterRep.time) >= MIN_TIME_GAP) {
+              foundAlternative = c;
+              break;
+            }
+          }
+          if (foundAlternative) {
+            bestCycle[earlierSide] = foundAlternative.cycleIndex;
+            console.log('[gait] time-spread fallback: ' + earlierSide + ' cycle ' + foundAlternative.cycleIndex +
+                        ' at t=' + foundAlternative.time.toFixed(2) + 's (gap=' + Math.abs(foundAlternative.time - laterRep.time).toFixed(2) +
+                        's from ' + laterSide + ' cy' + laterRep.cycleIndex + ' dir=' + foundAlternative.dir + ' closer=' + foundAlternative.closerSide + ')');
+          }
+        }
+      }
+
+      // 报警
+      var missingDir = [];
+      if (!bestCycle.left)  missingDir.push('左脚 cycle 不存在 (视频太短 / 单方向走动 / HS 检测失败)');
+      if (!bestCycle.right) missingDir.push('右脚 cycle 不存在 (视频太短 / 单方向走动 / HS 检测失败)');
+      if (missingDir.length) {
+        var w = window.__gaitAnalysis && window.__gaitAnalysis.getState && window.__gaitAnalysis.getState();
+        if (w && w.onPhaseError) w.onPhaseError(missingDir.join('; '));
+        console.warn('[gait] ' + missingDir.join('; '));
+      }
+      console.log('[gait] selected cycles (direction-paired picker): left=cy' + bestCycle.left +
+                  ' (t=' + (leftRep ? leftRep.time.toFixed(2) : '?') + ', dir=' + (leftRep ? leftRep.dir : '?') + ', closer=' + (leftRep ? leftRep.closerSide : '?') + ')' +
+                  ' right=cy' + bestCycle.right +
+                  ' (t=' + (rightRep ? rightRep.time.toFixed(2) : '?') + ', dir=' + (rightRep ? rightRep.dir : '?') + ', closer=' + (rightRep ? rightRep.closerSide : '?') + ')');
+
       var targets = phaseList.filter(function (p) {
-        return p.cycleIndex === firstBySide[p.side];
+        return p.cycleIndex === bestCycle[p.side];
       });
       var snapshots = [];
-      for (var i = 0; i < targets.length; i++) {
-        var p = targets[i];
-        var snap = await captureSnapshot(videoEl, p.time);
-        if (snap) {
+      // 同一脚同周期的截图必须取不同帧: 记录已用帧索引, 避免重复
+      var usedFrameIdx = {};
+      for (var ti = 0; ti < targets.length; ti++) {
+        var tp = targets[ti];
+        var key = tp.side + '_' + tp.cycleIndex;
+        var bestFrame = null, bestIdx = -1;
+
+        // 优先: phaseList 带了 frameIndex (按姿态直接选的帧), 直接用
+        if (tp.frameIndex != null && capturedFrames[tp.frameIndex]) {
+          bestIdx = tp.frameIndex;
+          // === 关键验证: 该帧 MediaPipe 是否真识别到人? ===
+          // 不验证的话, build() 推错的 IC 帧 (heelY 模式匹配兜底到中段) 会让截图是空 pose 帧
+          if (!frameHasValidPose(bestIdx)) {
+            var nearFi = findNearestValidFrame(bestIdx);
+            if (nearFi >= 0 && !usedFrameIdx[key + '_' + nearFi]) {
+              console.log('[gait] snap ' + tp.side + ' ' + tp.label +
+                ' 原始 frameIdx=' + bestIdx + ' 无有效 pose → 用邻近 frameIdx=' + nearFi + ' (pose validation)');
+              bestIdx = nearFi;
+            } else if (nearFi >= 0 && usedFrameIdx[key + '_' + nearFi]) {
+              // 已占用 → 找下一个未占用
+              for (var delta = 1; delta < 15; delta++) {
+                var tryPos = nearFi + delta;
+                if (tryPos < capturedFrames.length && !usedFrameIdx[key + '_' + tryPos] && frameHasValidPose(tryPos)) {
+                  bestIdx = tryPos;
+                  console.log('[gait] snap ' + tp.side + ' ' + tp.label + ' → 用 frameIdx=' + bestIdx + ' (已占用 fallback)');
+                  break;
+                }
+                tryPos = nearFi - delta;
+                if (tryPos >= 0 && !usedFrameIdx[key + '_' + tryPos] && frameHasValidPose(tryPos)) {
+                  bestIdx = tryPos;
+                  console.log('[gait] snap ' + tp.side + ' ' + tp.label + ' → 用 frameIdx=' + bestIdx + ' (已占用 fallback)');
+                  break;
+                }
+              }
+            } else {
+              // ±15 帧都没找到有效 pose → 丢弃该时相截图, 不输出幻觉
+              console.warn('[gait] snap ' + tp.side + ' ' + tp.label +
+                ' 原始 frameIdx=' + bestIdx + ' 且 ±15 帧都无有效 pose, 丢弃该时相 (避免幻觉截图)');
+              continue;
+            }
+          }
+          // 帧已被占用 → 找相邻未占用帧
+          if (usedFrameIdx[key + '_' + bestIdx]) {
+            for (var delta = 1; delta < 10; delta++) {
+              if (capturedFrames[bestIdx + delta] && !usedFrameIdx[key + '_' + (bestIdx + delta)]) {
+                bestIdx = bestIdx + delta; break;
+              }
+              if (capturedFrames[bestIdx - delta] && !usedFrameIdx[key + '_' + (bestIdx - delta)]) {
+                bestIdx = bestIdx - delta; break;
+              }
+            }
+          }
+          bestFrame = capturedFrames[bestIdx];
+        } else {
+          // 兜底: 没有 frameIndex, 用时间找最近且未被占用的帧
+          var candidates = [];
+          for (var fi = 0; fi < capturedFrames.length; fi++) {
+            candidates.push({ idx: fi, dist: Math.abs(capturedFrames[fi].t - tp.time) });
+          }
+          candidates.sort(function (a, b) { return a.dist - b.dist; });
+          for (var ci = 0; ci < candidates.length; ci++) {
+            if (usedFrameIdx[key + '_' + candidates[ci].idx]) continue;
+            // 同样验证 pose
+            if (!frameHasValidPose(candidates[ci].idx)) continue;
+            bestIdx = candidates[ci].idx; break;
+          }
+          if (bestIdx >= 0) bestFrame = capturedFrames[bestIdx];
+        }
+
+        if (bestFrame) {
+          usedFrameIdx[key + '_' + bestIdx] = true;
+          console.log('[gait] snap ' + tp.side + ' ' + tp.label +
+            ' phaseT=' + tp.time.toFixed(2) + 's frameIdx=' + bestIdx + ' frameT=' + bestFrame.t.toFixed(2) + 's');
           snapshots.push({
-            cycleIndex: p.cycleIndex,
-            side: p.side,
-            phase: p.phase,
-            label: p.label,
-            time: p.time,
-            stance: p.stance,
-            imageData: snap.dataUrl,
-            w: snap.w, h: snap.h
+            side: tp.side, cycleIndex: tp.cycleIndex,
+            phase: tp.phase, label: tp.label,
+            time: tp.time, stance: tp.stance,
+            imageData: bestFrame.imageData,
+            w: bestFrame.w, h: bestFrame.h
           });
         }
       }
@@ -543,102 +877,79 @@
 
   function extractFrames(videoEl, fps) {
     return new Promise(function (resolve, reject) {
-      fps = fps || 30;
+      fps = fps || 15;
       var duration = videoEl.duration;
       if (!isFinite(duration) || duration <= 0) return reject(new Error('Invalid video duration'));
       var frameCount = Math.min(Math.floor(duration * fps), 600);
       if (frameCount <= 0) return reject(new Error('Invalid frameCount: ' + frameCount));
+      console.log('[gait] extractFrames: duration=' + duration.toFixed(1) + 's fps=' + fps + ' total=' + frameCount + ' frames');
       var actualFps = frameCount / duration;
       var frames = [];
       var canvas = document.createElement('canvas');
-      canvas.width = videoEl.videoWidth || 640;
-      canvas.height = videoEl.videoHeight || 480;
       var ctx = canvas.getContext('2d');
       var idx = 0;
       var finished = false;
-      var globalTimeout = null;
+      var seekTimer = null;
 
-      function captureCurrentFrame() {
+      function scheduleSeek() {
         if (finished) return;
-        if (idx >= frameCount) {
-          finished = true;
-          if (globalTimeout) clearTimeout(globalTimeout);
-          videoEl.pause();
-          videoEl.removeEventListener('seeked', onSeeked);
-          resolve(frames);
-          return;
+        if (idx >= frameCount) { finishAndResolve(); return; }
+        var target = idx / actualFps;
+        // nudge 确保 seeked 事件触发
+        if (Math.abs((videoEl.currentTime || 0) - target) < 0.003) {
+          target = target > 0.001 ? target - 0.003 : target + 0.003;
         }
+        try { videoEl.currentTime = target; } catch (e) {}
+        // 防断链: 如果 3000ms 内 seeked 不触发, 跳过当前帧继续下一个
+        seekTimer = setTimeout(function () {
+          if (finished) return;
+          console.warn('[gait] seek timeout at idx=' + idx + ' t=' + target.toFixed(2));
+          idx++;
+          scheduleSeek();
+        }, 3000);
+      }
+
+      function onSeeked() {
+        if (finished) return;
+        clearTimeout(seekTimer);
         try {
           if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
             canvas.width = videoEl.videoWidth;
             canvas.height = videoEl.videoHeight;
             ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-            var dataUrl = canvas.toDataURL('image/jpeg', 0.5);
-            frames.push({ t: idx / actualFps, imageData: dataUrl, w: canvas.width, h: canvas.height });
+            frames.push({ t: idx / actualFps, imageData: canvas.toDataURL('image/jpeg', 0.5), w: canvas.width, h: canvas.height });
           }
-        } catch (e) {
-          console.warn('[gait] frame capture error at', idx, e.message);
-        }
+        } catch (e) { /* skip bad frame */ }
         idx++;
         updateProcessingProgress(0.05 + (idx / frameCount) * 0.2);
-        if (idx >= frameCount) {
-          finished = true;
-          if (globalTimeout) clearTimeout(globalTimeout);
-          videoEl.pause();
-          videoEl.removeEventListener('seeked', onSeeked);
-          resolve(frames);
-          return;
-        }
-        setTimeout(function () {
-          if (finished) return;
-          try {
-            // 微调 ±0.005s 强制触发 seeked 事件 (currentTime 未变化时不触发)
-            var target = idx / actualFps;
-            if (Math.abs((videoEl.currentTime || 0) - target) < 0.005) {
-              target = target > 0 ? target - 0.005 : target + 0.005;
-            }
-            videoEl.currentTime = target;
-          } catch (e) { console.warn('[gait] seek error', e.message); }
-        }, 10);
+        scheduleSeek();
       }
 
-      function onSeeked() {
-        if (finished) return;
-        captureCurrentFrame();
-      }
-
-      videoEl.addEventListener('seeked', onSeeked);
-      videoEl.addEventListener('error', function (e) {
+      function finishAndResolve() {
         if (finished) return;
         finished = true;
-        if (globalTimeout) clearTimeout(globalTimeout);
-        reject(new Error('Video error during frame extraction'));
-      });
-
-      // 全局超时: 90s (移动端 seek 可能每帧 200-500ms, 留足余量)
-      globalTimeout = setTimeout(function () {
-        if (finished) return;
+        clearTimeout(seekTimer);
         videoEl.removeEventListener('seeked', onSeeked);
-        // 优雅降级: 如果已捕获足够帧 (>一半), 用已有帧继续处理, 不报错
-        if (frames.length >= Math.max(10, frameCount * 0.4)) {
-          console.warn('[gait] frame extraction partial: ' + frames.length + '/' + frameCount + ' (timeout, using partial)');
-          finished = true;
-          videoEl.pause();
-          resolve(frames);
-        } else {
-          finished = true;
-          reject(new Error('帧提取超时且帧数不足 (' + frames.length + '/' + frameCount + '), 请尝试用较短视频或降低分辨率'));
-        }
-      }, 90000);
+        videoEl.removeEventListener('error', onError);
+        try { videoEl.pause(); } catch (e) {}
+        console.log('[gait] extractFrames done: ' + frames.length + '/' + frameCount + ' frames');
+        resolve(frames);
+      }
 
-      // 启动 seek 循环 (currentTime=0 nudge 强制触发首次 seeked)
-      setTimeout(function () {
+      function onError() { if (!finished) { finished = true; reject(new Error('Video error')); } }
+
+      videoEl.addEventListener('seeked', onSeeked);
+      videoEl.addEventListener('error', onError);
+
+      // 全局超时: 120s
+      var globalTimeout = setTimeout(function () {
         if (finished) return;
-        try {
-          var target = idx / actualFps + 0.005;  // nudge +5ms 强制 seeked 触发
-          videoEl.currentTime = target;
-        } catch (e) { reject(new Error('Seek init failed: ' + e.message)); }
-      }, 50);
+        console.warn('[gait] extractFrames global timeout, captured ' + frames.length);
+        if (frames.length >= 10) finishAndResolve();
+        else { finished = true; reject(new Error('帧提取超时')); }
+      }, 120000);
+
+      scheduleSeek();
     });
   }
 
@@ -724,25 +1035,79 @@
         throw new Error('视频首帧未解码 (videoWidth=' + (v.videoWidth || 0) + '), 请重新上传或换视频');
       }
 
-      // 2. 提取帧 — 15fps (足够步态分析, 手机 seek 性能下 30fps 会超时)
+      // 2. 提取帧 — 20fps (来回走动视频需要 ≥10fps/方向 才能可靠检测两侧, 15fps 在手机上经常掉到 10-12)
       $('#gait-progress-title').textContent = '提取视频帧...';
-      var frames = await extractFrames(v, 15);
+      var frames = await extractFrames(v, 20);
+      console.log('[gait] extracted: ' + frames.length + ' frames, t=' +
+        (frames[0] ? frames[0].t.toFixed(1) : '?') + 's-' +
+        (frames[frames.length - 1] ? frames[frames.length - 1].t.toFixed(1) : '?') + 's');
       updateProcessingProgress(0.25);
 
       if (frames.length < 5) throw new Error('视频帧数过少 (需要至少 5 帧, 实际 ' + frames.length + ')');
 
+// 检测有效帧率: 实际捕获 < 70% 目标 → 手机 seek 性能差, 提示用户但继续处理
+var expectedFrames = Math.floor(v.duration * 20);  // 当前 extractFrames 的目标 fps
+var effectiveFps = frames.length / v.duration;
+if (frames.length < expectedFrames * 0.7) {
+  console.warn('[gait] 帧捕获率 ' + (frames.length / expectedFrames * 100).toFixed(0) +
+               '% (' + frames.length + '/' + expectedFrames + ') — 有效 fps≈' + effectiveFps.toFixed(1) +
+               '. 来回走动视频可能丢失一侧.');
+}
+
       // 3. 加载 AI 模型 + 姿势检测
       $('#gait-progress-title').textContent = '加载 AI 姿势识别模型...';
-      $('#gait-progress-text').textContent = '首次使用需下载 ~8MB 模型, 国内用户可能需要 15-30 秒';
+      $('#gait-progress-text').textContent = '首次使用需下载 ~6MB MediaPipe 模型, 请稍候';
       updateProcessingProgress(0.28);
       var keypointFrames = await detectPoses(frames);
       updateProcessingProgress(0.90);
 
-      // 3b. 左右标签校正 — 根据摄像头侧+行走方向判断是否需要交换 MoveNet 标签
+      // 诊断: 统计关键点覆盖率 (MediaPipe 是否检测到人体)
+      // 严格质量门槛: 半数帧有有效全身姿势 + 双脚踝被同时检测到
+      // 之前 kpRate < 0.1 太宽松, 45% 覆盖率仍能通过, 导致无人物帧被 "HS detection 飞"
+      var framesWithFullBody = 0, framesWithBothAnkles = 0;
+      var framesWithAnyKP = 0, framesWithLAnkle = 0, framesWithRAnkle = 0, totalKP = 0;
+      for (var fi = 0; fi < keypointFrames.length; fi++) {
+        var kps = keypointFrames[fi].keypoints || [];
+        if (kps.length > 0) framesWithAnyKP++;
+        totalKP += kps.length;
+        // 全身姿势: ≥10 个关键点 (MediaPipe Pose 33 点中至少 10 个 score ≥ 0.3)
+        var goodKPs = 0;
+        var hasLAnkle = false, hasRAnkle = false;
+        for (var ki = 0; ki < kps.length; ki++) {
+          if (kps[ki].score >= 0.3) {
+            goodKPs++;
+            if (kps[ki].name === 'left_ankle')  hasLAnkle = true;
+            if (kps[ki].name === 'right_ankle') hasRAnkle = true;
+          }
+        }
+        if (goodKPs >= 10) framesWithFullBody++;
+        if (hasLAnkle) framesWithLAnkle++;
+        if (hasRAnkle) framesWithRAnkle++;
+        if (hasLAnkle && hasRAnkle) framesWithBothAnkles++;
+      }
+      console.log('[gait] keypoint coverage: anyKP=' + framesWithAnyKP + '/' + keypointFrames.length +
+        ' fullBody=' + framesWithFullBody + ' bothAnkles=' + framesWithBothAnkles +
+        ' L=' + framesWithLAnkle + ' R=' + framesWithRAnkle + ' totalKP=' + totalKP);
+      var fullBodyRate = framesWithFullBody / Math.max(1, keypointFrames.length);
+      var bothAnkleRate = framesWithBothAnkles / Math.max(1, keypointFrames.length);
+      if (fullBodyRate < 0.30) {
+        throw new Error('视频中未检测到稳定人体姿势 (全身姿势覆盖率仅 ' + Math.round(fullBodyRate * 100) +
+          '%). 可能原因: ① 人物未全身入镜 (脚部被裁剪) ② 光线太暗/逆光 ③ 镜头离人太远 ④ 摄像头权限被拒. 请重新拍摄.');
+      }
+      if (bothAnkleRate < 0.20) {
+        throw new Error('未同时检测到双脚踝位置 (双脚可见率 ' + Math.round(bothAnkleRate * 100) +
+          '%). 请确保患者脚部全程在画面下半部分, 不要被裤子/鞋袜遮挡.');
+      }
+
+      // 3b. 左右标签校正 — MediaPipe PoseLandmarker left_/right_ 是解剖学标签
+      // 但手机视频侧方45°拍摄时方向可能判错 → 用几何约束 (Y位置+置信度) 验证
       var walkDir = window.__gaitParams.detectWalkingDirection(keypointFrames);
       var sideResolution = window.__gaitParams.resolveAnatomicalSides(keypointFrames, state.cameraSide, walkDir);
       if (sideResolution.swapNeeded) {
+        console.log('[gait] side swap APPLIED: ' + sideResolution.reason);
         keypointFrames = window.__gaitParams.swapKeypointLabels(keypointFrames);
+      } else {
+        console.log('[gait] side labels OK: ' + sideResolution.reason);
       }
       updateProcessingProgress(0.92);
 
@@ -753,30 +1118,46 @@
 
       // 4b. 步态周期时相 (8 时相 Rancho Los Amigos) — 依赖参数计算后的 heelStrikes
       updateProcessingProgress(0.94);
-      var leftHS  = (params.heelStrikes && params.heelStrikes.left)  || [];
-      var rightHS = (params.heelStrikes && params.heelStrikes.right) || [];
-      var leftTO  = window.__gaitParams.detectToeOffs(keypointFrames, 'left',  leftHS);
-      var rightTO = window.__gaitParams.detectToeOffs(keypointFrames, 'right', rightHS);
-      var gaitPhases = window.__gaitParams.computeGaitCyclePhases(keypointFrames, leftHS, leftTO, rightHS, rightTO);
-
-      // 4c. 时相截图 — 从 HS/TO 推算 8 时相时间戳, 截取视频帧供报告可视化验证
-      $('#gait-progress-title').textContent = '提取时相截图...';
-      var phaseTimestamps = window.__gaitParams.computePhaseTimestamps(leftHS, leftTO, rightHS, rightTO);
-      var phaseSnapshots = [];
-      try {
-        phaseSnapshots = await capturePhaseSnapshots(v, phaseTimestamps);
-      } catch (e) {
-        console.warn('[gait] phase snapshots failed (non-fatal):', e.message);
+      var gaitPhases, phaseTimestamps, phaseSnapshots;
+      if (params.degraded) {
+        gaitPhases = [];
+        phaseTimestamps = [];
         phaseSnapshots = [];
+      } else {
+        var leftHS  = (params.heelStrikes && params.heelStrikes.left)  || [];
+        var rightHS = (params.heelStrikes && params.heelStrikes.right) || [];
+        var leftTO  = window.__gaitParams.detectToeOffs(keypointFrames, 'left',  leftHS);
+        var rightTO = window.__gaitParams.detectToeOffs(keypointFrames, 'right', rightHS);
+        gaitPhases = window.__gaitParams.computeGaitCyclePhases(keypointFrames, leftHS, leftTO, rightHS, rightTO);
+
+        // 4c. 时相截图
+        $('#gait-progress-title').textContent = '提取时相截图...';
+        phaseTimestamps = window.__gaitParams.computePhaseTimestamps(keypointFrames, leftHS, leftTO, rightHS, rightTO);
+        phaseSnapshots = [];
+        try {
+          phaseSnapshots = await capturePhaseSnapshots(frames, phaseTimestamps, keypointFrames);
+          console.log('[gait] phase snapshots: ' + phaseSnapshots.length + ' captured from ' + phaseTimestamps.length + ' timestamps');
+        } catch (e) {
+          console.warn('[gait] phase snapshots failed (non-fatal):', e.message);
+          phaseSnapshots = [];
+        }
       }
       updateProcessingProgress(0.96);
 
-      var classification = window.__gaitParams.classifyGait(params);
-      var neuro = window.__gaitParams.getNeuroLocalization(classification.primary);
-      var rehab = window.__gaitParams.getRehabSuggestions(classification.primary);
+      var classification, neuro, rehab;
+      if (params.degraded) {
+        classification = { primary: 'limited', confidence: 0, scores: { limited: 1 }, note: '步态周期检测不足 — 仅输出运动学参数' };
+        neuro = { note: '步态周期不足, 无法进行神经定位' };
+        rehab = { note: '步态周期不足, 仅提供基础运动学参考' };
+      } else {
+        classification = window.__gaitParams.classifyGait(params);
+        neuro = window.__gaitParams.getNeuroLocalization(classification.primary);
+        rehab = window.__gaitParams.getRehabSuggestions(classification.primary);
+      }
 
       state.results = {
         timestamp: Date.now(),
+        degraded: !!params.degraded,
         duration: state.videoDuration,
         frameCount: keypointFrames.length,
         fps: keypointFrames.length / state.videoDuration,
@@ -794,10 +1175,10 @@
           params.armSwing, params.elbowSwing, params.kneeLeft, params.kneeRight, params
         ),
         events: {
-          leftHeelStrikes: leftHS,
-          rightHeelStrikes: rightHS,
-          leftToeOffs: leftTO,
-          rightToeOffs: rightTO
+          leftHeelStrikes: params.heelStrikes ? params.heelStrikes.left || [] : [],
+          rightHeelStrikes: params.heelStrikes ? params.heelStrikes.right || [] : [],
+          leftToeOffs: params.degraded ? [] : leftTO,
+          rightToeOffs: params.degraded ? [] : rightTO
         },
         gaitPhases: gaitPhases,
         phaseSnapshots: phaseSnapshots,
@@ -806,7 +1187,11 @@
         rehab: rehab
       };
 
-      // 5. 持久化
+      // 5. 累积到多段视频结果 + 合并 + 持久化
+      state.videoSegments.push(state.results);
+      mergeSegments();
+      // 如果是补录段, 完成后清掉 hint
+      state.nextSegmentHint = null;
       saveAssessment(state.results);
 
       updateProcessingProgress(1.0);
@@ -831,15 +1216,88 @@
           '4. 行走步数不足 — 至少走3步以上<br>' +
           '5. 人物太小 — 离摄像头再近一些 (2-4米)';
       } else if (msg.indexOf('首帧未解码') !== -1) {
-        state.errorMessage = '无法解码视频。<br><br>手机录制的 HEVC/MOV 视频在桌面 Chrome 可能不兼容。<br>' +
-          '<b>解决方案</b>: 在手机上直接打开此页面分析, 或转码为 H.264/MP4 后再上传。';
+        state.errorMessage = '<b>视频无法解码 — 编码为 HEVC/H.265</b><br><br>' +
+          '该 MP4 文件视频流是 <b>H.265/HEVC</b> 编码, 桌面 Chrome/Edge 均不支持此类解码。<br><br>' +
+          '<b>✅ 推荐做法</b>: 用 <b>手机浏览器直接打开此页面</b>, 点击"录制"拍摄行走视频并分析 — 手机浏览器天然支持 HEVC。<br><br>' +
+          '<b>或重新录制兼容视频</b>:<br>' +
+          '• iPhone: 设置→相机→格式→选"<b>兼容性最佳</b>" (输出 H.264/MP4)<br>' +
+          '• Android: 相机设置→视频编码→选 <b>H.264</b> 而非 H.265';
       } else if (msg.indexOf('帧数过少') !== -1) {
         state.errorMessage = '视频帧数不足, 请确保视频 > 2 秒且人物在画面中行走。';
+      } else if (msg.indexOf('未检测到人体') !== -1) {
+        state.errorMessage = '<b>视频中未检测到人体姿势</b><br><br>' +
+          'AI 模型在视频帧中找不到人体关键点。<br>' +
+          '<b>请检查</b>:<br>' +
+          '1. 人物是否从头到脚<b>完整入镜</b><br>' +
+          '2. 光线是否<b>充足</b> (太暗会检测不到)<br>' +
+          '3. 拍摄角度 — 应站在<b>斜前方约45°</b>位置<br>' +
+          '4. 人物是否离摄像头过远 (建议 <b>2-4 米</b>)';
+      } else if (msg.indexOf('未检测到脚踝') !== -1) {
+        state.errorMessage = '<b>未检测到脚踝位置</b><br><br>' +
+          '姿势模型检测到了人体但脚踝关键点缺失。<br>' +
+          '<b>请检查</b>:<br>' +
+          '1. 双脚是否<b>全程可见</b> (不被遮挡/出镜)<br>' +
+          '2. 避免穿<b>深色裤子或深色鞋子</b> (与地板对比度低)<br>' +
+          '3. 确保脚部有明显光照';
       } else {
         state.errorMessage = '分析失败: ' + msg + '<br><br>请确认视频中有人行走, 且拍摄角度为斜前方约45°。如持续失败, 请尝试重录。';
       }
+      // 失败时清掉补录提示, 避免下一段还以为是补录模式
+      state.nextSegmentHint = null;
       setPhase(PHASE.CAPTURE);
     }
+  }
+
+  // ============================================================
+  // 多段视频合并 — 把多段独立视频的结果拼成一个完整 reports
+  // phaseSnapshots 按 side 合并: 各段只填它检测到的脚, 缺的由其他段补
+  // 其他参数 (步速/步频/对称性) 取最新段的值
+  // ============================================================
+  function mergeSegments() {
+    if (!state.videoSegments || state.videoSegments.length === 0) return;
+    if (state.videoSegments.length === 1) {
+      state.results = state.videoSegments[0];
+      return;
+    }
+    var latest = state.videoSegments[state.videoSegments.length - 1];
+    // 浅拷贝最新段作为基底 (参数/分类/神经定位都用最新)
+    var merged = {};
+    for (var k in latest) {
+      if (k === 'phaseSnapshots' || k === 'segments') continue;
+      merged[k] = latest[k];
+    }
+    // 合并所有段的 phaseSnapshots — 按 side+phase 去重, 后录的覆盖先录的 (倒序遍历, 先记后段)
+    var seenKeys = {};
+    var allSnaps = [];
+    for (var i = state.videoSegments.length - 1; i >= 0; i--) {
+      var segSnaps = (state.videoSegments[i] && state.videoSegments[i].phaseSnapshots) || [];
+      segSnaps.forEach(function (s) {
+        var key = s.side + '_' + s.phase;
+        if (seenKeys[key]) return;
+        seenKeys[key] = true;
+        allSnaps.push(s);
+      });
+    }
+    // 反转回正序, 按 IC→TSw 显示更自然
+    allSnaps.reverse();
+    merged.phaseSnapshots = allSnaps;
+    merged.segments = state.videoSegments.length;
+    state.results = merged;
+    console.log('[gait] merged ' + state.videoSegments.length + ' segments: ' + allSnaps.length + ' phase snapshots total');
+  }
+
+  // 找出 phaseSnapshots 中缺失的那一侧 ('left' / 'right' / null)
+  function getMissingPhaseSide() {
+    var snaps = state.results && state.results.phaseSnapshots;
+    if (!snaps || snaps.length === 0) return null; // 完全空, 不算缺
+    var hasLeft = false, hasRight = false;
+    snaps.forEach(function (s) {
+      if (s.side === 'left') hasLeft = true;
+      if (s.side === 'right') hasRight = true;
+    });
+    if (!hasLeft) return 'left';
+    if (!hasRight) return 'right';
+    return null;
   }
 
   // ============================================================
@@ -963,8 +1421,20 @@
   function renderCalibration() {
     var errHtml = renderError();
     clearError();
+    // 补录模式提示: 如果有方向 hint, 在顶部给出明确指示
+    var hintBanner = '';
+    if (state.nextSegmentHint) {
+      var hint = state.nextSegmentHint;
+      var hSideLabel = hint === 'left' ? '左脚' : '右脚';
+      var hDirLabel = hint === 'left' ? '从右向左' : '从左向右';
+      hintBanner = '<div style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;padding:14px 18px;border-radius:10px;margin-bottom:12px;box-shadow:0 4px 12px rgba(245,158,11,0.25);">' +
+        '<div style="font-size:16px;font-weight:700;margin-bottom:4px;">➕ 补录第 ' + (state.videoSegments.length + 1) + ' 段 — 捕获 ' + hSideLabel + ' 时相</div>' +
+        '<div style="font-size:13px;line-height:1.6;opacity:0.95;">这一次请 <b>走 ' + hDirLabel + '</b>，让 ' + hSideLabel + ' 面向摄像头。当前已录 ' + state.videoSegments.length + ' 段。</div>' +
+      '</div>';
+    }
     setBody(
       errHtml +
+      hintBanner +
       renderCameraSelector() +
       renderCameraSideSelector() +
       '<div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;">' +
@@ -1108,7 +1578,7 @@
       }
       btn.disabled = true;
       btn.textContent = '⏳ 加载AI模型...';
-      setStatus('⏳ 首次使用需加载 ~2MB AI 模型, 请稍候...', '#444');
+      setStatus('⏳ 首次使用需加载 MediaPipe 模型, 请稍候...', '#444');
       loadPoseDetection()
         .then(function (detector) {
           btn.textContent = '⏳ 检测人体...';
@@ -1166,8 +1636,20 @@
   function renderCapture() {
     var errHtml = renderError();
     clearError();
+    // 补录模式提示横幅 (CAPTURE 阶段也需要, 因为上传路径直接进这里)
+    var captureHintBanner = '';
+    if (state.nextSegmentHint) {
+      var hint = state.nextSegmentHint;
+      var hSideLabel = hint === 'left' ? '左脚' : '右脚';
+      var hDirLabel = hint === 'left' ? '从右向左' : '从左向右';
+      captureHintBanner = '<div style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;padding:12px 16px;border-radius:8px;margin-bottom:10px;box-shadow:0 4px 12px rgba(245,158,11,0.25);">' +
+        '<div style="font-size:14px;font-weight:700;margin-bottom:2px;">➕ 补录第 ' + (state.videoSegments.length + 1) + ' 段 — 捕获 ' + hSideLabel + ' 时相</div>' +
+        '<div style="font-size:12px;line-height:1.5;opacity:0.95;">请 <b>走 ' + hDirLabel + '</b>，让 ' + hSideLabel + ' 面向摄像头。已录 ' + state.videoSegments.length + ' 段。</div>' +
+      '</div>';
+    }
     setBody(
       errHtml +
+      captureHintBanner +
       renderCameraSelector() +
       renderCameraSideSelector() +
       '<div style="display:flex;gap:6px;margin-bottom:8px;">' +
@@ -1188,6 +1670,18 @@
         '</div>' +
         '<div id="gait-preview-panel" style="display:none;text-align:center;margin-top:8px;">' +
           '<video id="gait-preview-video" controls muted playsinline style="max-width:100%;max-height:300px;background:#000;border-radius:8px;"></video>' +
+          '<div id="gait-video-cal-area" style="margin-top:10px;padding:12px;background:#f0f2f5;border-radius:8px;text-align:left;">' +
+            '<div id="gait-video-cal-status" style="font-size:13px;color:#444;text-align:center;">' +
+              (state.calibration.method === 'height'
+                ? '✓ 已标定: ' + (state.calibration.scale * 100).toFixed(2) + ' cm/px (身高 ' + state.calibration.heightCm + 'cm)'
+                : '⚠️ 未标定 — 请输入身高, 从视频开头站立帧自动标定') +
+            '</div>' +
+            '<div id="gait-video-cal-form" style="display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px;' + (state.calibration.method === 'height' ? 'display:none;' : '') + '">' +
+              '<span style="font-size:13px;color:#333;white-space:nowrap;">身高(cm):</span>' +
+              '<input id="gait-video-cal-height" type="number" min="100" max="220" step="1" value="' + (state.calibration.heightCm || 170) + '" style="width:70px;padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">' +
+              '<button id="gait-video-cal-btn" style="padding:6px 16px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;white-space:nowrap;">📏 从视频标定</button>' +
+            '</div>' +
+          '</div>' +
           '<div style="display:flex;gap:8px;margin-top:10px;justify-content:center;">' +
             '<button id="gait-process-btn" style="padding:14px 40px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:30px;cursor:pointer;font-size:18px;font-weight:600;">&#x1f50d; 开始分析</button>' +
             '<button id="gait-retry-btn" style="padding:14px 30px;background:rgba(0,0,0,0.08);border:none;border-radius:30px;cursor:pointer;font-size:14px;">&#x1f504; 重新录制</button>' +
@@ -1282,6 +1776,85 @@
       $('#gait-record-controls').style.display = 'flex';
       setPhase(PHASE.CAPTURE);
     });
+
+    // 从视频开头站立帧自动标定身高
+    var calBtn = $('#gait-video-cal-btn');
+    if (calBtn) {
+      calBtn.addEventListener('click', function () {
+        var video = $('#gait-preview-video');
+        var heightCm = parseInt($('#gait-video-cal-height').value, 10) || 170;
+        var statusEl = $('#gait-video-cal-status');
+        if (!video || !video.videoWidth) {
+          if (statusEl) { statusEl.textContent = '视频未就绪, 请稍候再试'; statusEl.style.color = '#dc2626'; }
+          return;
+        }
+        calBtn.disabled = true;
+        calBtn.textContent = '⏳ 标定中...';
+        if (statusEl) { statusEl.textContent = '⏳ 加载 AI 模型并从视频开头检测站立姿势...'; statusEl.style.color = '#444'; }
+
+        // seek 到视频开头 ~1 秒处 (站立相), 截帧检测
+        var seekT = Math.min(1.0, (video.duration || 2) / 2);
+        var detectCanvas = document.createElement('canvas');
+        var detectCtx = detectCanvas.getContext('2d');
+
+        function doDetect() {
+          loadPoseDetection().then(function (detector) {
+            detectCanvas.width = video.videoWidth;
+            detectCanvas.height = video.videoHeight;
+            detectCtx.drawImage(video, 0, 0, detectCanvas.width, detectCanvas.height);
+            return detector.estimatePoses(detectCanvas, { flipHorizontal: false });
+          }).then(function (poses) {
+            var pose = poses && poses[0];
+            if (!pose || !pose.keypoints || pose.keypoints.length === 0) {
+              throw new Error('未检测到人体');
+            }
+            var kps = pose.keypoints.map(function (k) {
+              return { x: k.x, y: k.y, score: k.score || 0, name: k.name || '' };
+            });
+            var frames = [{ t: 0, keypoints: kps }];
+            var cal = window.__gaitParams.calibrateByHeight(frames, heightCm / 100);
+            if (cal.error) {
+              throw new Error(cal.error + ' (像素高度: ' + Math.round(cal.pixelHeight || 0) + 'px)');
+            }
+            state.calibration.scale = cal.scale;
+            state.calibration.realMeters = cal.realHeight;
+            state.calibration.pixelDistance = cal.pixelHeight;
+            state.calibration.heightCm = heightCm;
+            state.calibration.method = 'height';
+            state.calibration.confidence = cal.confidence;
+            // 更新 UI
+            var formEl = $('#gait-video-cal-form');
+            if (formEl) formEl.style.display = 'none';
+            if (statusEl) {
+              statusEl.innerHTML = '✓ 标定成功 — 比例: ' + (cal.scale * 100).toFixed(2) + ' cm/px (身高 ' + heightCm + 'cm, 像素 ' + Math.round(cal.pixelHeight) + 'px)';
+              statusEl.style.color = '#10b981';
+            }
+            calBtn.textContent = '✓ 已标定';
+          }).catch(function (e) {
+            console.error('[gait] video calibration error', e);
+            if (statusEl) {
+              statusEl.textContent = '❌ 标定失败: ' + (e.message || e) + ' — 请确保视频开头有清晰站立画面';
+              statusEl.style.color = '#dc2626';
+            }
+            calBtn.disabled = false;
+            calBtn.textContent = '📏 从视频标定';
+          });
+        }
+
+        // seek 到指定时间
+        var seeked = false;
+        video.addEventListener('seeked', function onSeeked() {
+          if (seeked) return; seeked = true;
+          video.removeEventListener('seeked', onSeeked);
+          doDetect();
+        });
+        try {
+          video.currentTime = seekT;
+        } catch (e) { doDetect(); }
+        // 超时保护
+        setTimeout(function () { if (!seeked) { seeked = true; doDetect(); } }, 2000);
+      });
+    }
   }
 
   function renderProcessing() {
@@ -1301,6 +1874,14 @@
 
   function renderResults() {
     if (!state.results) { setPhase(PHASE.INTRO); return; }
+    // 如果有 gait-report.js, 用它渲染格式一致的报告 (和历史记录一样)
+    if (window.__gaitReport && window.__gaitReport.renderReport) {
+      window.__gaitReport.renderReport(state.results, $('#gait-body'));
+      // 报告渲染完后, 绑定"补录另一段"按钮 (由 report.js 注入的 DOM)
+      if (typeof bindAddSegmentHandler === 'function') bindAddSegmentHandler();
+      return;
+    }
+    // fallback: 内联渲染
     var r = state.results;
     var c = r.classification || { primary: 'unknown', primaryLabel: '—', confidence: 0 };
     if (!c.primaryLabel) c.primaryLabel = c.primary || '—';
@@ -1381,7 +1962,8 @@
               { key: 'MSw', name: '摆动中期',  short: 'MSw' },
               { key: 'TSw', name: '摆动末期',  short: 'TSw' }
             ].map(function (p) {
-              var pct = r.gaitPhases.phases[p.key] || 0;
+              var phaseObj = (r.gaitPhases && r.gaitPhases.phases && r.gaitPhases.phases[p.key]) || {};
+              var pct = typeof phaseObj.pct === 'number' ? phaseObj.pct : 0;
               var color = p.key === 'IC' || p.key === 'PSw' ? '#dc2626' :
                           p.key === 'LR' || p.key === 'TSt' ? '#f59e0b' :
                           p.key === 'MSt' || p.key === 'MSw' ? '#10b981' : '#3b82f6';
@@ -1396,6 +1978,42 @@
           '</div>' +
         '</div>'
       : '') +
+      // 时相截图
+      (r.phaseSnapshots && r.phaseSnapshots.length > 0 ?
+        (function () {
+          var h = '<h3 style="margin:20px 0 10px 0;font-size:16px;color:#1a1a2e;">📸 时相截图 (验证算法检测)</h3>' +
+            '<div style="font-size:12px;color:#666;margin-bottom:10px;">IC=足跟刚触地 | PSw=足趾即将离地 | MSw=摆动中点' +
+              (r.segments && r.segments > 1 ? ' · <span style="color:#10b981;">已合并 ' + r.segments + ' 段视频</span>' : '') +
+            '</div>' +
+            '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">';
+          var o = ['IC','LR','MSt','TSt','PSw','ISw','MSw','TSw'];
+          r.phaseSnapshots.sort(function (a, b) { return o.indexOf(a.phase) - o.indexOf(b.phase); });
+          r.phaseSnapshots.forEach(function (s) {
+            var c = s.stance ? '#3b82f6' : '#f59e0b';
+            h += '<div style="background:#fff;border-radius:8px;overflow:hidden;border:2px solid ' + c + ';">' +
+              '<img src="' + s.imageData + '" style="width:100%;display:block;">' +
+              '<div style="padding:4px;font-size:11px;text-align:center;background:' + c + ';color:#fff;">' +
+                s.side + '·' + s.label + '</div></div>';
+          });
+          h += '</div>';
+          // 缺另一侧 → "补录" 按钮 (只在 RESULTS 阶段、当前 state 才生效)
+          var missingSide = getMissingPhaseSide();
+          if (missingSide) {
+            var sideLabel = missingSide === 'left' ? '左脚' : '右脚';
+            var dirHint = missingSide === 'left' ? '从右向左' : '从左向右';
+            h += '<div id="gait-add-segment" data-missing="' + missingSide + '" ' +
+              'style="background:linear-gradient(135deg,#fff7ed,#fef3c7);border:2px dashed #f59e0b;border-radius:10px;padding:14px;margin-bottom:14px;">' +
+              '<div style="font-size:14px;font-weight:600;color:#92400e;margin-bottom:6px;">⚠️ ' + sideLabel + ' 时相缺失</div>' +
+              '<div style="font-size:12px;color:#78350f;line-height:1.6;margin-bottom:10px;">' +
+                '当前视频只检测到了' + (missingSide === 'left' ? '右脚' : '左脚') + '的时相。要看 ' + sideLabel + ' 时相，需要再录一段 ' + dirHint + ' 走路的视频（这样 ' + sideLabel + ' 才会面向摄像头）。' +
+              '</div>' +
+              '<button id="gait-add-segment-btn" ' +
+                'style="padding:10px 24px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;">' +
+                '➕ 补录 ' + sideLabel + ' (走 ' + dirHint + ')</button>' +
+            '</div>';
+          }
+          return h;
+        })() : '') +
       // 上肢摆动分析 (ANRM §4.2 上肢观察)
       (r.armSwing && !r.armSwing.error ?
         '<h3 style="margin:20px 0 10px 0;font-size:16px;color:#1a1a2e;">💪 上肢摆动分析</h3>' +
@@ -1718,6 +2336,9 @@
   function open() {
     var overlay = $('#gait-overlay');
     if (overlay) overlay.style.display = 'block';
+    // 重置累积段, 每次打开都是新评估
+    state.videoSegments = [];
+    state.nextSegmentHint = null;
     setPhase(PHASE.INTRO);
   }
 
@@ -1728,8 +2349,10 @@
     state.recordedURL = null;
     state.results = null;
     state.capturedFrames = [];
-    state.calibration = { p1: null, p2: null, scale: 0 };
+    state.calibration = { p1: null, p2: null, scale: 0, heightCm: 170, method: null };
     state.recordedChunks = [];
+    state.videoSegments = [];
+    state.nextSegmentHint = null;
     var overlay = $('#gait-overlay');
     if (overlay) overlay.style.display = 'none';
     var page2 = document.getElementById('page2');
@@ -1785,6 +2408,65 @@
     });
   }
 
+  // "补录另一段" 按钮 — 委托绑定, 每次重新 renderResults 后重绑
+  function bindAddSegmentHandler() {
+    var box = document.getElementById('gait-add-segment');
+    if (!box) return;
+    var missing = box.getAttribute('data-missing');
+    if (!missing) return;
+
+    // (A) 重录 — 走 CALIBRATION, 完整流程
+    var btnRecord = document.getElementById('gait-add-segment-record');
+    if (btnRecord) {
+      btnRecord.addEventListener('click', function () {
+        state.nextSegmentHint = missing;
+        state.calibration = { p1: null, p2: null, scale: 0, heightCm: 170, method: null };
+        state.capturedFrames = [];
+        stopCamera();
+        setPhase(PHASE.CALIBRATION);
+        console.log('[gait] add-segment-record triggered, hint=' + missing);
+      });
+    }
+
+    // (B) 上传 — 直接进 CAPTURE, 跳过标定, 用默认比例或继承上次比例
+    var btnUpload = document.getElementById('gait-add-segment-upload');
+    if (btnUpload) {
+      btnUpload.addEventListener('click', function () {
+        addSegmentUpload(missing);
+      });
+    }
+  }
+
+  // 补录 — 上传路径: 直接进 CAPTURE 阶段 + 默认标定 + 自动切到 upload tab + 自动打开文件选择器
+  function addSegmentUpload(missing) {
+    state.nextSegmentHint = missing;
+    // 保留历史 scale (从第一段继承), 没的话用默认
+    if (!state.calibration.scale) {
+      state.calibration.scale = 1 / 130;
+      state.calibration.realMeters = 1.0;
+      state.calibration.pixelDistance = 130;
+      state.calibration.method = 'default';
+      state.calibration.note = '补录上传 — 使用默认比例';
+    }
+    state.capturedFrames = [];
+    if (state.recordedURL) { URL.revokeObjectURL(state.recordedURL); state.recordedURL = null; }
+    state.recordedBlob = null;
+    stopCamera();
+    // 进 CAPTURE 阶段
+    setPhase(PHASE.CAPTURE);
+    // 渲染完成后: 切到 upload tab + 触发文件选择器
+    setTimeout(function () {
+      // 切到 upload tab
+      var uploadTab = document.querySelector('.gait-capture-tab[data-mode="upload"]');
+      if (uploadTab) uploadTab.click();
+      // 触发文件选择
+      var fi = document.getElementById('gait-file-input');
+      if (fi) fi.click();
+      else console.warn('[gait] addSegmentUpload: #gait-file-input not found');
+    }, 250);
+    console.log('[gait] add-segment-upload triggered, hint=' + missing + ' scale=' + state.calibration.scale);
+  }
+
   // 延迟绑定, 等 DOM 就绪
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', bindEvents);
@@ -1801,6 +2483,7 @@
     processVideo: processVideo,
     renderResults: renderResults,
     showQR: showQR,
+    addSegmentUpload: addSegmentUpload,
     getState: function () { return state; },
     PHASE: PHASE
   };
