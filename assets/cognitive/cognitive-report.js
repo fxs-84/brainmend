@@ -2514,6 +2514,7 @@
       id: record.id, date: record.date, time: record.time,
       patientInfo: record.patientInfo, normalizedScores: record.normalizedScores, rawScores: trimmedRaw,
       brainRegions: record.brainRegions, riskIndex: record.riskIndex, overallScore: record.overallScore, isQuick6: record.isQuick6,
+      type: record.type || '', qnr: record.qnr || null,
       createdAt: new Date().toISOString()
     };
     var json = JSON.stringify(cloudRecord);
@@ -2533,6 +2534,8 @@
       }
     }).catch(function(err) {});
   }
+  // 导出供神经系统自评复用 (自评保存后同步上传云端)
+  window._uploadToCloud = uploadToCloud;
 
   function fetchCloudReports(callback) {
     if (!CLOUD_ENABLED) { callback([]); return; }
@@ -2554,7 +2557,7 @@
               if (fileData && fileData.content) {
                 try {
                   var r = JSON.parse(decodeURIComponent(escape(atob(fileData.content))));
-                  results.push({ id: 'cloud_' + (r.id || f.sha), date: r.date, time: r.time, patientInfo: r.patientInfo || {}, normalizedScores: r.normalizedScores || {}, rawScores: r.rawScores || {}, brainRegions: r.brainRegions || {}, riskIndex: r.riskIndex, overallScore: r.overallScore, isQuick6: !!r.isQuick6, _isCloud: true, _cloudId: f.sha, _cloudCreatedAt: new Date(r.createdAt || 0).getTime() });
+                  results.push({ id: 'cloud_' + (r.id || f.sha), date: r.date, time: r.time, patientInfo: r.patientInfo || {}, normalizedScores: r.normalizedScores || {}, rawScores: r.rawScores || {}, brainRegions: r.brainRegions || {}, riskIndex: r.riskIndex, overallScore: r.overallScore, isQuick6: !!r.isQuick6, type: r.type || '', qnr: r.qnr || null, _isCloud: true, _cloudId: f.sha, _cloudCreatedAt: new Date(r.createdAt || 0).getTime() });
                 } catch(e2) {}
               }
               if (loaded >= files.length) {
@@ -3440,6 +3443,11 @@
           + '</div>';
         row.querySelector('[style*="cursor:pointer"]').addEventListener('click', function() {
           overlay.remove();
+          // 神经系统自评云端记录 → 自绘报告
+          if (rec.type === 'questionnaire' && window._qnrRenderCloud) {
+            window._qnrRenderCloud(rec);
+            return;
+          }
           // Render cloud report directly (data already in memory)
           var reportTime = rec.date && rec.time ? (rec.date + ' ' + rec.time) : null;
           renderReport(rec.rawScores, null, rec.isQuick6, reportTime, rec.patientInfo);

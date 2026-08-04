@@ -153,6 +153,7 @@
   <link rel="modulepreload" crossorigin href="./assets/scene-base-CyDX7Q2w.js">
   <link rel="modulepreload" crossorigin href="./assets/sound-manager-D69fGs02.js">
   <link rel="stylesheet" crossorigin href="./assets/index-CA2quyDM.css">
+  <script type="module" src="./src/game-3d/integrate.js"></script>
 </head>
 <body>
     <!-- 首页 -->
@@ -160,7 +161,7 @@
         <button id="page2-fullscreen" title="全屏" style="position:absolute;top:20px;right:24px;background:rgba(0,0,0,0.06);border:1px solid rgba(0,0,0,0.15);color:#5a7a9a;font-size:22px;width:44px;height:44px;border-radius:10px;cursor:pointer;transition:background 0.2s;" onmouseover="this.style.background='rgba(0,0,0,0.12)'" onmouseout="this.style.background='rgba(0,0,0,0.06)'">⛶</button>
         <img src="assets/brainmend-home.png" alt="BrainMend Logo" style="max-width:280px;height:auto;margin-bottom:24px;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.08));">
         <h2 style="font-size:36px;margin:0 0 40px 0;color:#1a3a5c;font-weight:700;">BrainMend 脑优化</h2>
-        <div style="display:flex;gap:14px;flex-wrap:nowrap;justify-content:center;max-width:1100px;padding:0 16px;">
+        <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;max-width:1100px;padding:0 16px;">
             <button id="page2-cog-report" style="flex:1;min-width:0;padding:28px 16px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:16px;cursor:pointer;font-size:16px;font-weight:600;box-shadow:0 8px 24px rgba(102,126,234,0.25);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'" onclick="window._showCogRecordList()">
                 <div style="font-size:40px;margin-bottom:8px;">🧠</div>
                 认知报告
@@ -176,10 +177,15 @@
                 头动追踪
                 <div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:4px;">颈椎康复训练</div>
             </button>
-            <button id="page2-gait" style="display:none;flex:1;min-width:0;padding:28px 16px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:16px;cursor:pointer;font-size:16px;font-weight:600;box-shadow:0 8px 24px rgba(67,233,123,0.25);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+            <button id="page2-gait" style="flex:1;min-width:0;padding:28px 16px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:16px;cursor:pointer;font-size:16px;font-weight:600;box-shadow:0 8px 24px rgba(67,233,123,0.25);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
                 <div style="font-size:40px;margin-bottom:8px;">🚶</div>
                 步态分析
                 <div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:4px;">AI步态参数评估</div>
+            </button>
+            <button id="page2-questionnaire" style="flex:1;min-width:0;padding:28px 16px;background:linear-gradient(135deg,#f093fb,#f5576c);color:#fff;border:none;border-radius:16px;cursor:pointer;font-size:16px;font-weight:600;box-shadow:0 8px 24px rgba(245,87,108,0.25);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size:40px;margin-bottom:8px;">📋</div>
+                神经系统自评
+                <div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:4px;">100 题 · 16 分区脑功能地图</div>
             </button>
         </div>
     </div>
@@ -196,6 +202,31 @@
             <button id="cog-qr-btn" style="display:block;width:100%;margin-top:10px;padding:14px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:16px;font-weight:700;box-shadow:0 4px 16px rgba(102,126,234,0.4);transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform='scale(1.02)';this.style.boxShadow='0 6px 20px rgba(102,126,234,0.6)';" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 4px 16px rgba(102,126,234,0.4)';">📱 生成二维码 (患者扫码做题)</button>
             <div class="cog-modal-grid" style="margin-top:12px;" id="cog-modal-grid">
             </div>
+        </div>
+    </div>
+
+    <!-- 神经系统自评 QR 码弹窗 (与认知评估同模式) -->
+    <div id="qnr-qr-overlay" style="display:none;position:fixed;inset:0;z-index:25500;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
+        <div style="background:#fff;border-radius:16px;padding:30px;text-align:center;max-width:360px;width:90%;">
+            <h3 style="color:#1a1a2e;margin:0 0 6px;">📱 扫码开始神经系统自评</h3>
+            <p style="color:#666;font-size:12px;margin:0 0 16px;">请患者使用手机扫描二维码，24 小时内有效</p>
+            <div id="qnr-qr-canvas" style="display:inline-block;"></div>
+            <p id="qnr-qr-url" style="color:#999;font-size:11px;margin:12px 0 0;word-break:break-all;"></p>
+            <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;">
+                <button id="qnr-qr-share" style="padding:8px 24px;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;">📤 分享二维码</button>
+                <button id="qnr-qr-close" style="padding:8px 24px;background:#1a1a2e;color:#fff;border:none;border-radius:8px;cursor:pointer;">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 神经系统自评入口弹窗 (与认知 modal 同型) -->
+    <div id="qnr-modal-overlay" class="cog-modal-overlay">
+        <div class="cog-modal" style="position:relative;max-width:420px;">
+            <button class="cog-modal-close" id="qnr-modal-close">&times;</button>
+            <h3>📋 神经系统状态自评</h3>
+            <div class="subtitle">100 题 · 16 分区脑功能地图 · 教育版</div>
+            <button class="cog-modal-full" id="qnr-modal-start" style="background:linear-gradient(135deg,#f093fb,#f5576c);">🚀 开始测评</button>
+            <button id="qnr-modal-share" style="display:block;width:100%;margin-top:10px;padding:14px;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:16px;font-weight:700;box-shadow:0 4px 16px rgba(0,217,165,0.4);transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform='scale(1.02)';this.style.boxShadow='0 6px 20px rgba(0,217,165,0.6)';" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 4px 16px rgba(0,217,165,0.4)';">📱 生成二维码 (患者扫码做题)</button>
         </div>
     </div>
 
@@ -941,8 +972,8 @@
 <script src="./assets/cognitive/cognitive-language.js"></script>
 <script src="./assets/cognitive/cognitive-reasoning.js"></script>
 <script src="./assets/cognitive/cognitive-observation.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="./assets/vendor/html2canvas-1.4.1.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+<script src="./assets/vendor/jspdf-2.5.1.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous"></script>
 <script src="./assets/cognitive/cognitive-report.js?v=20260620b"></script>
 <!-- 步态分析模块 (基于 ANRM 步态分析手册) -->
 <script src="./assets/gait-params.js"></script>
@@ -1002,6 +1033,31 @@
         if (cogBtn) cogBtn.addEventListener("click", function() {
             document.getElementById("cog-modal-overlay").classList.add("show");
         });
+
+        // 2.3 认知报告入口兜底重试 (仅当 bundle 未就绪时介入, 避免抢掉 bundle 的绑定)
+        (function(){
+            var btn = document.getElementById('page2-cog-report');
+            if (!btn) return;
+            var fired = false;
+            btn.addEventListener('click', function() {
+                if (fired) return; // 已被处理过一次(说明 bundle 绑定了)
+                if (typeof window._showCogRecordList === 'function') {
+                    fired = true;
+                    return; // bundle 已就绪, 让 bundle 自己处理 (不调用, 不抢)
+                }
+                // bundle 未就绪 → 延迟重试, 等 bundle 绑好
+                setTimeout(function() {
+                    if (typeof window._showCogRecordList === 'function' && !fired) {
+                        // 检查是否已被 bundle 处理(弹窗是否已开), 若未开则手动兜底
+                        var modal = document.getElementById('records-modal');
+                        if (modal && !modal.classList.contains('show')) {
+                            fired = true;
+                            window._showCogRecordList();
+                        }
+                    }
+                }, 300);
+            });
+        })();
 
         // 2.5 步态分析系统
         var gaitBtn = document.getElementById('page2-gait');
@@ -1666,8 +1722,425 @@
         })();
     })();
 
+    // ====================================================================
+    // 神经系统状态自评 · 与认知评估同链路 (QR / 沙箱 / 报告聚合)
+    // 镜像 _buildQRUrl / _showQRForTest / _activatePatientSandbox 模式
+    // ====================================================================
+    (function(){
+        // 0) 🛡️ 防御性初始化: 清理任何残留的全屏覆盖层 (根治"入口被遮挡点不了")
+        // ⚠️ 分类清理! 内联 style.display 优先级高于 .show 类选择器,
+        //    对 .show 类控制的 overlay 只能 remove('show'), 不能设内联 display:none (否则永远打不开)
+        function _qnrCleanupOverlays() {
+            // .show 类控制显示 (内联 display 保持原样, 只移除类)
+            ['cog-modal-overlay', 'qnr-modal-overlay'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (!el) return;
+                try { el.classList.remove('show'); } catch(e) {}
+            });
+            // 内联 display 控制显示 (cog-report-overlay 由 JS 设 display:block/none)
+            ['cog-report-overlay', 'qnr-qr-overlay', 'cog-qr-overlay', 'trk-qr-overlay',
+             'gait-overlay', 'gait-qr-overlay', 'gait-history-overlay'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (!el) return;
+                try { el.style.display = 'none'; } catch(e) {}
+            });
+        }
+        // 动态创建的 overlay (cognitive-report.js 运行时生成) 一并清理
+        function _qnrCleanupDynamic() {
+            ['cog-record-list-overlay', 'cog-zoom-overlay', 'cog-reg-overlay', 'qnr-reg-overlay'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (el) { try { el.remove(); } catch(e) {} }
+            });
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() { _qnrCleanupOverlays(); _qnrCleanupDynamic(); });
+        } else {
+            _qnrCleanupOverlays(); _qnrCleanupDynamic();
+        }
+        // bfcache 返回时也清理
+        window.addEventListener('pageshow', function() { _qnrCleanupOverlays(); _qnrCleanupDynamic(); });
+        // 包装 goHome: 返回首页时确保无覆盖层残留
+        (function(){
+            var origGoHome = window.goHome;
+            if (typeof origGoHome === 'function' && !origGoHome.__qnrCleaned) {
+                var wrapped = function() {
+                    origGoHome.apply(this, arguments);
+                    setTimeout(function() { _qnrCleanupOverlays(); _qnrCleanupDynamic(); }, 50);
+                };
+                wrapped.__qnrCleaned = true;
+                window.goHome = wrapped;
+            }
+        })();
 
+        // 1) 首页入口 → 弹窗
+        var qnrBtn = document.getElementById('page2-questionnaire');
+        var qnrModal = document.getElementById('qnr-modal-overlay');
+        if (qnrBtn && qnrModal) {
+            qnrBtn.addEventListener('click', function() { qnrModal.classList.add('show'); });
+        }
+        var qnrModalClose = document.getElementById('qnr-modal-close');
+        if (qnrModalClose) qnrModalClose.addEventListener('click', function() { qnrModal.classList.remove('show'); });
+        if (qnrModal) qnrModal.addEventListener('click', function(e) { if (e.target === qnrModal) qnrModal.classList.remove('show'); });
+        var qnrModalStart = document.getElementById('qnr-modal-start');
+        if (qnrModalStart) qnrModalStart.addEventListener('click', function() {
+            qnrModal.classList.remove('show');
+            window.location.href = './questionnaire.html';
+        });
+        var qnrModalShare = document.getElementById('qnr-modal-share');
+        if (qnrModalShare) qnrModalShare.addEventListener('click', function() {
+            qnrModal.classList.remove('show');
+            _showQnrQR();
+        });
 
+        // 2) QR 码 URL 构建 (与 _buildQRUrl 同结构)
+        function _buildQnrQRUrl() {
+            var baseUrl = window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'questionnaire.html';
+            var ci = { name: '', age: '', gender: '' };
+            try {
+                if (window.D && window.D.clientInfo) {
+                    ci.name = window.D.clientInfo.name || '';
+                    ci.age = window.D.clientInfo.age || '';
+                    ci.gender = window.D.clientInfo.gender || '';
+                }
+            } catch(e) {}
+            if (!ci.name) {
+                try {
+                    var raw = localStorage.getItem('cervical_current_client');
+                    if (raw) { var p = JSON.parse(raw); ci.name = p.name || ''; ci.age = p.age || ''; ci.gender = p.gender || ''; }
+                } catch(e2) {}
+            }
+            var params = ['sandbox=1', 't=' + Date.now(), 'v=' + Date.now()];
+            if (ci.name) params.push('name=' + encodeURIComponent(ci.name));
+            if (ci.age) params.push('age=' + encodeURIComponent(ci.age));
+            if (ci.gender) params.push('gender=' + encodeURIComponent(ci.gender));
+            var tid = '';
+            try { tid = localStorage.getItem('cog_therapist_id') || 'default'; } catch(e) {}
+            params.push('tid=' + encodeURIComponent(tid));
+            // 带 GitHub token: 患者扫码后 cognitive-report.js 自动存 cog_gh_token → 结果可上传云端
+            var tk = '';
+            try { tk = localStorage.getItem('cog_gh_token') || ''; } catch(e) {}
+            if (tk) params.push('token=' + encodeURIComponent(tk));
+            return baseUrl + '?' + params.join('&');
+        }
+
+        // 3) QR 码显示 (镜像 _showQRForTest)
+        function _showQnrQR() {
+            var url = _buildQnrQRUrl();
+            var overlay = document.getElementById('qnr-qr-overlay');
+            if (!overlay) return;
+            _qnrCleanupOverlays(); // 打开前清理其它残留覆盖层
+            overlay.style.display = 'flex';
+            document.getElementById('qnr-qr-url').textContent = url;
+            var canvasDiv = document.getElementById('qnr-qr-canvas');
+            function renderSvg() {
+                try {
+                    var qr = qrcode(0, 'M');
+                    qr.addData(url);
+                    qr.make();
+                    canvasDiv.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4 });
+                    return true;
+                } catch (e) { return false; }
+            }
+            if (typeof qrcode !== 'undefined' && renderSvg()) return;
+            canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载中…<br><a href="' + url + '" style="color:#0086FF;">直接打开链接</a></div>';
+            var s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js';
+            s.onload = function() {
+                if (!renderSvg()) {
+                    canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR生成失败<br><a href="' + url + '" style="color:#0086FF;">' + url + '</a></div>';
+                }
+            };
+            s.onerror = function() {
+                canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载失败<br><a href="' + url + '" style="color:#0086FF;">' + url + '</a></div>';
+            };
+            document.head.appendChild(s);
+        }
+
+        // 4) 分享 + 关闭 (与 cog-qr-share 同)
+        var qnrQrShare = document.getElementById('qnr-qr-share');
+        if (qnrQrShare) qnrQrShare.addEventListener('click', function() {
+            var shareUrl = document.getElementById('qnr-qr-url').textContent;
+            if (navigator.share) {
+                navigator.share({ title: '神经系统自评', text: '请扫描二维码开始神经系统状态自评', url: shareUrl }).catch(function(){});
+            } else if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(shareUrl).then(function() {
+                    var btn = document.getElementById('qnr-qr-share');
+                    if (btn) { var orig = btn.textContent; btn.textContent = '✅ 已复制链接'; btn.style.background = '#4CAF50'; setTimeout(function() { btn.textContent = orig; btn.style.background = 'linear-gradient(135deg,#00D9A5,#0086FF)'; }, 2000); }
+                }).catch(function() { alert('复制失败，请手动复制链接：\n' + shareUrl); });
+            } else {
+                var input = document.createElement('textarea');
+                input.value = shareUrl; input.style.position = 'fixed'; input.style.opacity = '0';
+                document.body.appendChild(input); input.select();
+                try { document.execCommand('copy'); alert('链接已复制到剪贴板'); } catch(e) { alert('请手动复制链接：\n' + shareUrl); }
+                document.body.removeChild(input);
+            }
+        });
+        var qnrQrClose = document.getElementById('qnr-qr-close');
+        if (qnrQrClose) qnrQrClose.addEventListener('click', function() {
+            document.getElementById('qnr-qr-overlay').style.display = 'none';
+        });
+        // 点击遮罩背景关闭
+        var qnrQrOverlay = document.getElementById('qnr-qr-overlay');
+        if (qnrQrOverlay) qnrQrOverlay.addEventListener('click', function(e) {
+            if (e.target === qnrQrOverlay) qnrQrOverlay.style.display = 'none';
+        });
+
+        // 5) 记录存储: 与认知评估同库 cog_records (cognitive-report.js 读取), 加 type=questionnaire 区分
+        function _readRecords() {
+            try { return JSON.parse(localStorage.getItem('cog_records')) || []; } catch(e) { return []; }
+        }
+        function _writeRecords(arr) {
+            try { localStorage.setItem('cog_records', JSON.stringify(arr)); } catch(e) {}
+        }
+        // 保存自评记录 (对齐认知 schema: patientInfo / overallScore / date / time + type 标记)
+        function _qnrSaveRecord(payload, patientInfo) {
+            var now = new Date();
+            var rec = {
+                id: 'qnr_' + now.getTime(),
+                date: now.getFullYear() + '/' + (now.getMonth() + 1) + '/' + now.getDate(),
+                time: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
+                patientInfo: {
+                    name: (patientInfo && patientInfo.name) || '未知',
+                    age: (patientInfo && patientInfo.age) || '',
+                    gender: (patientInfo && patientInfo.gender) || '',
+                    id: (patientInfo && patientInfo.id) || ''
+                },
+                type: 'questionnaire',
+                overallScore: payload.percent,
+                qnr: payload
+            };
+            var arr = _readRecords();
+            arr.push(rec);
+            if (arr.length > 100) arr.splice(0, arr.length - 100);
+            _writeRecords(arr);
+            // 与认知同链路: 上传云端 (cognitive-report.js 导出的 _uploadToCloud)
+            if (typeof window._uploadToCloud === 'function') {
+                try { setTimeout(function() { window._uploadToCloud(rec); }, 0); } catch(e) {}
+            }
+            return rec;
+        }
+        window._qnrSaveRecord = _qnrSaveRecord;
+
+        // 6) 接收 ?return=questionnaire&result=... → 与认知同库保存 + 打开报告
+        (function _qnrReturnReceiver(){
+            var params = new URLSearchParams(window.location.search);
+            if (params.get('return') !== 'questionnaire') return;
+            var raw = params.get('result');
+            if (!raw) return;
+            try {
+                var json = JSON.parse(atob(decodeURIComponent(raw)));
+                if (!json || !json.items) throw new Error('payload 无效');
+                // 动态加载 scoring 模块算出 16 分区严重度
+                Promise.all([
+                    import('./js/questionnaire/scoring.js'),
+                    import('./js/questionnaire/data.js')
+                ]).then(function(mods){
+                    var scoring = mods[0], data = mods[1];
+                    var r = scoring.scoreBrainRegion({ items: json.items, phoneEar: json.phoneEar || null });
+                    var groupHasBurden = {};
+                    data.REGION_GROUPS.forEach(function(g){
+                        g.regionIds.forEach(function(rid){
+                            if (r.severityByRegion[rid] && r.severityByRegion[rid] !== 'normal') groupHasBurden[g.id] = g.label;
+                        });
+                    });
+                    var burdenGroups = Object.keys(groupHasBurden).map(function(k){ return groupHasBurden[k]; });
+                    // 整体负担: 选最高严重度
+                    var worstSev = 'normal';
+                    ['severe','moderate','mild'].forEach(function(s){
+                        if (worstSev === 'normal' && Object.values(r.severityByRegion).indexOf(s) >= 0) worstSev = s;
+                    });
+                    var payload = {
+                        byRegion: r.byRegion,
+                        severityByRegion: r.severityByRegion,
+                        affectedRegions: r.affectedRegions,
+                        total: r.total,
+                        percent: r.percent,
+                        phoneEar: json.phoneEar || null,
+                        burdenGroups: burdenGroups,
+                        worstSeverity: worstSev,
+                        groupDefs: data.REGION_GROUPS,
+                        regionDefs: data.BRAIN_REGION_DEFS,
+                        items: json.items
+                    };
+                    var rec = _qnrSaveRecord(payload, json);
+                    // 清掉 URL 参数
+                    var cleanUrl = window.location.origin + window.location.pathname;
+                    history.replaceState({}, '', cleanUrl);
+                    // 等 cognitive-report.js 就绪后直接打开该记录报告
+                    var tries = 0;
+                    var t = setInterval(function(){
+                        tries++;
+                        if (typeof window._viewCogReport === 'function') {
+                            clearInterval(t);
+                            var arr = _readRecords();
+                            var idx = arr.indexOf(rec);
+                            window._viewCogReport(idx < 0 ? arr.length - 1 : idx);
+                        } else if (tries > 50) {
+                            clearInterval(t);
+                            alert('报告模块尚未就绪，请稍后点击"认知报告"查看。');
+                        }
+                    }, 100);
+                }).catch(function(err){
+                    alert('自评结果回传失败：' + (err && err.message || err));
+                });
+            } catch(e) {
+                alert('自评结果解码失败，请重试。');
+            }
+        })();
+    })();
+
+    // ====================================================================
+    // 神经系统自评 · 报告展示 (与认知评估同链路)
+    //   - 记录存 cog_records 同库 (type=questionnaire)
+    //   - 包装 _viewCogReport: 自评记录走自绘 4 组 16 分区, 认知记录走原版
+    //   - 包装 _showCogRecordList: 列表自评行显示 📋100题
+    // ====================================================================
+    (function(){
+        // ---------- 自绘自评报告 (复用 cog-report-overlay 壳) ----------
+        function _qnrRenderReport(rec) {
+            var d = rec.qnr || {};
+            var overlay = document.getElementById('cog-report-overlay');
+            if (!overlay) return;
+            var nav = document.getElementById('cog-report-nav');
+            var body = document.getElementById('cog-report-body');
+            if (!nav || !body) return;
+            // 重建 nav: 只留"神经系统自评"tab
+            nav.innerHTML = '<button class="cog-report-tab active" data-section="questionnaire" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0;">📋 神经系统自评</button>';
+            overlay.style.display = 'block';
+            // footer 恢复显示
+            var footer = document.getElementById('cog-report-footer');
+            if (footer) footer.style.display = '';
+            // 隐藏认知记录切换 nav (自评单记录视图)
+            var recNav = document.getElementById('cog-record-nav');
+            if (recNav) recNav.style.display = 'none';
+
+            var p = rec.patientInfo || {};
+            var groupDefs = d.groupDefs || [];
+            var regionDefs = d.regionDefs || [];
+            var sevColor = { normal:'#16a34a', mild:'#ca8a04', moderate:'#ea580c', severe:'#dc2626' };
+            var sevLabel = { normal:'正常', mild:'轻度', moderate:'中度', severe:'重度' };
+            var GROUP_ICONS = { alarm:'🚨', bodymap:'🗺️', motor:'🏃', higher:'🧠' };
+            var regionMax = {};
+            regionDefs.forEach(function(def){
+                var cnt = 0;
+                for (var k in (d.items || {})) {
+                    if (parseInt(k) === 46) continue;
+                    if (parseInt(k) >= def.range[0] && parseInt(k) <= def.range[1]) cnt++;
+                }
+                regionMax[def.id] = cnt * 4;
+            });
+
+            var html = '';
+            // 头部患者卡
+            html += '<div style="background:#fff;border-radius:12px;padding:18px 20px;margin-bottom:14px;border-left:4px solid #f5576c;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
+                '<div>' +
+                    '<div style="font-size:18px;font-weight:700;color:#0f172a;">' + (p.name || '未知') + ' 的脑区地图 <span style="font-size:12px;color:#94a3b8;font-weight:400;">' + (p.gender||'') + (p.age ? ' · ' + p.age + '岁' : '') + '</span></div>' +
+                    '<div style="font-size:12px;color:#94a3b8;margin-top:2px;">' + (rec.date || '') + ' ' + (rec.time || '') + ' · 神经系统状态自评 (100题)</div>' +
+                '</div>' +
+                '<span style="background:' + sevColor[d.worstSeverity || 'normal'] + ';color:#fff;font-size:13px;font-weight:700;padding:4px 14px;border-radius:999px;">' + (sevLabel[d.worstSeverity] || '正常') + ' · ' + (d.percent != null ? d.percent : 0) + '%</span>' +
+            '</div>';
+            // 摘要
+            if (!(d.burdenGroups || []).length) {
+                html += '<div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:12px;padding:14px 16px;color:#047857;font-weight:600;margin-bottom:14px;">本次自评未发现明显高负担区，各分区均在正常范围。</div>';
+            } else {
+                html += '<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:12px;padding:14px 16px;color:#9a3412;font-weight:600;margin-bottom:14px;">你的高负担区: ' + d.burdenGroups.join('、') + '</div>' +
+                    '<div style="font-size:13px;color:#64748b;margin-bottom:14px;">以下按 4 组展示 16 个功能分区的自评结果（轻度及以上即提示有负担）。</div>';
+            }
+            // 4 组
+            groupDefs.forEach(function(g){
+                var hasBurden = g.regionIds.some(function(rid){ return d.severityByRegion[rid] && d.severityByRegion[rid] !== 'normal'; });
+                html += '<div style="background:#fff;border:1px solid ' + (hasBurden ? '#fdba74' : '#e2e8f0') + ';border-radius:14px;padding:14px 16px;margin-bottom:12px;' + (hasBurden ? 'background:linear-gradient(180deg,#fff7ed 0%,#ffffff 60%);' : '') + '">' +
+                    '<div style="font-size:15px;font-weight:700;color:#0f172a;margin-bottom:10px;">' + (GROUP_ICONS[g.id] || '') + ' ' + g.label + '</div>';
+                g.regionIds.forEach(function(rid){
+                    var def = regionDefs.find(function(x){ return x.id === rid; });
+                    if (!def) return;
+                    var score = d.byRegion[rid] || 0;
+                    var max = regionMax[rid] || 0;
+                    var sev = d.severityByRegion[rid] || 'normal';
+                    var pct = max > 0 ? Math.round((score/max)*100) : 0;
+                    html += '<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid #f1f5f9;">' +
+                        '<div style="flex:1;min-width:0;">' +
+                            '<div style="font-size:13px;color:#0f172a;">' + def.label + (def.detail ? ' <span style="color:#94a3b8;font-size:11px;">· ' + def.detail + '</span>' : '') + '</div>' +
+                            '<div style="font-size:11px;color:#64748b;margin:2px 0 4px;">' + score + ' / ' + max + ' 分</div>' +
+                            '<div style="height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + sevColor[sev] + ';border-radius:3px;transition:width 0.4s;"></div></div>' +
+                        '</div>' +
+                        '<span style="flex:0 0 auto;font-size:12px;font-weight:700;color:#0f172a;background:' + sevColor[sev] + ';color:#fff;padding:4px 12px;border-radius:999px;min-width:48px;text-align:center;">' + sevLabel[sev] + '</span>' +
+                    '</div>';
+                });
+                html += '</div>';
+            });
+            // 免责
+            html += '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:12px 16px;font-size:12px;color:#92400e;line-height:1.7;">⚠️ 本评估用于一般健康教育，结果属于评估提示，不等同于医学诊断。如结果异常或症状持续，请到正规医疗机构进一步评估。</div>';
+            body.innerHTML = html;
+            overlay.scrollTop = 0;
+        }
+
+        // ---------- 包装 _viewCogReport ----------
+        function _wrapViewCogReport() {
+            var orig = window._viewCogReport;
+            if (!orig || orig.__qnrWrapped) return;
+            var wrapped = function(idx) {
+                var records = _qnrReadRecords();
+                var rec = records[idx];
+                if (rec && rec.type === 'questionnaire') { _qnrRenderReport(rec); return; }
+                orig.apply(this, arguments);
+            };
+            wrapped.__qnrWrapped = true;
+            window._viewCogReport = wrapped;
+        }
+
+        // ---------- 包装 _showCogRecordList (自评行显示 📋100题) ----------
+        function _wrapShowCogRecordList() {
+            var orig = window._showCogRecordList;
+            if (!orig || orig.__qnrWrapped) return;
+            var wrapped = function() {
+                orig.apply(this, arguments);
+                setTimeout(_qnrBeautifyList, 80);
+            };
+            wrapped.__qnrWrapped = true;
+            window._showCogRecordList = wrapped;
+        }
+        function _qnrBeautifyList() {
+            var overlay = document.getElementById('cog-record-list-overlay');
+            if (!overlay) return;
+            var recs = _qnrReadRecords().filter(function(r){ return r && r.type === 'questionnaire'; });
+            if (!recs.length) return;
+            var keys = {};
+            recs.forEach(function(r){ keys[r.date + ' ' + r.time] = true; });
+            var rows = overlay.querySelectorAll('[style*="cursor:pointer"]');
+            rows.forEach(function(el){
+                var t = el.textContent || '';
+                for (var k in keys) {
+                    if (t.indexOf(k) >= 0) {
+                        el.innerHTML = el.innerHTML.replace('📊12项', '📋100题');
+                        break;
+                    }
+                }
+            });
+        }
+
+        // ---------- 启动: cognitive-report.js 已先于此脚本执行, 直接包装; 失败则轮询 ----------
+        _wrapViewCogReport();
+        _wrapShowCogRecordList();
+        var pt = setInterval(function(){
+            _wrapViewCogReport();
+            _wrapShowCogRecordList();
+            var vOK = window._viewCogReport && window._viewCogReport.__qnrWrapped;
+            var sOK = window._showCogRecordList && window._showCogRecordList.__qnrWrapped;
+            if (vOK && sOK) clearInterval(pt);
+        }, 200);
+        setTimeout(function(){ clearInterval(pt); }, 30000);
+
+        // 暴露读取 (供 _qnrReturnReceiver 用)
+        function _qnrReadRecords() {
+            try { return JSON.parse(localStorage.getItem('cog_records')) || []; } catch(e) { return []; }
+        }
+        window._qnrReadRecords = _qnrReadRecords;
+        // 云端自评记录渲染入口 (cognitive-report.js _renderCloudRows 调用)
+        window._qnrRenderCloud = function(rec) {
+            _qnrRenderReport(rec);
+        };
+    })();
 
 </script>
 </body>
