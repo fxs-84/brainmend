@@ -7,6 +7,38 @@ import { Road3DEngine } from './engine.js';
   let engine3d = null;
   let container = null;
 
+  // 空闲时预取 3D 模型（~29MB），让点击"开始"后的 GLTFLoader 直接命中 HTTP 缓存
+  const MODEL_FILES = [
+    './models/car-harley-v2.glb',
+    './models/car-street-prop-v2.glb',
+    './models/car-sedan-red-v3.glb',
+    './models/car-sedan-blue-v3.glb',
+    './models/car-sedan-green-v3.glb',
+    './models/car-sedan-yellow-v3.glb',
+    './models/car-sedan-gray-v3.glb',
+    './models/car-suv-black-v3.glb',
+    './models/car-suv-green-v3.glb',
+    './models/car-suv-silver-v3.glb',
+    './models/car-suv-navy-v3.glb',
+    './models/car-suv-wine-v3.glb',
+    './models/car-bus-blue-v3.glb',
+    './models/car-bus-green-v3.glb',
+    './models/car-bus-red-v3.glb',
+    './models/car-bus-white-v3.glb',
+    './models/car-bus-yellow-v3.glb',
+  ];
+  function prefetchModels() {
+    // 串行发请求，避免与首屏资源抢带宽；浏览器缓存后正式加载秒开
+    MODEL_FILES.reduce(
+      (p, url) => p.then(() => fetch(url, { cache: 'force-cache' }).then(r => r.blob()).catch(() => {})),
+      Promise.resolve()
+    );
+  }
+  addEventListener('load', () => {
+    if ('requestIdleCallback' in window) requestIdleCallback(prefetchModels, { timeout: 5000 });
+    else setTimeout(prefetchModels, 3000);
+  });
+
   function getContainer() {
     if (!container) {
       container = document.createElement('div');

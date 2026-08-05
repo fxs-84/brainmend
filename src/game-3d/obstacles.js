@@ -40,6 +40,14 @@ function hueShader(hueDeg) {
   return (shader) => {};
 }
 
+// ⚠️ 基于 import.meta.url 解析（Pages 子路径 /brainmend/ 下相对路径会 404）
+// 注意：vite dev 会把 new URL 参数重写为无尾斜杠形式，这里兜底补 '/'
+//（DRACOLoader 直接拼接 decoderPath + 文件名，缺尾斜杠会拼错路径）
+export function dracoDecoderPath() {
+  const p = new URL('../../assets/vendor/draco/gltf/', import.meta.url).href;
+  return p.endsWith('/') ? p : p + '/';
+}
+
 export class ObstaclePool {
   constructor() {
     this.templates = [];
@@ -50,13 +58,12 @@ export class ObstaclePool {
 
   async load(manager) {
     const draco = new DRACOLoader(manager);
-    draco.setDecoderPath(new URL('./draco/', import.meta.url).href);
+    draco.setDecoderPath(dracoDecoderPath());
     const loader = new GLTFLoader(manager);
     loader.setDRACOLoader(draco);
-    for (let fi = 0; fi < CAR_FILES.length; fi++) {
-      const f = CAR_FILES[fi];
+    const loadOne = async (ld, fi) => {
       // ⚠️ 基于 import.meta.url 解析, 避免 Pages 子路径 404 (见 player.js 注释)
-      const gltf = await loader.loadAsync(new URL(f, import.meta.url).href);
+      const gltf = await ld.loadAsync(new URL(CAR_FILES[fi], import.meta.url).href);
       const tpl = gltf.scene;
       const box = new THREE.Box3().setFromObject(tpl);
       const center = box.getCenter(new THREE.Vector3());
@@ -82,10 +89,26 @@ export class ObstaclePool {
       });
       // 障碍车朝向（加载时不转，spawn 时统一设，可用快捷键实时调）
       tpl.visible = false;
+      return tpl;
+    };
+    // 渐进式加载：每类先并行载一款（轿车/SUV/公交），立刻可开局；
+    // 其余颜色后台流式补齐（spawn 随机取模板，天然兼容陆续到达）
+    const FIRST = [0, 5, 10];
+    const first = await Promise.all(FIRST.map(fi => loadOne(loader, fi)));
+    for (const tpl of first) {
       this.group.add(tpl);
       this.templates.push(tpl);
     }
     this.loaded = true;
+    // 后台部分不带 manager：避免开局后进度回调覆盖游戏内 HUD 计分
+    const bgLoader = new GLTFLoader();
+    bgLoader.setDRACOLoader(draco);
+    const rest = CAR_FILES.map((_, fi) => fi).filter(fi => !FIRST.includes(fi));
+    Promise.all(rest.map(async fi => {
+      const tpl = await loadOne(bgLoader, fi);
+      this.group.add(tpl);
+      this.templates.push(tpl);
+    })).catch(err => console.warn('[obstacles] 后台加载部分车型失败:', err));
   }
 
   spawn(z, laneIdx, speed) {
@@ -157,7 +180,7 @@ export class SceneryPool {
 
   async load(manager) {
     const draco = new DRACOLoader(manager);
-    draco.setDecoderPath(new URL('./draco/', import.meta.url).href);
+    draco.setDecoderPath(dracoDecoderPath());
     const loader = new GLTFLoader(manager);
     loader.setDRACOLoader(draco);
     const gltf = await loader.loadAsync(new URL('../../models/car-street-prop-v2.glb', import.meta.url).href);

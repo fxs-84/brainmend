@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { LANES_X } from './assets/road.js';
 import { WorldCurve } from './curve.js';
+import { dracoDecoderPath } from './obstacles.js';
 
 // 头部位置 → 车道位置映射常量
 const YAW_DEADZONE = 0.08;        // 中立死区：|yaw| 小于此值视为头回正（约 2.4°）
@@ -28,7 +29,7 @@ export class Player {
 
   async load(manager) {
     const draco = new DRACOLoader(manager);
-    draco.setDecoderPath(new URL('./draco/', import.meta.url).href);
+    draco.setDecoderPath(dracoDecoderPath());
     const loader = new GLTFLoader(manager);
     loader.setDRACOLoader(draco);
     try {
