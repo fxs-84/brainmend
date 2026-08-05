@@ -1907,7 +1907,8 @@
             var now = new Date();
             var rec = {
                 id: 'qnr_' + now.getTime(),
-                date: now.getFullYear() + '/' + (now.getMonth() + 1) + '/' + now.getDate(),
+                // 与认知记录同格式 YYYY-MM-DD (斜杠会进云端文件名被 GitHub 拒绝)
+                date: now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0'),
                 time: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
                 patientInfo: {
                     name: (patientInfo && patientInfo.name) || '未知',

@@ -2522,14 +2522,20 @@
     };
     var json = JSON.stringify(cloudRecord);
     var b64 = btoa(unescape(encodeURIComponent(json)));
-    var fileName = (record.date || 'unknown') + '_' + (record.id || Date.now()) + '.json';
+    // ⚠️ 文件名不能含 '/': 旧自评记录 date 为 "2026/8/5" 斜杠格式, 进 URL 变 %2F 被 GitHub 拒绝 (HTTP 422)
+    // 统一替换为 '-' (与认知记录 "2026-08-05" 格式一致)
+    var fileName = ((record.date || 'unknown') + '_' + (record.id || Date.now()) + '.json').replace(/\//g, '-');
     var path = GH_API + encodeURIComponent(tid) + '/' + encodeURIComponent(fileName);
 
     return fetch(path, { method: 'PUT', headers: _ghHeaders(), body: JSON.stringify({ message: 'upload report: ' + (record.patientInfo && record.patientInfo.name || ''), content: b64 }) })
     .then(function(res) {
       if (!res.ok) {
-        window._lastCloudError = 'HTTP ' + res.status;
-        return { ok: false, error: 'HTTP ' + res.status };
+        // 带上 GitHub 返回的具体 message (如 "Invalid request"), 便于定位
+        return res.json().catch(function() { return null; }).then(function(body) {
+          var detail = body && body.message ? ': ' + body.message : '';
+          window._lastCloudError = 'HTTP ' + res.status + detail;
+          return { ok: false, error: 'HTTP ' + res.status + detail };
+        });
       }
       return res.json().then(function(obj) {
         if (obj && obj.content && obj.content.sha) {

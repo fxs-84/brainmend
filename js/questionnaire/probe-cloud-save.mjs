@@ -101,7 +101,9 @@ await ctx.close();
 
 // ==================== 场景 2: PUT 失败 (403) → _cloudErr 落盘 + 报告页重试按钮 ====================
 const ctx2 = await browser.newContext();
+const putUrls = [];
 await ctx2.route("https://api.github.com/**", async (route) => {
+  if (route.request().method() === "PUT") putUrls.push(route.request().url());
   await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ message: "Forbidden" }) });
 });
 const p2 = await ctx2.newPage();
@@ -134,8 +136,9 @@ assert(await retryBtn.count() === 1, "未同步记录报告页显示「☁️ �
 await retryBtn.click();
 await p2.waitForTimeout(1500);
 const failErr = await p2.evaluate(() => (JSON.parse(localStorage.getItem("cog_records") || "[]")[0] || {})._cloudErr);
-assert(failErr === "HTTP 403", `重试失败后 _cloudErr 落盘 (${failErr})`);
+assert(failErr && failErr.indexOf("HTTP 403") === 0, `重试失败后 _cloudErr 落盘 (${failErr})`);
 assert(dialogs.some((m) => m.includes("HTTP 403") || m.includes("权限")), `失败弹窗包含可读原因: ${dialogs[0] || "(无)"}`);
+assert(putUrls.length > 0 && putUrls.every((u) => !u.includes("%2F")), `旧斜杠日期记录重试时文件名已替换为 '-' (${putUrls[0] || "无 PUT"})`);
 
 console.log("\n🎉 云端失败路径 probe (403 + 重试) 全部通过");
 await ctx2.close();
