@@ -2558,8 +2558,12 @@
     if (!tid) { callback([]); return; }
     var dirUrl = GH_API + encodeURIComponent(tid);
     fetch(dirUrl, { headers: _ghHeaders() })
-      .then(function(res) { return res.ok ? res.json() : null; })
+      .then(function(res) {
+        if (!res.ok) { callback([], 'HTTP ' + res.status); return null; }
+        return res.json();
+      })
       .then(function(data) {
+        if (data === null) return; // 已在上一棒报错
         if (!Array.isArray(data)) { callback([]); return; }
         var files = data.filter(function(f) { return f.type === 'file' && f.name.endsWith('.json'); });
         if (files.length === 0) { callback([]); return; }
@@ -2581,7 +2585,7 @@
               }
             }).catch(function() { loaded++; if (loaded >= files.length) callback(results); });
         });
-      }).catch(function(err) { callback([]); });
+      }).catch(function(err) { callback([], String(err && err.message || err)); });
   }
 
   function loadHistory() {
@@ -3342,10 +3346,25 @@
     var tokenWrap = document.createElement('div');
     tokenWrap.style.cssText = 'display:none;padding:8px 12px;background:#fffbe6;border-radius:8px;margin-bottom:10px;font-size:12px;';
     tokenWrap.innerHTML = '<div style="color:#b8860b;margin-bottom:6px;">需要 GitHub Token 才能访问云端记录</div>'
-      + '<div style="display:flex;gap:6px;"><input id="cog-gh-token-input" type="password" placeholder="ghp_..." style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">'
+      + '<div style="display:flex;gap:6px;"><input id="cog-gh-token-input" type="password" placeholder="ghp_... 或 github_pat_..." style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">'
       + '<button id="cog-gh-token-save" style="padding:6px 14px;background:#1a1a2e;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">保存</button></div>'
-      + '<div style="color:#999;margin-top:4px;font-size:11px;">创建 token: GitHub Settings → Developer settings → Personal access tokens → Fine-grained tokens → 仅选此仓库 + Contents: Read and Write</div>';
+      + '<div style="color:#999;margin-top:4px;font-size:11px;">创建 token: GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → 仅选 fxs-84/brainmend 仓库 + Contents: Read and Write</div>';
     panel.appendChild(tokenWrap);
+
+    // Token 管理栏: 已存 token 时也显示 (脱敏 + 修改入口), 避免旧 token 失效后无法更换
+    var tokenBar = document.createElement('div');
+    tokenBar.style.cssText = 'display:none;padding:6px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;margin-bottom:10px;font-size:12px;color:#166534;';
+    panel.appendChild(tokenBar);
+    function _renderTokenBar() {
+      var t = '';
+      try { t = localStorage.getItem('cog_gh_token') || ''; } catch(e) {}
+      if (!t) { tokenBar.style.display = 'none'; return; }
+      var masked = t.length > 12 ? t.slice(0, 7) + '****' + t.slice(-4) : '****';
+      tokenBar.innerHTML = '🔑 Token: <span style="font-family:monospace;">' + masked + '</span> <a href="javascript:void 0" id="cog-gh-token-edit" style="color:#1d4ed8;margin-left:8px;">修改</a>';
+      tokenBar.style.display = 'block';
+      var editLink = document.getElementById('cog-gh-token-edit');
+      if (editLink) editLink.addEventListener('click', function() { tokenWrap.style.display = 'block'; });
+    }
 
     var listWrap = document.createElement('div');
     listWrap.style.cssText = 'overflow-y:auto;flex:1;';
@@ -3483,19 +3502,27 @@
       localTab.style.background = '#1a1a2e'; localTab.style.color = '#fff';
       cloudTab.style.background = '#f5f5f5'; cloudTab.style.color = '#999';
       tokenWrap.style.display = 'none';
+      tokenBar.style.display = 'none';
       _renderLocalRows(listWrap, records);
     });
     cloudTab.addEventListener('click', function() {
       if (currentView === 'cloud') return;
       var hasToken = false;
       try { hasToken = !!(localStorage.getItem('cog_gh_token')); } catch(e) {}
-      if (!hasToken) { tokenWrap.style.display = 'block'; listWrap.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#999;">请先设置 GitHub Token</div>'; return; }
+      if (!hasToken) { tokenBar.style.display = 'none'; tokenWrap.style.display = 'block'; listWrap.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#999;">请先设置 GitHub Token</div>'; return; }
       currentView = 'cloud';
       cloudTab.style.background = '#1a1a2e'; cloudTab.style.color = '#fff';
       localTab.style.background = '#f5f5f5'; localTab.style.color = '#999';
       tokenWrap.style.display = 'none';
+      _renderTokenBar();
       listWrap.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#999;">⏳ 加载中...</div>';
-      fetchCloudReports(function(cloudRecords) { _renderCloudRows(listWrap, cloudRecords); });
+      fetchCloudReports(function(cloudRecords, err) {
+        if (err) {
+          listWrap.innerHTML = '<div style="text-align:center;padding:30px 20px;color:#dc2626;font-size:13px;">⚠️ 云端加载失败 (' + err + ')<br><span style="color:#999;font-size:12px;">token 可能已失效或无权限，请点上方「修改」更新</span></div>';
+          return;
+        }
+        _renderCloudRows(listWrap, cloudRecords);
+      });
     });
 
     overlay.appendChild(panel);

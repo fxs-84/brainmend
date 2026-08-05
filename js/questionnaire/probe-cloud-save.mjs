@@ -138,4 +138,37 @@ assert(failErr === "HTTP 403", `重试失败后 _cloudErr 落盘 (${failErr})`);
 assert(dialogs.some((m) => m.includes("HTTP 403") || m.includes("权限")), `失败弹窗包含可读原因: ${dialogs[0] || "(无)"}`);
 
 console.log("\n🎉 云端失败路径 probe (403 + 重试) 全部通过");
+await ctx2.close();
+
+// ==================== 场景 3: 云端 tab — token 管理栏可见 + 401 错误提示 ====================
+const ctx3 = await browser.newContext();
+await ctx3.route("https://api.github.com/**", async (route) => {
+  await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ message: "Bad credentials" }) });
+});
+const p3 = await ctx3.newPage();
+await p3.goto(`${base}/index.html`, { waitUntil: "domcontentloaded" });
+await p3.waitForTimeout(1500);
+await p3.evaluate(([tk, tid]) => {
+  localStorage.setItem("cog_gh_token", tk);
+  localStorage.setItem("cog_therapist_id", tid);
+}, [FAKE_TOKEN, TID]);
+await p3.reload({ waitUntil: "domcontentloaded" });
+await p3.waitForTimeout(1500);
+
+await p3.locator("#page2-cog-report").click();
+await p3.waitForTimeout(600);
+await p3.locator("button", { hasText: "云端记录" }).click();
+await p3.waitForTimeout(1500);
+
+const panelText = await p3.locator("#cog-record-list-overlay").textContent();
+assert(panelText.includes("Token:") && panelText.includes("****"), "已存 token 时显示脱敏 Token 管理栏");
+assert(panelText.includes("HTTP 401"), `401 时云端列表显示具体错误 (实际: ${panelText.slice(0, 120)}...)`);
+
+// 点「修改」→ token 输入框出现
+await p3.locator("#cog-gh-token-edit").click();
+await p3.waitForTimeout(300);
+const tokenInputVisible = await p3.locator("#cog-gh-token-input").isVisible();
+assert(tokenInputVisible, "点「修改」后 token 输入框出现");
+
+console.log("\n🎉 token 管理栏 + 云端错误提示 probe 全部通过");
 await browser.close();
