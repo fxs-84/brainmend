@@ -1924,12 +1924,76 @@
             if (arr.length > 100) arr.splice(0, arr.length - 100);
             _writeRecords(arr);
             // 与认知同链路: 上传云端 (cognitive-report.js 导出的 _uploadToCloud)
+            // 失败原因写回记录 (_cloudErr), 供报告页提示与重试
             if (typeof window._uploadToCloud === 'function') {
-                try { setTimeout(function() { window._uploadToCloud(rec); }, 0); } catch(e) {}
+                try {
+                    setTimeout(function() {
+                        Promise.resolve(window._uploadToCloud(rec)).then(function(res) {
+                            if (res && res.ok === false) {
+                                rec._cloudErr = res.error || 'unknown';
+                                var arr2 = _readRecords();
+                                for (var i = 0; i < arr2.length; i++) { if (arr2[i].id === rec.id) { arr2[i]._cloudErr = rec._cloudErr; break; } }
+                                _writeRecords(arr2);
+                            }
+                        });
+                    }, 0);
+                } catch(e) {}
+            } else {
+                rec._cloudErr = 'no_uploader';
             }
             return rec;
         }
         window._qnrSaveRecord = _qnrSaveRecord;
+
+        // 云端错误码 → 用户可读原因
+        function _qnrCloudErrText(err) {
+            if (!err) return '未知原因';
+            if (err === 'no_token') return '二维码未携带云端密钥 (token)。请治疗师先在「认知报告 → ☁️云端记录」配置 GitHub token，再重新生成二维码。';
+            if (err === 'no_uploader') return '上传模块未加载，请刷新页面后在报告页点「☁️ 重试上传云端」。';
+            if (err.indexOf('HTTP 401') === 0) return '云端密钥已失效 (HTTP 401)，请治疗师更新 GitHub token。';
+            if (err.indexOf('HTTP 403') === 0) return '云端密钥无仓库写入权限 (HTTP 403)，请治疗师检查 token 权限。';
+            if (err.indexOf('HTTP 404') === 0) return '云端仓库或目录不存在 (HTTP 404)，请治疗师检查仓库配置。';
+            if (/fetch|network|Failed|timed out|abort/i.test(err)) return '本机网络无法连接 api.github.com（请求被拦截或超时）。';
+            return err;
+        }
+        // 保存后云端结果检查: 失败时明确提示 (8 秒足够一次 PUT 往返)
+        function _qnrCloudCheck(recId) {
+            var arr = _readRecords();
+            var rec = null;
+            for (var i = 0; i < arr.length; i++) { if (arr[i].id === recId) { rec = arr[i]; break; } }
+            if (!rec) return;
+            if (rec._cloudId) return; // 已同步, 不打扰
+            var err = rec._cloudErr || window._lastCloudError || 'unknown';
+            alert('⚠️ 自评结果未能同步到云端\n\n原因: ' + _qnrCloudErrText(err) + '\n\n结果已保存在本机，网络恢复后可在报告页点「☁️ 重试上传云端」。');
+        }
+        // 报告页"重试上传"按钮逻辑 (自评/认知记录通用)
+        window._qnrRetryCloud = function(recId) {
+            var arr = _readRecords();
+            var rec = null;
+            for (var i = 0; i < arr.length; i++) { if (arr[i].id === recId) { rec = arr[i]; break; } }
+            if (!rec) { alert('未找到本地记录'); return; }
+            if (typeof window._uploadToCloud !== 'function') { alert('上传模块未加载，请刷新页面重试'); return; }
+            Promise.resolve(window._uploadToCloud(rec)).then(function(res) {
+                if (res && res.ok) {
+                    alert('✅ 已同步到云端');
+                    var arr2 = _readRecords();
+                    for (var j = 0; j < arr2.length; j++) {
+                        if (arr2[j].id === recId && arr2[j].type === 'questionnaire') { _qnrRenderReportById(recId); break; }
+                    }
+                } else {
+                    var err = (res && res.error) || 'unknown';
+                    rec._cloudErr = err;
+                    var arr3 = _readRecords();
+                    for (var k = 0; k < arr3.length; k++) { if (arr3[k].id === recId) { arr3[k]._cloudErr = err; break; } }
+                    _writeRecords(arr3);
+                    alert('⚠️ 上传失败\n\n原因: ' + _qnrCloudErrText(err));
+                }
+            });
+        };
+        function _qnrRenderReportById(recId) {
+            var arr = _readRecords();
+            for (var i = 0; i < arr.length; i++) { if (arr[i].id === recId) { window._viewCogReport(i); return; } }
+        }
 
         // 6) 接收 ?return=questionnaire&result=... → 与认知同库保存 + 打开报告
         (function _qnrReturnReceiver(){
@@ -1988,6 +2052,8 @@
                             var arr = _readRecords();
                             var idx = arr.indexOf(rec);
                             window._viewCogReport(idx < 0 ? arr.length - 1 : idx);
+                            // 云端同步结果反馈: 8 秒后检查, 失败则明确提示原因 (不再静默)
+                            setTimeout(function(){ _qnrCloudCheck(rec.id); }, 8000);
                         } else if (tries > 50) {
                             clearInterval(t);
                             alert('报告模块尚未就绪，请稍后点击"认知报告"查看。');
@@ -2090,11 +2156,20 @@
             });
 
             var html = '';
+            // 云端同步状态行 (未同步的本地记录给重试入口, 避免重做 100 题)
+            var cloudLine = '';
+            if (rec._cloudId) {
+                cloudLine = '<div style="font-size:12px;color:#16a34a;margin-top:4px;">☁️ 已同步云端</div>';
+            } else if (rec.id && String(rec.id).indexOf('cloud_') !== 0) {
+                var errHint = rec._cloudErr ? '（上次失败: ' + String(rec._cloudErr).replace(/[<>&"']/g, '') + '）' : '';
+                cloudLine = '<div style="margin-top:6px;"><button onclick="window._qnrRetryCloud(\'' + rec.id + '\')" style="background:#eff6ff;border:1px solid #93c5fd;color:#1d4ed8;font-size:12px;padding:5px 12px;border-radius:999px;cursor:pointer;">☁️ 重试上传云端' + errHint + '</button></div>';
+            }
             // 头部患者卡
             html += '<div style="background:#fff;border-radius:12px;padding:18px 20px;margin-bottom:14px;border-left:4px solid #f5576c;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
                 '<div>' +
                     '<div style="font-size:18px;font-weight:700;color:#0f172a;">' + (p.name || '未知') + ' 的脑区地图 <span style="font-size:12px;color:#94a3b8;font-weight:400;">' + (p.gender||'') + (p.age ? ' · ' + p.age + '岁' : '') + '</span></div>' +
                     '<div style="font-size:12px;color:#94a3b8;margin-top:2px;">' + (rec.date || '') + ' ' + (rec.time || '') + ' · 神经系统状态自评 (100题)</div>' +
+                    cloudLine +
                 '</div>' +
                 '<span style="background:' + sevColor[d.worstSeverity || 'normal'] + ';color:#fff;font-size:13px;font-weight:700;padding:4px 14px;border-radius:999px;">' + (sevLabel[d.worstSeverity] || '正常') + ' · ' + (d.percent != null ? d.percent : 0) + '%</span>' +
             '</div>';

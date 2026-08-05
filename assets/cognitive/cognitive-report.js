@@ -2501,7 +2501,10 @@
   function _ghHeaders() { var t = _ghToken(); if (!t) return null; return { 'Authorization': 'token ' + t, 'Content-Type': 'application/json' }; }
 
   function uploadToCloud(record) {
-    if (!CLOUD_ENABLED || !_ghToken()) return;
+    if (!CLOUD_ENABLED || !_ghToken()) {
+      window._lastCloudError = 'no_token';
+      return Promise.resolve({ ok: false, error: 'no_token' });
+    }
     var tid = _getTherapistId() || _ensureTherapistId();
     var trimmedRaw = {};
     try {
@@ -2522,17 +2525,29 @@
     var fileName = (record.date || 'unknown') + '_' + (record.id || Date.now()) + '.json';
     var path = GH_API + encodeURIComponent(tid) + '/' + encodeURIComponent(fileName);
 
-    fetch(path, { method: 'PUT', headers: _ghHeaders(), body: JSON.stringify({ message: 'upload report: ' + (record.patientInfo && record.patientInfo.name || ''), content: b64 }) })
-    .then(function(res) { return res.ok ? res.json() : null; })
-    .then(function(obj) {
-      if (obj && obj.content && obj.content.sha) {
-        try {
-          var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
-          for (var i = 0; i < records.length; i++) { if (records[i].id === record.id) { records[i]._cloudId = obj.content.sha; break; } }
-          localStorage.setItem('cog_records', JSON.stringify(records));
-        } catch(e2) {}
+    return fetch(path, { method: 'PUT', headers: _ghHeaders(), body: JSON.stringify({ message: 'upload report: ' + (record.patientInfo && record.patientInfo.name || ''), content: b64 }) })
+    .then(function(res) {
+      if (!res.ok) {
+        window._lastCloudError = 'HTTP ' + res.status;
+        return { ok: false, error: 'HTTP ' + res.status };
       }
-    }).catch(function(err) {});
+      return res.json().then(function(obj) {
+        if (obj && obj.content && obj.content.sha) {
+          try {
+            var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
+            for (var i = 0; i < records.length; i++) { if (records[i].id === record.id) { records[i]._cloudId = obj.content.sha; delete records[i]._cloudErr; break; } }
+            localStorage.setItem('cog_records', JSON.stringify(records));
+          } catch(e2) {}
+          window._lastCloudError = '';
+          return { ok: true, sha: obj.content.sha };
+        }
+        window._lastCloudError = 'bad_response';
+        return { ok: false, error: 'bad_response' };
+      });
+    }).catch(function(err) {
+      window._lastCloudError = String(err && err.message || err);
+      return { ok: false, error: window._lastCloudError };
+    });
   }
   // 导出供神经系统自评复用 (自评保存后同步上传云端)
   window._uploadToCloud = uploadToCloud;

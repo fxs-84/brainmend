@@ -96,5 +96,46 @@ assert(put.url.includes(`/data/reports/${TID}/`), `云端路径含治疗师目�
 assert(put.auth === "token " + FAKE_TOKEN, "PUT 携带 Authorization token");
 assert(rec._cloudId === "fake_sha_probe", "本地记录回填 _cloudId (云端同步确认)");
 
-console.log("\n🎉 云端保存链路 probe 全部通过");
+console.log("\n🎉 云端保存链路 probe (成功路径) 全部通过");
+await ctx.close();
+
+// ==================== 场景 2: PUT 失败 (403) → _cloudErr 落盘 + 报告页重试按钮 ====================
+const ctx2 = await browser.newContext();
+await ctx2.route("https://api.github.com/**", async (route) => {
+  await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ message: "Forbidden" }) });
+});
+const p2 = await ctx2.newPage();
+const dialogs = [];
+p2.on("dialog", async (d) => { dialogs.push(d.message()); await d.accept(); });
+
+// 预置: 有 token/tid + 一条未同步的自评记录
+await p2.goto(`${base}/index.html`, { waitUntil: "domcontentloaded" });
+await p2.waitForTimeout(1500);
+await p2.evaluate(([tk, tid]) => {
+  localStorage.setItem("cog_gh_token", tk);
+  localStorage.setItem("cog_therapist_id", tid);
+  localStorage.setItem("cog_records", JSON.stringify([{
+    id: "qnr_probe_fail", date: "2026/8/5", time: "15:00",
+    patientInfo: { name: "失败验证", age: "30", gender: "男", id: "" },
+    type: "questionnaire", overallScore: 40,
+    qnr: { percent: 40, worstSeverity: "mild", burdenGroups: [], byRegion: {}, severityByRegion: {}, groupDefs: [], regionDefs: [], items: {} }
+  }]));
+}, [FAKE_TOKEN, TID]);
+await p2.reload({ waitUntil: "domcontentloaded" });
+await p2.waitForTimeout(1500);
+
+// 打开该记录报告 → 应出现"重试上传云端"按钮
+await p2.evaluate(() => window._viewCogReport(0));
+await p2.waitForTimeout(500);
+const retryBtn = p2.locator("button", { hasText: "重试上传云端" });
+assert(await retryBtn.count() === 1, "未同步记录报告页显示「☁️ 重试上传云端」按钮");
+
+// 点击重试 → 403 → 弹失败原因 + _cloudErr 落盘
+await retryBtn.click();
+await p2.waitForTimeout(1500);
+const failErr = await p2.evaluate(() => (JSON.parse(localStorage.getItem("cog_records") || "[]")[0] || {})._cloudErr);
+assert(failErr === "HTTP 403", `重试失败后 _cloudErr 落盘 (${failErr})`);
+assert(dialogs.some((m) => m.includes("HTTP 403") || m.includes("权限")), `失败弹窗包含可读原因: ${dialogs[0] || "(无)"}`);
+
+console.log("\n🎉 云端失败路径 probe (403 + 重试) 全部通过");
 await browser.close();
