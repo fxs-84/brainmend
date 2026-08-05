@@ -32,7 +32,9 @@ export class Player {
     const loader = new GLTFLoader(manager);
     loader.setDRACOLoader(draco);
     try {
-      const gltf = await loader.loadAsync('../../models/car-harley-v2.glb');
+      // ⚠️ 必须基于 import.meta.url 解析: 相对字符串会被 GLTFLoader 按页面 URL 解析,
+      // 在 Pages 子路径 (/brainmend/) 下会 404. new URL 基于模块 URL 正确指向根 models/
+      const gltf = await loader.loadAsync(new URL('../../models/car-harley-v2.glb', import.meta.url).href);
       const model = gltf.scene;
       // 居中 + 落地（不动 GLB root 自带 X 轴旋转）
       const box = new THREE.Box3().setFromObject(model);

@@ -55,7 +55,8 @@ export class ObstaclePool {
     loader.setDRACOLoader(draco);
     for (let fi = 0; fi < CAR_FILES.length; fi++) {
       const f = CAR_FILES[fi];
-      const gltf = await loader.loadAsync(f);
+      // ⚠️ 基于 import.meta.url 解析, 避免 Pages 子路径 404 (见 player.js 注释)
+      const gltf = await loader.loadAsync(new URL(f, import.meta.url).href);
       const tpl = gltf.scene;
       const box = new THREE.Box3().setFromObject(tpl);
       const center = box.getCenter(new THREE.Vector3());
@@ -159,7 +160,7 @@ export class SceneryPool {
     draco.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
     const loader = new GLTFLoader(manager);
     loader.setDRACOLoader(draco);
-    const gltf = await loader.loadAsync('../../models/car-street-prop-v2.glb');
+    const gltf = await loader.loadAsync(new URL('../../models/car-street-prop-v2.glb', import.meta.url).href);
     const tpl = gltf.scene;
     const box = new THREE.Box3().setFromObject(tpl);
     const center = box.getCenter(new THREE.Vector3());
