@@ -28,7 +28,7 @@ export class Player {
 
   async load(manager) {
     const draco = new DRACOLoader(manager);
-    draco.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
+    draco.setDecoderPath(new URL('./draco/', import.meta.url).href);
     const loader = new GLTFLoader(manager);
     loader.setDRACOLoader(draco);
     try {

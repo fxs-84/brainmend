@@ -50,7 +50,7 @@ export class ObstaclePool {
 
   async load(manager) {
     const draco = new DRACOLoader(manager);
-    draco.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
+    draco.setDecoderPath(new URL('./draco/', import.meta.url).href);
     const loader = new GLTFLoader(manager);
     loader.setDRACOLoader(draco);
     for (let fi = 0; fi < CAR_FILES.length; fi++) {
@@ -157,7 +157,7 @@ export class SceneryPool {
 
   async load(manager) {
     const draco = new DRACOLoader(manager);
-    draco.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
+    draco.setDecoderPath(new URL('./draco/', import.meta.url).href);
     const loader = new GLTFLoader(manager);
     loader.setDRACOLoader(draco);
     const gltf = await loader.loadAsync(new URL('../../models/car-street-prop-v2.glb', import.meta.url).href);
