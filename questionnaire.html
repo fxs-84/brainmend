@@ -391,6 +391,17 @@
   (function(){
     var params = new URLSearchParams(window.location.search);
     var sandbox = params.get('sandbox') === '1';
+
+    // 云端链路: 捕获二维码携带的 token / tid 到 localStorage
+    // (认知评估在 index.html mode=cognitive 分支捕获; 自评入口是本页, 必须自己捕获,
+    //  否则完成跳回 index.html 后 _uploadToCloud 因无 token 静默跳过, 结果不会上传云端)
+    try {
+      var tk = params.get('token');
+      if (tk) localStorage.setItem('cog_gh_token', tk);
+      var tidParam = params.get('tid');
+      if (tidParam) localStorage.setItem('cog_therapist_id', tidParam);
+    } catch(e) {}
+
     var patient = {
       name: params.get('name') || '',
       age: params.get('age') || '',
@@ -510,6 +521,12 @@
           return;
         }
         var target = './index.html?return=questionnaire&result=' + encoded;
+        // 透传 token / tid: index.html 端 cognitive-report.js 从 URL 捕获 token 后才会上传云端,
+        // tid 决定云端目录 (治疗师 ID), 缺了会传到随机目录, 治疗师云端列表看不到
+        var tkOut = params.get('token');
+        if (tkOut) target += '&token=' + encodeURIComponent(tkOut);
+        var tidOut = params.get('tid');
+        if (tidOut) target += '&tid=' + encodeURIComponent(tidOut);
         window.location.href = target;
       });
     });

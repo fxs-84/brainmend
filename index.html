@@ -1935,6 +1935,10 @@
         (function _qnrReturnReceiver(){
             var params = new URLSearchParams(window.location.search);
             if (params.get('return') !== 'questionnaire') return;
+            // 与 mode=cognitive 分支同逻辑: tid 决定云端目录, 必须落 localStorage
+            if (params.get('tid')) {
+                try { localStorage.setItem('cog_therapist_id', params.get('tid')); } catch(e) {}
+            }
             var raw = params.get('result');
             if (!raw) return;
             try {
