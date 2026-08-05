@@ -32,7 +32,7 @@ export class Player {
     const loader = new GLTFLoader(manager);
     loader.setDRACOLoader(draco);
     try {
-      const gltf = await loader.loadAsync('./models/car-harley-v2.glb');
+      const gltf = await loader.loadAsync('../../models/car-harley-v2.glb');
       const model = gltf.scene;
       // 居中 + 落地（不动 GLB root 自带 X 轴旋转）
       const box = new THREE.Box3().setFromObject(model);

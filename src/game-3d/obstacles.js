@@ -8,23 +8,23 @@ import { WorldCurve } from './curve.js';
 // 玩家不换（哈雷）。障碍车用 products 目录里 v3 的多色款式，每类随机抽一款
 const CAR_FILES = [
   // 轿车（5 色）
-  './models/car-sedan-red-v3.glb',
-  './models/car-sedan-blue-v3.glb',
-  './models/car-sedan-green-v3.glb',
-  './models/car-sedan-yellow-v3.glb',
-  './models/car-sedan-gray-v3.glb',
+  '../../models/car-sedan-red-v3.glb',
+  '../../models/car-sedan-blue-v3.glb',
+  '../../models/car-sedan-green-v3.glb',
+  '../../models/car-sedan-yellow-v3.glb',
+  '../../models/car-sedan-gray-v3.glb',
   // SUV（5 色）
-  './models/car-suv-black-v3.glb',
-  './models/car-suv-green-v3.glb',
-  './models/car-suv-silver-v3.glb',
-  './models/car-suv-navy-v3.glb',
-  './models/car-suv-wine-v3.glb',
+  '../../models/car-suv-black-v3.glb',
+  '../../models/car-suv-green-v3.glb',
+  '../../models/car-suv-silver-v3.glb',
+  '../../models/car-suv-navy-v3.glb',
+  '../../models/car-suv-wine-v3.glb',
   // 公交（5 色）
-  './models/car-bus-blue-v3.glb',
-  './models/car-bus-green-v3.glb',
-  './models/car-bus-red-v3.glb',
-  './models/car-bus-white-v3.glb',
-  './models/car-bus-yellow-v3.glb',
+  '../../models/car-bus-blue-v3.glb',
+  '../../models/car-bus-green-v3.glb',
+  '../../models/car-bus-red-v3.glb',
+  '../../models/car-bus-white-v3.glb',
+  '../../models/car-bus-yellow-v3.glb',
 ];
 // 模型原始尺寸过小：轿车 1.09m → 4.4m / SUV 1.09m → 4.6m / 公交 1.13m → 9.0m
 // v3 系列每 5 个同款，scale 索引 = floor(i / 5)
@@ -159,7 +159,7 @@ export class SceneryPool {
     draco.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
     const loader = new GLTFLoader(manager);
     loader.setDRACOLoader(draco);
-    const gltf = await loader.loadAsync('./models/car-street-prop-v2.glb');
+    const gltf = await loader.loadAsync('../../models/car-street-prop-v2.glb');
     const tpl = gltf.scene;
     const box = new THREE.Box3().setFromObject(tpl);
     const center = box.getCenter(new THREE.Vector3());

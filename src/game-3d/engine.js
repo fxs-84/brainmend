@@ -187,10 +187,12 @@ export class Road3DEngine {
     this.gyroInput = { pitch: pitch || 0, yaw: yaw || 0, roll: roll || 0 };
   }
   _readInput() {
-    // 优先用外部 setGyroInput 喂入的数据 (与 2D 引擎一致), 兜底读 window.state
+    // 优先用外部 setGyroInput 喂入的数据 (与 2D 引擎一致), 兜底 window.state 和 window.D
     const g = this.gyroInput || window.state || {};
-    const yaw = Math.max(-1, Math.min(1, (g.yaw || 0) / 35));
-    const pitch = Math.max(-1, Math.min(1, (g.pitch || 0) / 22.5));
+    const yawRaw = (g.yaw != null) ? g.yaw : (window.D ? (window.D.yaw || 0) : 0);
+    const pitchRaw = (g.pitch != null) ? g.pitch : (window.D ? (window.D.pitch || 0) : 0);
+    const yaw = Math.max(-1, Math.min(1, (yawRaw || 0) / 35));
+    const pitch = Math.max(-1, Math.min(1, (pitchRaw || 0) / 22.5));
     return { yaw, pitch };
   }
 
