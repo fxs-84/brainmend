@@ -1936,6 +1936,8 @@
                                 for (var i = 0; i < arr2.length; i++) { if (arr2[i].id === rec.id) { arr2[i]._cloudErr = rec._cloudErr; break; } }
                                 _writeRecords(arr2);
                             }
+                            // 实时刷新打开中的报告页云端状态行
+                            if (typeof window._qnrUpdateCloudLine === 'function') window._qnrUpdateCloudLine(rec.id);
                         });
                     }, 0);
                 } catch(e) {}
@@ -1987,6 +1989,7 @@
                     var arr3 = _readRecords();
                     for (var k = 0; k < arr3.length; k++) { if (arr3[k].id === recId) { arr3[k]._cloudErr = err; break; } }
                     _writeRecords(arr3);
+                    if (typeof window._qnrUpdateCloudLine === 'function') window._qnrUpdateCloudLine(recId);
                     alert('⚠️ 上传失败\n\n原因: ' + _qnrCloudErrText(err));
                 }
             });
@@ -1995,6 +1998,26 @@
             var arr = _readRecords();
             for (var i = 0; i < arr.length; i++) { if (arr[i].id === recId) { window._viewCogReport(i); return; } }
         }
+        // 报告页云端状态行 HTML (同步状态 / 重试按钮)
+        window._qnrCloudLineHtml = function(rec) {
+            if (rec._cloudId) {
+                return '<div style="font-size:12px;color:#16a34a;margin-top:4px;">☁️ 已同步云端</div>';
+            }
+            if (rec.id && String(rec.id).indexOf('cloud_') !== 0) {
+                var errHint = rec._cloudErr ? '（上次失败: ' + String(rec._cloudErr).replace(/[<>&"']/g, '') + '）' : '';
+                return '<div style="margin-top:6px;"><button onclick="window._qnrRetryCloud(\'' + rec.id + '\')" style="background:#eff6ff;border:1px solid #93c5fd;color:#1d4ed8;font-size:12px;padding:5px 12px;border-radius:999px;cursor:pointer;">☁️ 重试上传云端' + errHint + '</button></div>';
+            }
+            return '';
+        };
+        // 上传完成后实时刷新报告页状态行 (报告是静态渲染的, 不刷新会一直显示旧状态)
+        window._qnrUpdateCloudLine = function(recId) {
+            var el = document.getElementById('qnr-cloud-status');
+            if (!el) return;
+            var arr = _readRecords();
+            for (var i = 0; i < arr.length; i++) {
+                if (arr[i].id === recId) { el.innerHTML = window._qnrCloudLineHtml(arr[i]); return; }
+            }
+        };
 
         // 6) 接收 ?return=questionnaire&result=... → 与认知同库保存 + 打开报告
         (function _qnrReturnReceiver(){
@@ -2157,14 +2180,10 @@
             });
 
             var html = '';
-            // 云端同步状态行 (未同步的本地记录给重试入口, 避免重做 100 题)
-            var cloudLine = '';
-            if (rec._cloudId) {
-                cloudLine = '<div style="font-size:12px;color:#16a34a;margin-top:4px;">☁️ 已同步云端</div>';
-            } else if (rec.id && String(rec.id).indexOf('cloud_') !== 0) {
-                var errHint = rec._cloudErr ? '（上次失败: ' + String(rec._cloudErr).replace(/[<>&"']/g, '') + '）' : '';
-                cloudLine = '<div style="margin-top:6px;"><button onclick="window._qnrRetryCloud(\'' + rec.id + '\')" style="background:#eff6ff;border:1px solid #93c5fd;color:#1d4ed8;font-size:12px;padding:5px 12px;border-radius:999px;cursor:pointer;">☁️ 重试上传云端' + errHint + '</button></div>';
-            }
+            // 云端同步状态行 (未同步的本地记录给重试入口; id 供上传完成后实时刷新)
+            var cloudLine = '<div id="qnr-cloud-status">' +
+                (typeof window._qnrCloudLineHtml === 'function' ? window._qnrCloudLineHtml(rec) : '') +
+                '</div>';
             // 头部患者卡
             html += '<div style="background:#fff;border-radius:12px;padding:18px 20px;margin-bottom:14px;border-left:4px solid #f5576c;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
                 '<div>' +

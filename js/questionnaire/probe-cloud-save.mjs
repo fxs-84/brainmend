@@ -174,4 +174,89 @@ const tokenInputVisible = await p3.locator("#cog-gh-token-input").isVisible();
 assert(tokenInputVisible, "点「修改」后 token 输入框出现");
 
 console.log("\n🎉 token 管理栏 + 云端错误提示 probe 全部通过");
+await ctx3.close();
+
+// ==================== 场景 4: 重试幂等 — 文件已存在 (422 sha) → 自动取 sha 覆盖更新 ====================
+const ctx4 = await browser.newContext();
+let putCount = 0;
+await ctx4.route("https://api.github.com/**", async (route) => {
+  const req = route.request();
+  const url = req.url();
+  const bodyText = req.postData() || "";
+  const json = (status, obj) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(obj) });
+  if (req.method() === "PUT" && bodyText.includes('"sha"')) return json(201, { content: { sha: "updated_sha" } });
+  if (req.method() === "PUT") { putCount++; return json(422, { message: 'Invalid request. "sha" wasn\'t supplied.' }); }
+  if (req.method() === "GET" && url.includes("qnr_probe_422")) return json(200, { sha: "existing_sha" });
+  return json(404, { message: "Not Found" });
+});
+const p4 = await ctx4.newPage();
+const dialogs4 = [];
+p4.on("dialog", async (d) => { dialogs4.push(d.message()); await d.accept(); });
+await p4.goto(`${base}/index.html`, { waitUntil: "domcontentloaded" });
+await p4.waitForTimeout(1500);
+await p4.evaluate(([tk, tid]) => {
+  localStorage.setItem("cog_gh_token", tk);
+  localStorage.setItem("cog_therapist_id", tid);
+  localStorage.setItem("cog_records", JSON.stringify([{
+    id: "qnr_probe_422", date: "2026/8/5", time: "17:42",
+    patientInfo: { name: "幂等验证", age: "42", gender: "男", id: "" },
+    type: "questionnaire", overallScore: 7.3,
+    qnr: { percent: 7.3, worstSeverity: "normal", burdenGroups: [], byRegion: {}, severityByRegion: {}, groupDefs: [], regionDefs: [], items: {} }
+  }]));
+}, [FAKE_TOKEN, TID]);
+await p4.reload({ waitUntil: "domcontentloaded" });
+await p4.waitForTimeout(1500);
+await p4.evaluate(() => window._viewCogReport(0));
+await p4.waitForTimeout(500);
+await p4.locator("button", { hasText: "重试上传云端" }).click();
+await p4.waitForTimeout(2000);
+const rec4 = await p4.evaluate(() => JSON.parse(localStorage.getItem("cog_records") || "[]")[0] || {});
+assert(putCount === 1, `首次 PUT 返回 422 (${putCount} 次)`);
+assert(rec4._cloudId === "updated_sha", `422 后自动取 sha 覆盖更新成功 (_cloudId=${rec4._cloudId})`);
+assert(!rec4._cloudErr, "幂等成功后 _cloudErr 已清除");
+assert(dialogs4.some((m) => m.includes("已同步")), `弹窗提示已同步: ${dialogs4[0] || "(无)"}`);
+const line4 = await p4.locator("#qnr-cloud-status").textContent();
+assert(line4.includes("已同步云端"), "报告页状态行实时刷新为「已同步云端」");
+console.log("\n🎉 重试幂等 (422 sha → 覆盖更新) probe 全部通过");
+await ctx4.close();
+
+// ==================== 场景 5: 云端列表递归嵌套目录 (早期斜杠日期 default/2026/8/) ====================
+const ctx5 = await browser.newContext();
+const GH_BASE = "https://api.github.com/repos/fxs-84/brainmend/contents/data/reports";
+const mkRec = (name) => Buffer.from(JSON.stringify({
+  id: "qnr_" + name, date: "2026-08-05", time: "17:00",
+  patientInfo: { name, age: "40", gender: "男", id: "" },
+  type: "questionnaire", overallScore: 10, createdAt: "2026-08-05T09:00:00Z",
+  qnr: { percent: 10, worstSeverity: "normal", burdenGroups: [], byRegion: {}, severityByRegion: {}, groupDefs: [], regionDefs: [], items: {} }
+})).toString("base64");
+await ctx5.route("https://api.github.com/**", async (route) => {
+  const url = route.request().url();
+  const json = (obj) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(obj) });
+  if (url.endsWith("/data/reports/" + TID)) return json([
+    { type: "file", name: "2026-08-05_qnr_flat.json", url: GH_BASE + "/" + TID + "/flat", sha: "sha_flat" },
+    { type: "dir", name: "2026", url: GH_BASE + "/" + TID + "/2026" },
+  ]);
+  if (url.endsWith(TID + "/2026")) return json([{ type: "dir", name: "8", url: GH_BASE + "/" + TID + "/2026/8" }]);
+  if (url.endsWith(TID + "/2026/8")) return json([{ type: "file", name: "5_qnr_nested.json", url: GH_BASE + "/" + TID + "/nested", sha: "sha_nested" }]);
+  if (url.endsWith("/flat")) return json({ content: mkRec("平铺患者"), sha: "sha_flat" });
+  if (url.endsWith("/nested")) return json({ content: mkRec("嵌套患者"), sha: "sha_nested" });
+  return route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
+});
+const p5 = await ctx5.newPage();
+await p5.goto(`${base}/index.html`, { waitUntil: "domcontentloaded" });
+await p5.waitForTimeout(1500);
+await p5.evaluate(([tk, tid]) => {
+  localStorage.setItem("cog_gh_token", tk);
+  localStorage.setItem("cog_therapist_id", tid);
+}, [FAKE_TOKEN, TID]);
+await p5.reload({ waitUntil: "domcontentloaded" });
+await p5.waitForTimeout(1500);
+await p5.locator("#page2-cog-report").click();
+await p5.waitForTimeout(600);
+await p5.locator("button", { hasText: "云端记录" }).click();
+await p5.waitForTimeout(2000);
+const cloudListText = await p5.locator("#cog-record-list-overlay").textContent();
+assert(cloudListText.includes("平铺患者"), "云端列表显示平铺文件记录");
+assert(cloudListText.includes("嵌套患者"), "云端列表递归显示嵌套目录 (2026/8/) 里的记录");
+console.log("\n🎉 云端列表递归嵌套目录 probe 全部通过");
 await browser.close();

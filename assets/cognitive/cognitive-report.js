@@ -2526,34 +2526,59 @@
     // 统一替换为 '-' (与认知记录 "2026-08-05" 格式一致)
     var fileName = ((record.date || 'unknown') + '_' + (record.id || Date.now()) + '.json').replace(/\//g, '-');
     var path = GH_API + encodeURIComponent(tid) + '/' + encodeURIComponent(fileName);
+    var patientName = (record.patientInfo && record.patientInfo.name) || '';
 
-    return fetch(path, { method: 'PUT', headers: _ghHeaders(), body: JSON.stringify({ message: 'upload report: ' + (record.patientInfo && record.patientInfo.name || ''), content: b64 }) })
-    .then(function(res) {
+    function _markSynced(sha) {
+      try {
+        var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
+        for (var i = 0; i < records.length; i++) { if (records[i].id === record.id) { records[i]._cloudId = sha; delete records[i]._cloudErr; break; } }
+        localStorage.setItem('cog_records', JSON.stringify(records));
+      } catch(e2) {}
+    }
+    function _putBody(sha) {
+      var body = { message: (sha ? 'update' : 'upload') + ' report: ' + patientName, content: b64 };
+      if (sha) body.sha = sha;
+      return JSON.stringify(body);
+    }
+    function _handleRes(res, isUpdate) {
       if (!res.ok) {
         // 带上 GitHub 返回的具体 message (如 "Invalid request"), 便于定位
         return res.json().catch(function() { return null; }).then(function(body) {
           var detail = body && body.message ? ': ' + body.message : '';
+          // 文件已存在 ("sha" wasn't supplied): 取已有文件 sha 覆盖更新, 重试幂等
+          if (res.status === 422 && !isUpdate && body && /sha/i.test(body.message || '')) {
+            return fetch(path, { headers: _ghHeaders() })
+              .then(function(gr) { return gr.ok ? gr.json() : null; })
+              .then(function(fileObj) {
+                if (!fileObj || !fileObj.sha) {
+                  window._lastCloudError = 'HTTP 422' + detail;
+                  return { ok: false, error: 'HTTP 422' + detail };
+                }
+                return fetch(path, { method: 'PUT', headers: _ghHeaders(), body: _putBody(fileObj.sha) })
+                  .then(function(res2) { return _handleRes(res2, true); });
+              });
+          }
           window._lastCloudError = 'HTTP ' + res.status + detail;
           return { ok: false, error: 'HTTP ' + res.status + detail };
         });
       }
       return res.json().then(function(obj) {
         if (obj && obj.content && obj.content.sha) {
-          try {
-            var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
-            for (var i = 0; i < records.length; i++) { if (records[i].id === record.id) { records[i]._cloudId = obj.content.sha; delete records[i]._cloudErr; break; } }
-            localStorage.setItem('cog_records', JSON.stringify(records));
-          } catch(e2) {}
+          _markSynced(obj.content.sha);
           window._lastCloudError = '';
           return { ok: true, sha: obj.content.sha };
         }
         window._lastCloudError = 'bad_response';
         return { ok: false, error: 'bad_response' };
       });
-    }).catch(function(err) {
-      window._lastCloudError = String(err && err.message || err);
-      return { ok: false, error: window._lastCloudError };
-    });
+    }
+
+    return fetch(path, { method: 'PUT', headers: _ghHeaders(), body: _putBody() })
+      .then(function(res) { return _handleRes(res, false); })
+      .catch(function(err) {
+        window._lastCloudError = String(err && err.message || err);
+        return { ok: false, error: window._lastCloudError };
+      });
   }
   // 导出供神经系统自评复用 (自评保存后同步上传云端)
   window._uploadToCloud = uploadToCloud;
@@ -2562,36 +2587,55 @@
     if (!CLOUD_ENABLED) { callback([]); return; }
     var tid = _getTherapistId();
     if (!tid) { callback([]); return; }
-    var dirUrl = GH_API + encodeURIComponent(tid);
-    fetch(dirUrl, { headers: _ghHeaders() })
-      .then(function(res) {
-        if (!res.ok) { callback([], 'HTTP ' + res.status); return null; }
-        return res.json();
-      })
-      .then(function(data) {
-        if (data === null) return; // 已在上一棒报错
-        if (!Array.isArray(data)) { callback([]); return; }
-        var files = data.filter(function(f) { return f.type === 'file' && f.name.endsWith('.json'); });
-        if (files.length === 0) { callback([]); return; }
-        var results = []; var loaded = 0;
-        files.forEach(function(f) {
-          fetch(f.url, { headers: _ghHeaders() })
-            .then(function(res) { return res.ok ? res.json() : null; })
-            .then(function(fileData) {
-              loaded++;
-              if (fileData && fileData.content) {
-                try {
-                  var r = JSON.parse(decodeURIComponent(escape(atob(fileData.content))));
-                  results.push({ id: 'cloud_' + (r.id || f.sha), date: r.date, time: r.time, patientInfo: r.patientInfo || {}, normalizedScores: r.normalizedScores || {}, rawScores: r.rawScores || {}, brainRegions: r.brainRegions || {}, riskIndex: r.riskIndex, overallScore: r.overallScore, isQuick6: !!r.isQuick6, type: r.type || '', qnr: r.qnr || null, _isCloud: true, _cloudId: f.sha, _cloudCreatedAt: new Date(r.createdAt || 0).getTime() });
-                } catch(e2) {}
-              }
-              if (loaded >= files.length) {
-                results.sort(function(a, b) { return (b._cloudCreatedAt || 0) - (a._cloudCreatedAt || 0); });
-                callback(results);
-              }
-            }).catch(function() { loaded++; if (loaded >= files.length) callback(results); });
-        });
-      }).catch(function(err) { callback([], String(err && err.message || err)); });
+    // 递归收集目录下所有 .json 文件条目 (兼容早期斜杠日期文件名产生的嵌套目录, 如 default/2026/8/)
+    function _listFiles(url, depth, out, done) {
+      fetch(url, { headers: _ghHeaders() })
+        .then(function(res) {
+          if (!res.ok) { done(depth === 0 ? 'HTTP ' + res.status : null); return null; }
+          return res.json();
+        })
+        .then(function(data) {
+          if (data === null) return; // 已在上一棒调 done
+          if (!Array.isArray(data)) { done(null); return; }
+          data.forEach(function(f) { if (f.type === 'file' && f.name.endsWith('.json')) out.push(f); });
+          var dirs = data.filter(function(f) { return f.type === 'dir'; });
+          if (!dirs.length || depth >= 3) { done(null); return; }
+          var pending = dirs.length;
+          dirs.forEach(function(d) {
+            _listFiles(d.url, depth + 1, out, function() {
+              pending--;
+              if (pending === 0) done(null);
+            });
+          });
+        })
+        .catch(function(err) { done(depth === 0 ? String(err && err.message || err) : null); });
+    }
+    var files = [];
+    var doneCalled = false;
+    _listFiles(GH_API + encodeURIComponent(tid), 0, files, function(err) {
+      if (doneCalled) return;
+      doneCalled = true;
+      if (err) { callback([], err); return; }
+      if (files.length === 0) { callback([]); return; }
+      var results = []; var loaded = 0;
+      files.forEach(function(f) {
+        fetch(f.url, { headers: _ghHeaders() })
+          .then(function(res) { return res.ok ? res.json() : null; })
+          .then(function(fileData) {
+            loaded++;
+            if (fileData && fileData.content) {
+              try {
+                var r = JSON.parse(decodeURIComponent(escape(atob(fileData.content))));
+                results.push({ id: 'cloud_' + (r.id || f.sha), date: r.date, time: r.time, patientInfo: r.patientInfo || {}, normalizedScores: r.normalizedScores || {}, rawScores: r.rawScores || {}, brainRegions: r.brainRegions || {}, riskIndex: r.riskIndex, overallScore: r.overallScore, isQuick6: !!r.isQuick6, type: r.type || '', qnr: r.qnr || null, _isCloud: true, _cloudId: f.sha, _cloudCreatedAt: new Date(r.createdAt || 0).getTime() });
+              } catch(e2) {}
+            }
+            if (loaded >= files.length) {
+              results.sort(function(a, b) { return (b._cloudCreatedAt || 0) - (a._cloudCreatedAt || 0); });
+              callback(results);
+            }
+          }).catch(function() { loaded++; if (loaded >= files.length) callback(results); });
+      });
+    });
   }
 
   function loadHistory() {
