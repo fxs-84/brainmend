@@ -2063,39 +2063,87 @@
             }
         };
 
-        // ===== 神经系统自评 · 报告导出 =====
-        // 导出为 JSON 文件 (含完整 qnr payload + 患者信息 + 元数据), 文件名格式:
-        //   神经系统自评报告_<患者姓名>_<日期>_<id>.json
-        // 安全: 仅本机下载, 不外发; 含 _cloudId / _cloudErr, 方便治疗师核对云端状态
-        window._qnrExportReport = function(recId) {
-            var arr = _readRecords();
-            var rec = null;
-            for (var i = 0; i < arr.length; i++) if (arr[i].id === recId) { rec = arr[i]; break; }
-            if (!rec) { alert('未找到该记录'); return; }
+        // ===== 神经系统自评 · 报告导出 (PDF) =====
+        // 复用 cognitive-report.js 同款 html2canvas + jsPDF 链路 (assets/vendor/* 已在 index.html 加载)
+        // A4 纵向 + 头页(患者信息 + 云端状态) + 内容页(4 组 16 分区), 多页自动分页
+        // 文件名: 神经系统自评报告_<姓名>_<日期>.pdf
+        window._qnrExportReport = async function(recId) {
+            // 找按钮 (做禁用 + 进度提示)
+            var btn = document.querySelector('button[onclick*="_qnrExportReport(\'' + recId + '\')"]');
+            var setBtn = function(text, disabled) {
+                if (btn) { btn.disabled = disabled; btn.textContent = text; }
+            };
+            var origText = btn ? btn.textContent : '📤 导出报告';
+
             try {
-                var payload = {
-                    exportedAt: new Date().toISOString(),
-                    source: '神经系统状态自评 (cervical-spine-rehab-game)',
-                    record: rec
-                };
-                var json = JSON.stringify(payload, null, 2);
-                // 用 UTF-8 编码 + BOM (兼容 Windows 记事本打开中文不乱码)
-                var blob = new Blob(['﻿' + json], { type: 'application/json;charset=utf-8' });
-                var url = URL.createObjectURL(blob);
-                var a = document.createElement('a');
+                if (typeof html2canvas !== 'function') throw new Error('html2canvas 未加载,请刷新页面重试');
+                if (!window.jspdf || !window.jspdf.jsPDF) throw new Error('jsPDF 未加载,请刷新页面重试');
+
+                var arr = _readRecords();
+                var rec = null;
+                for (var i = 0; i < arr.length; i++) if (arr[i].id === recId) { rec = arr[i]; break; }
+                if (!rec) throw new Error('未找到该记录');
+
+                var body = document.getElementById('cog-report-body');
+                if (!body) throw new Error('报告内容不存在');
+
+                setBtn('⏳ 准备中...', true);
+                await new Promise(function(r) { setTimeout(r, 50); }); // 让按钮渲染一下
+
+                // 构造离屏 wrap (克隆报告 DOM, 强制宽度 794px ≈ A4 210mm @96dpi)
+                var wrap = document.createElement('div');
+                wrap.style.cssText = 'position:absolute;left:-9999px;top:0;width:794px;padding:24px;background:#fff;font-family:"PingFang SC","Microsoft YaHei",sans-serif;color:#0f172a;box-sizing:border-box;';
+                wrap.innerHTML = body.innerHTML;
+                // 强制 wrap 内颜色为打印友好 (避免深色背景丢分)
+                wrap.querySelectorAll('[style*="background:#1a"]').forEach(function(el) {
+                    el.style.background = '#fff';
+                    el.style.color = '#0f172a';
+                });
+                document.body.appendChild(wrap);
+
+                setBtn('⏳ 截图中...', true);
+                var canvas = await html2canvas(wrap, {
+                    scale: 1.6,
+                    backgroundColor: '#ffffff',
+                    logging: false,
+                    useCORS: true
+                });
+                document.body.removeChild(wrap);
+
+                setBtn('⏳ 生成 PDF...', true);
+                // A4 纵向, 单位 mm
+                var pdf = new window.jspdf.jsPDF('p', 'mm', 'a4');
+                var pdfW = pdf.internal.pageSize.getWidth();   // 210
+                var pdfH = pdf.internal.pageSize.getHeight();  // 297
+                var margin = 10;
+                var imgW = pdfW - margin * 2;
+                // canvas → image
+                var imgData = canvas.toDataURL('image/jpeg', 0.92);
+                var imgH = (canvas.height * imgW) / canvas.width;
+                // 多页分页
+                var pageH = pdfH - margin * 2;
+                if (imgH <= pageH) {
+                    pdf.addImage(imgData, 'JPEG', margin, margin, imgW, imgH);
+                } else {
+                    var y = 0;
+                    while (y < imgH) {
+                        pdf.addImage(imgData, 'JPEG', margin, margin - y, imgW, imgH);
+                        y += pageH;
+                        if (y < imgH) pdf.addPage();
+                    }
+                }
+
                 var name = (rec.patientInfo && rec.patientInfo.name) || '未知';
                 var safeName = String(name).replace(/[\\/:*?"<>|]/g, '_');
                 var dateStr = (rec.date || 'unknown').replace(/\//g, '-');
-                a.href = url;
-                a.download = '神经系统自评报告_' + safeName + '_' + dateStr + '_' + rec.id + '.json';
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(function() {
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                }, 100);
+                pdf.save('神经系统自评报告_' + safeName + '_' + dateStr + '.pdf');
+
+                setBtn('✅ 已导出', false);
+                setTimeout(function() { setBtn(origText, false); }, 1500);
             } catch (e) {
-                alert('导出失败: ' + (e && e.message || e));
+                setBtn('❌ 导出失败', false);
+                setTimeout(function() { setBtn(origText, false); }, 2000);
+                alert('PDF 导出失败: ' + (e && e.message || e));
             }
         };
 
@@ -2305,9 +2353,9 @@
             });
             // 免责
             html += '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:12px 16px;font-size:12px;color:#92400e;line-height:1.7;">⚠️ 本评估用于一般健康教育，结果属于评估提示，不等同于医学诊断。如结果异常或症状持续，请到正规医疗机构进一步评估。</div>';
-            // 操作栏: 导出报告 + 重新测评 + 返回 (无"保存到评估报告"按钮 — 数据已在生成报告时自动同步)
+            // 操作栏: 导出 PDF + 打印 (无"保存到评估报告"按钮 — 数据已在生成报告时自动同步)
             html += '<div style="display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap;">' +
-                '<button onclick="window._qnrExportReport(\'' + rec.id + '\')" style="background:linear-gradient(135deg,#0d9488,#0284c7);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(13,148,136,0.25);">📤 导出报告</button>' +
+                '<button onclick="window._qnrExportReport(\'' + rec.id + '\')" style="background:linear-gradient(135deg,#0d9488,#0284c7);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(13,148,136,0.25);">📄 导出 PDF</button>' +
                 '<button onclick="window.print()" style="background:#fff;color:#334155;border:1.5px solid #cbd5e1;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;">🖨️ 打印</button>' +
             '</div>';
             body.innerHTML = html;

@@ -135,12 +135,20 @@ if (!reportText.includes("前额叶") || !reportText.includes("报警系统") ||
 const regionRows = await pp.locator("#cog-report-body [style*='border-top:1px solid #f1f5f9']").count();
 console.log(`✅ 报告自动打开: 4 组渲染正常 (${regionRows} 行分区)`);
 
-// ===== 新增验证: 报告页有「导出」按钮 + 持久化云端状态行 =====
-// 注: 旧版 #cog-report-footer 含 cog-report-close-btn, 新版多了「导出报告」+「打印」按钮
-const exportBtn = pp.locator('button:has-text("导出报告")');
-const exportVisible = await exportBtn.isVisible().catch(() => false);
-if (!exportVisible) throw new Error("报告页缺少「📤 导出报告」按钮");
-console.log("✅ 报告页有「📤 导出报告」按钮 (符合新流程: 不要保存按钮, 只要导出)");
+// ===== 新增验证: 报告页有「导出 PDF」按钮 + 持久化云端状态行 =====
+// 注: 旧版 #cog-report-footer 含 cog-report-close-btn, 新版多了「导出 PDF」+「打印」按钮
+const exportBtn = pp.locator('button:has-text("导出 PDF")');
+const exportCount = await exportBtn.count();
+const exportVisible = exportCount > 0 ? await exportBtn.first().isVisible().catch(() => false) : false;
+if (!exportVisible) {
+  // 调试: 把报告 body 里所有 button 列出来
+  const allBtns = await pp.evaluate(() => {
+    const btns = Array.from(document.querySelectorAll('#cog-report-body button'));
+    return btns.map(b => b.textContent.replace(/[-‍﻿]/g, '').trim());
+  });
+  throw new Error("报告页缺少「📄 导出 PDF」按钮 (debug buttons=" + JSON.stringify(allBtns) + ")");
+}
+console.log("✅ 报告页有「📄 导出 PDF」按钮 (符合新流程: 不要保存按钮, 只要导出)");
 
 // 持久化云端状态行: 应显示「正在同步」/「已同步」/「同步失败」(三选一)
 const cloudLine = pp.locator("#qnr-cloud-status");
