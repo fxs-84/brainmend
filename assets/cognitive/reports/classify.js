@@ -88,14 +88,19 @@ export function normalizeCloudRecord(raw, file, fileData) {
 
 /**
  * 校验 GitHub 文件路径是否在 data/reports/ 下且为 .json (防越界, 防误删).
+ * 加固: 拒绝反斜杠、控制字符、双斜杠、隐藏文件段, 防止跨平台路径解释差异.
  * @param {any} path
  * @returns {boolean}
  */
 export function isDeletableCloudPath(path) {
   if (typeof path !== 'string' || !path) return false;
-  if (path.includes('..')) return false;
+  if (path.includes('..') || path.includes('\\')) return false;
+  if (/[\x00-\x1f]/.test(path)) return false;
   if (!path.startsWith('data/reports/')) return false;
+  if (path.includes('//')) return false;
   if (!path.endsWith('.json')) return false;
+  // 拒绝隐藏文件段 (如 .json, .git)
+  if (path.split('/').some(function(seg) { return seg.startsWith('.'); })) return false;
   return true;
 }
 

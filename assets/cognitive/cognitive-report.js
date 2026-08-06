@@ -972,9 +972,9 @@ import {
     // 患者信息 (独立一行: 姓名/年龄/性别 + 测试时间)
     html += '<div style="background:#fff;border-radius:8px;padding:10px 18px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#555;box-shadow:0 1px 4px rgba(0,0,0,0.05);">';
     html += '<div style="display:flex;gap:24px;">';
-    html += '<div>姓名: <b style="color:#222;">'+patientInfo.name+'</b></div>';
-    html += '<div>年龄: <b style="color:#222;">'+(patientInfo.age || '—')+'</b></div>';
-    html += '<div>性别: <b style="color:#222;">'+(patientInfo.gender || '—')+'</b></div>';
+    html += '<div>姓名: <b style="color:#222;">'+_escHtml(patientInfo.name)+'</b></div>';
+    html += '<div>年龄: <b style="color:#222;">'+_escHtml(patientInfo.age || '—')+'</b></div>';
+    html += '<div>性别: <b style="color:#222;">'+_escHtml(patientInfo.gender || '—')+'</b></div>';
     html += '</div>';
     html += '<div style="color:#888;">测试时间: <b style="color:#555;">'+dateStr+' '+timeStr+'</b></div>';
     html += '</div>';
@@ -3615,7 +3615,7 @@ import {
         empty.innerHTML = '<div style="font-size:48px;margin-bottom:12px;">☁️</div>'
           + '<div style="font-size:15px;color:#999;">云端暂无评估报告</div>'
           + '<div style="font-size:12px;margin-top:6px;color:#bbb;">完成认知测试或神经系统自评后会自动同步到云端</div>'
-          + '<div style="font-size:11px;margin-top:12px;color:#aaa;">治疗师 ID: ' + tid + '</div>';
+          + '<div style="font-size:11px;margin-top:12px;color:#aaa;">治疗师 ID: ' + _escHtml(tid) + '</div>';
         wrap.appendChild(empty); return;
       }
       var grouped = classifyByKind(cloudRecs);
@@ -3678,7 +3678,7 @@ import {
         empty.innerHTML = '<div style="font-size:48px;margin-bottom:12px;">☁️</div>'
           + '<div style="font-size:15px;color:#999;">云端暂无评估报告</div>'
           + '<div style="font-size:12px;margin-top:6px;color:#bbb;">完成认知测试或神经系统自评后会自动同步到云端</div>'
-          + '<div style="font-size:11px;margin-top:12px;color:#aaa;">治疗师 ID: ' + tid + '</div>';
+          + '<div style="font-size:11px;margin-top:12px;color:#aaa;">治疗师 ID: ' + _escHtml(tid) + '</div>';
         wrap.appendChild(empty);
       }
     }
@@ -3755,7 +3755,7 @@ import {
       listWrap.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#999;">⏳ 加载中...</div>';
       fetchCloudReports(function(cloudRecords, err) {
         if (err) {
-          listWrap.innerHTML = '<div style="text-align:center;padding:30px 20px;color:#dc2626;font-size:13px;">⚠️ 云端加载失败 (' + err + ')<br><span style="color:#999;font-size:12px;">token 可能已失效或无权限，请点上方「修改」更新</span></div>';
+          listWrap.innerHTML = '<div style="text-align:center;padding:30px 20px;color:#dc2626;font-size:13px;">⚠️ 云端加载失败 (' + _escHtml(String(err)) + ')<br><span style="color:#999;font-size:12px;">token 可能已失效或无权限，请点上方「修改」更新</span></div>';
           return;
         }
         _renderCloudRows(listWrap, cloudRecords);
