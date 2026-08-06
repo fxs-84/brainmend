@@ -20,20 +20,51 @@ afterEach(() => { restoreFetch(originalFetch); });
 
 describe('deleteCloudReport', () => {
   test('成功删除 → 调用 DELETE 方法, URL 使用 _cloudPath, body 含 sha 与 message', async () => {
+    // 测试用 baseUrl 末尾为 /contents/ (不含 data/reports/), 模拟 _cloudPath 完整路径
+    const testBase = 'https://api.github.com/repos/fxs-84/brainmend/contents/';
+    const testRec = {
+      _isCloud: true,
+      _cloudId: 'sha_abc',
+      _cloudPath: 'data/reports/th_x/2026-08-06_cog_abc.json',  // 完整路径
+      id: 'cog_abc',
+      patientInfo: { name: '张三' }
+    };
     const calls = mockFetch([
-      [/contents\/data\/reports\/th_x\/2026-08-06_cog_abc\.json/, makeResponse(200, { content: { sha: 'new_sha' } })]
+      [/contents\/th_x\/2026-08-06_cog_abc\.json/, makeResponse(200, { content: { sha: 'new_sha' } })]
     ]);
-    const res = await deleteCloudReport(CLOUD_REC, { token: TOKEN, baseUrl: BASE });
+    const res = await deleteCloudReport(testRec, { token: TOKEN, baseUrl: testBase });
     assert.equal(res.ok, true);
     const [req] = calls();
     assert.equal(req.init.method, 'DELETE');
-    assert.match(req.url, /contents\/data\/reports\/th_x\/2026-08-06_cog_abc\.json/);
+    assert.match(req.url, /contents\/th_x\/2026-08-06_cog_abc\.json/);
     assert.match(req.url, /ref=main/);
     assert.equal(req.init.headers.Authorization, 'token ' + TOKEN);
     const body = JSON.parse(req.init.body);
     assert.equal(body.sha, 'sha_abc');
     assert.match(body.message, /delete report/);
     assert.match(body.message, /张三/);
+  });
+
+  test('修复 baseUrl/_cloudPath 重复拼接 bug: 生产 baseUrl 含 data/reports/ 时不重复', async () => {
+    // 模拟生产环境: baseUrl 末尾是 /contents/data/reports/, _cloudPath 也以 data/reports/ 开头
+    const prodBase = 'https://api.github.com/repos/fxs-84/brainmend/contents/data/reports/';
+    const prodRec = {
+      _isCloud: true,
+      _cloudId: 'sha_prod',
+      _cloudPath: 'data/reports/th_default/2026-08-06_test_delete_001.json',
+      id: 'test_delete_001',
+      patientInfo: { name: '测试' }
+    };
+    const calls = mockFetch([
+      [/contents\/data\/reports\/th_default\/2026-08-06_test_delete_001\.json/, makeResponse(200, { content: { sha: 'new' } })]
+    ]);
+    const res = await deleteCloudReport(prodRec, { token: TOKEN, baseUrl: prodBase });
+    assert.equal(res.ok, true);
+    const [req] = calls();
+    // 关键断言: URL 不能有 data/reports/ 重复
+    const matchCount = (req.url.match(/data\/reports\//g) || []).length;
+    assert.equal(matchCount, 1, 'URL 中 data/reports/ 只应出现 1 次, 实际: ' + matchCount + ', URL: ' + req.url);
+    assert.match(req.url, /contents\/data\/reports\/th_default\/2026-08-06_test_delete_001\.json/);
   });
 
   test('缺少 token → 返回 {ok:false, error:"no_token"}, 不发请求', async () => {

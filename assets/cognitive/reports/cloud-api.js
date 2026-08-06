@@ -32,7 +32,15 @@ export async function deleteCloudReport(record, deps) {
   if (!record._cloudId) return { ok: false, error: 'missing_sha' };
   if (!isDeletableCloudPath(record._cloudPath)) return { ok: false, error: 'invalid_path' };
 
-  const path = record._cloudPath;
+  // 修复 baseUrl + _cloudPath 重复拼接 bug:
+  //   生产环境 baseUrl = 'https://api.github.com/.../contents/data/reports/'
+  //   _cloudPath = 'data/reports/th_default/2026-08-06_xxx.json'
+  //   直接拼接会得到 .../data/reports/data/reports/... (404)
+  //   正确做法: 去掉 _cloudPath 的 'data/reports/' 前缀, 再用 baseUrl 拼接
+  const basePath = 'data/reports/';
+  const path = record._cloudPath.startsWith(basePath)
+    ? record._cloudPath.slice(basePath.length)
+    : record._cloudPath;
   const url = baseUrl + encodeURI(path).replace(/^\//, '') + '?ref=' + encodeURIComponent(ref);
   const patientName = (record.patientInfo && record.patientInfo.name) || '';
   const body = JSON.stringify({
