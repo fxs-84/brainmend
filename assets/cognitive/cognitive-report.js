@@ -4,7 +4,8 @@ import {
   getReportTypeLabel,
   classifyByKind,
   normalizeCloudRecord,
-  isDeletableCloudPath
+  isDeletableCloudPath,
+  decodeGhContent
 } from './reports/classify.js';
 import {
   deleteCloudReport as _deleteCloudReportRaw,
@@ -2623,31 +2624,46 @@ import {
     var tid = _getTherapistId();
     if (!tid) { callback([]); return; }
     // 递归收集目录下所有 .json 文件条目 (兼容早期斜杠日期文件名产生的嵌套目录, 如 default/2026/8/)
-    function _listFiles(url, depth, out, done) {
+    // 错误聚合: 子目录失败不会静默吞掉, 通过 errors 数组传递到顶层 done, 顶层展示给用户
+    function _listFiles(url, depth, out, errors, done) {
       fetch(url, { headers: _ghHeaders() })
         .then(function(res) {
-          if (!res.ok) { done(depth === 0 ? 'HTTP ' + res.status : null); return null; }
+          if (!res.ok) {
+            errors.push('HTTP ' + res.status + ' (depth=' + depth + ')');
+            done();
+            return null;
+          }
           return res.json();
         })
         .then(function(data) {
-          if (data === null) return; // 已在上一棒调 done
-          if (!Array.isArray(data)) { done(null); return; }
+          if (data === null) return;
+          if (!Array.isArray(data)) { done(); return; }
           data.forEach(function(f) { if (f.type === 'file' && f.name.endsWith('.json')) out.push(f); });
           var dirs = data.filter(function(f) { return f.type === 'dir'; });
-          if (!dirs.length || depth >= 3) { done(null); return; }
+          if (!dirs.length || depth >= 3) { done(); return; }
           var pending = dirs.length;
           dirs.forEach(function(d) {
-            _listFiles(d.url, depth + 1, out, function() {
+            _listFiles(d.url, depth + 1, out, errors, function() {
               pending--;
-              if (pending === 0) done(null);
+              if (pending === 0) done();
             });
           });
         })
-        .catch(function(err) { done(depth === 0 ? String(err && err.message || err) : null); });
+        .catch(function(err) {
+          errors.push(String(err && err.message || err) + ' (depth=' + depth + ')');
+          done();
+        });
+    }
+    // 顶层包装: 把 errors 数组汇总为单个 error 字符串或 null
+    function _listFilesWithErrors(url, depth, out, done) {
+      var errors = [];
+      _listFiles(url, depth, out, errors, function() {
+        done(errors.length ? errors.join('; ') : null);
+      });
     }
     var files = [];
     var doneCalled = false;
-    _listFiles(GH_API + encodeURIComponent(tid), 0, files, function(err) {
+    _listFilesWithErrors(GH_API + encodeURIComponent(tid), 0, files, function(err) {
       if (doneCalled) return;
       doneCalled = true;
       if (err) { callback([], err); return; }
@@ -2660,10 +2676,14 @@ import {
             loaded++;
             if (fileData && fileData.content) {
               try {
-                var r = JSON.parse(decodeURIComponent(escape(atob(fileData.content))));
-                // 使用 classify.js 的 normalizeCloudRecord 保留 _cloudPath/_cloudFileName/_cloudUrl
-                // (DELETE 必需的元数据 — 老实现只存了 _cloudId, 导致无法删除)
-                results.push(normalizeCloudRecord(r, f, fileData));
+                // 用 classify.js 的 decodeGhContent 替代内联 escape/atob, 统一 Node/浏览器路径
+                // decodeGhContent 已返回 parsed object, 不需要再 JSON.parse
+                var r = decodeGhContent(fileData.content);
+                if (r) {
+                  // 使用 classify.js 的 normalizeCloudRecord 保留 _cloudPath/_cloudFileName/_cloudUrl
+                  // (DELETE 必需的元数据 — 老实现只存了 _cloudId, 导致无法删除)
+                  results.push(normalizeCloudRecord(r, f, fileData));
+                }
               } catch(e2) {}
             }
             if (loaded >= files.length) {
@@ -3523,11 +3543,13 @@ import {
       return { row: row, patientName: patientName };
     }
 
-    // 分组标题
-    function _buildGroupHeader(label, icon, count) {
+    // 分组标题 (挂 data-group 属性, 删除/刷新逻辑用属性选择器定位, 避免 textContent 匹配脆弱)
+    function _buildGroupHeader(label, icon, groupKind, count) {
       var h = document.createElement('div');
       h.style.cssText = 'font-size:13px;font-weight:700;color:#0f172a;padding:8px 14px 6px;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:6px;';
-      h.innerHTML = '<span>'+icon+'</span><span>'+label+'</span><span style="font-size:11px;color:#94a3b8;font-weight:400;">· '+count+' 条</span>';
+      h.dataset.group = groupKind;
+      h.dataset.groupLabel = label;
+      h.innerHTML = '<span>'+icon+'</span><span>'+label+'</span><span style="font-size:11px;color:#94a3b8;font-weight:400;" data-group-count>'+count+' 条</span>';
       return h;
     }
     function _buildGroupEmpty(label) {
@@ -3548,24 +3570,24 @@ import {
       }
       var grouped = classifyByKind(recs);
       // 认知组
-      wrap.appendChild(_buildGroupHeader('认知报告', '🧠', grouped.cognitive.length));
+      wrap.appendChild(_buildGroupHeader('认知报告', '🧠', 'cognitive', grouped.cognitive.length));
       if (grouped.cognitive.length === 0) {
         wrap.appendChild(_buildGroupEmpty('认知报告'));
       } else {
         grouped.cognitive.forEach(function(rec) {
           var built = _buildRecordRow(rec, { isCloud: false });
-          listWrap.appendChild(built.row);
+          wrap.appendChild(built.row);
           _bindLocalRowEvents(built.row, rec, built.patientName, wrap);
         });
       }
       // 自评组
-      wrap.appendChild(_buildGroupHeader('神经系统自评报告', '📋', grouped.questionnaire.length));
+      wrap.appendChild(_buildGroupHeader('神经系统自评报告', '📋', 'questionnaire', grouped.questionnaire.length));
       if (grouped.questionnaire.length === 0) {
         wrap.appendChild(_buildGroupEmpty('神经系统自评报告'));
       } else {
         grouped.questionnaire.forEach(function(rec) {
           var built = _buildRecordRow(rec, { isCloud: false });
-          listWrap.appendChild(built.row);
+          wrap.appendChild(built.row);
           _bindLocalRowEvents(built.row, rec, built.patientName, wrap);
         });
       }
@@ -3619,7 +3641,7 @@ import {
         wrap.appendChild(empty); return;
       }
       var grouped = classifyByKind(cloudRecs);
-      wrap.appendChild(_buildGroupHeader('认知报告', '🧠', grouped.cognitive.length));
+      wrap.appendChild(_buildGroupHeader('认知报告', '🧠', 'cognitive', grouped.cognitive.length));
       if (grouped.cognitive.length === 0) {
         wrap.appendChild(_buildGroupEmpty('认知报告'));
       } else {
@@ -3629,7 +3651,7 @@ import {
           _bindCloudRowEvents(built.row, rec, built.patientName, wrap);
         });
       }
-      wrap.appendChild(_buildGroupHeader('神经系统自评报告', '📋', grouped.questionnaire.length));
+      wrap.appendChild(_buildGroupHeader('神经系统自评报告', '📋', 'questionnaire', grouped.questionnaire.length));
       if (grouped.questionnaire.length === 0) {
         wrap.appendChild(_buildGroupEmpty('神经系统自评报告'));
       } else {
@@ -3642,30 +3664,28 @@ import {
     }
 
     // 刷新云端分组的标题计数与空状态 (单条删除后调用, 避免完全重渲染)
+    // 用 [data-group] 属性选择器定位, 不依赖 textContent 匹配
     function _refreshCloudGroupHeaders(wrap) {
-      var headers = wrap.querySelectorAll(':scope > div');
-      // 简化: 找到所有分组标题, 重新统计每组的 data-record-kind 行数
       var groupDefs = [
-        { label: '认知报告', kind: 'cognitive' },
-        { label: '神经系统自评报告', kind: 'questionnaire' }
+        { label: '认知报告', kind: 'cognitive', icon: '🧠' },
+        { label: '神经系统自评报告', kind: 'questionnaire', icon: '📋' }
       ];
       groupDefs.forEach(function(g) {
+        var header = wrap.querySelector('[data-group="' + g.kind + '"]');
+        if (!header) return;
         var rows = wrap.querySelectorAll('[data-record-kind="' + g.kind + '"]');
         var count = rows.length;
-        // 找到包含 g.label 的标题元素, 更新计数
-        headers.forEach(function(h) {
-          if (h.textContent.indexOf(g.label) === 0 && h.textContent.indexOf('条') > 0) {
-            h.innerHTML = '<span>' + (g.kind === 'cognitive' ? '🧠' : '📋') + '</span><span>' + g.label + '</span><span style="font-size:11px;color:#94a3b8;font-weight:400;">· ' + count + ' 条</span>';
-            // 找到紧跟其后的空状态或行, 如果 count=0 且没有空状态, 添加
-            var next = h.nextElementSibling;
-            var hasEmpty = next && next.textContent === '暂无' + g.label;
-            if (count === 0 && !hasEmpty) {
-              h.parentNode.insertBefore(_buildGroupEmpty(g.label), h.nextSibling);
-            } else if (count > 0 && hasEmpty) {
-              next.remove();
-            }
-          }
-        });
+        // 更新计数 span
+        var countSpan = header.querySelector('[data-group-count]');
+        if (countSpan) countSpan.textContent = count + ' 条';
+        // 检查紧跟其后的元素, 维护空状态
+        var next = header.nextElementSibling;
+        var isEmptyState = next && next.textContent === '暂无' + g.label;
+        if (count === 0 && !isEmptyState) {
+          header.parentNode.insertBefore(_buildGroupEmpty(g.label), header.nextSibling);
+        } else if (count > 0 && isEmptyState) {
+          next.remove();
+        }
       });
       // 检查整个列表是否清空
       var all = wrap.querySelectorAll('[data-record-id]');

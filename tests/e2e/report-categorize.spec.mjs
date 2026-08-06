@@ -115,37 +115,42 @@ async function main() {
   // 8) 截图证据
   await page.screenshot({ path: 'tests/e2e/screenshots/report-categorize-local.png', fullPage: false });
 
-  // 9) 切到云端 tab + 模拟 GitHub API
+  // 9) 切到云端 tab + 用 Playwright page.route() 模拟 GitHub API
+  //    (不能用 window.fetch mock — 模块加载时 fetch 闭包已绑定到原生 fetch, 后续替换 window.fetch 不影响)
   await page.evaluate(() => {
     localStorage.setItem('cog_gh_token', 'ghp_test_e2e_token_xxx');
-    // Mock fetch to return cloud records
-    const sampleB64 = (obj) => btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
-    const cogRec = { id: 'cog_cloud_1', date: '2026-08-05', time: '11:00', patientInfo: { name: '云端认知' }, overallScore: 110, isQuick6: false, createdAt: '2026-08-05T03:00:00Z' };
-    const qnrRec = { id: 'qnr_cloud_1', date: '2026-08-06', time: '08:00', patientInfo: { name: '云端自评' }, type: 'questionnaire', overallScore: 70, qnr: { percent: 70, worstSeverity: 'mild' }, createdAt: '2026-08-06T00:00:00Z' };
-    const listJson = JSON.stringify([
-      { type: 'file', name: '2026-08-05_cog_cloud_1.json', path: 'data/reports/th_test_e2e/2026-08-05_cog_cloud_1.json', sha: 'sha_cog_1', url: 'https://api.github.com/repos/fxs-84/brainmend/contents/data/reports/th_test_e2e/2026-08-05_cog_cloud_1.json', size: 100 },
-      { type: 'file', name: '2026-08-06_qnr_cloud_1.json', path: 'data/reports/th_test_e2e/2026-08-06_qnr_cloud_1.json', sha: 'sha_qnr_1', url: 'https://api.github.com/repos/fxs-84/brainmend/contents/data/reports/th_test_e2e/2026-08-06_qnr_cloud_1.json', size: 100 }
-    ]);
-    const cogFileJson = JSON.stringify({ content: sampleB64(cogRec) });
-    const qnrFileJson = JSON.stringify({ content: sampleB64(qnrRec) });
+  });
 
-    const origFetch = window.fetch;
-    window.fetch = async (url, init) => {
-      const u = String(url);
-      if (u.includes('/contents/data/reports/th_test_e2e') && (!u.includes('.json?') && !u.match(/[^/]\.json/))) {
-        return new Response(listJson, { status: 200, headers: { 'content-type': 'application/json' } });
-      }
-      if (u.includes('cog_cloud_1.json') && (!init || init.method !== 'DELETE')) {
-        return new Response(cogFileJson, { status: 200, headers: { 'content-type': 'application/json' } });
-      }
-      if (u.includes('qnr_cloud_1.json') && (!init || init.method !== 'DELETE')) {
-        return new Response(qnrFileJson, { status: 200, headers: { 'content-type': 'application/json' } });
-      }
-      if (init && init.method === 'DELETE') {
-        return new Response(JSON.stringify({ content: { sha: 'new_sha_after_delete' } }), { status: 200, headers: { 'content-type': 'application/json' } });
-      }
-      return origFetch ? origFetch(url, init) : new Response('{}', { status: 404 });
-    };
+  // 设置路由拦截 — 在浏览器网络层拦截, 不依赖 window.fetch
+  const sampleB64 = (obj) => Buffer.from(JSON.stringify(obj), 'utf-8').toString('base64');
+  const cogRec = { id: 'cog_cloud_1', date: '2026-08-05', time: '11:00', patientInfo: { name: '云端认知' }, overallScore: 110, isQuick6: false, createdAt: '2026-08-05T03:00:00Z' };
+  const qnrRec = { id: 'qnr_cloud_1', date: '2026-08-06', time: '08:00', patientInfo: { name: '云端自评' }, type: 'questionnaire', overallScore: 70, qnr: { percent: 70, worstSeverity: 'mild' }, createdAt: '2026-08-06T00:00:00Z' };
+  const listJson = JSON.stringify([
+    { type: 'file', name: '2026-08-05_cog_cloud_1.json', path: 'data/reports/th_test_e2e/2026-08-05_cog_cloud_1.json', sha: 'sha_cog_1', url: 'https://api.github.com/repos/fxs-84/brainmend/contents/data/reports/th_test_e2e/2026-08-05_cog_cloud_1.json', size: 100 },
+    { type: 'file', name: '2026-08-06_qnr_cloud_1.json', path: 'data/reports/th_test_e2e/2026-08-06_qnr_cloud_1.json', sha: 'sha_qnr_1', url: 'https://api.github.com/repos/fxs-84/brainmend/contents/data/reports/th_test_e2e/2026-08-06_qnr_cloud_1.json', size: 100 }
+  ]);
+  const cogFileJson = JSON.stringify({ content: sampleB64(cogRec) });
+  const qnrFileJson = JSON.stringify({ content: sampleB64(qnrRec) });
+
+  await page.route('**/api.github.com/**', async (route) => {
+    const req = route.request();
+    const url = req.url();
+    const method = req.method();
+    if (method === 'DELETE') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ content: { sha: 'new_sha_after_delete' } }) });
+      return;
+    }
+    if (url.includes('cog_cloud_1.json')) {
+      console.log('[route] returning cogFileJson, length:', cogFileJson.length, 'starts with:', cogFileJson.substring(0, 50));
+      await route.fulfill({ status: 200, contentType: 'application/json', body: cogFileJson });
+      return;
+    }
+    if (url.includes('qnr_cloud_1.json')) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: qnrFileJson });
+      return;
+    }
+    // 目录列表请求
+    await route.fulfill({ status: 200, contentType: 'application/json', body: listJson });
   });
 
   // 10) 点击云端 tab
