@@ -5,7 +5,8 @@ import {
   classifyByKind,
   normalizeCloudRecord,
   isDeletableCloudPath,
-  decodeGhContent
+  decodeGhContent,
+  filterRecords
 } from './reports/classify.js';
 import {
   deleteCloudReport as _deleteCloudReportRaw,
@@ -3449,6 +3450,56 @@ import {
     tabRow.appendChild(localTab); tabRow.appendChild(cloudTab);
     panel.appendChild(tabRow);
 
+    // 搜索框 (本机/云端 tab 共用, overlay 内跨 tab 保留, 关闭 overlay 时随闭包释放)
+    var searchQuery = '';
+    var searchWrap = document.createElement('div');
+    searchWrap.style.cssText = 'display:flex;gap:6px;margin-bottom:10px;align-items:center;';
+    var searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.id = 'cog-rec-search-input';
+    searchInput.placeholder = '🔍 搜索患者姓名 / 日期 (2026-08-05) / 类型 (认知/自评)';
+    searchInput.style.cssText = 'flex:1;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;outline:none;';
+    var searchClear = document.createElement('button');
+    searchClear.textContent = '✕';
+    searchClear.title = '清空搜索';
+    searchClear.style.cssText = 'background:#f5f5f5;border:1px solid #ddd;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px;color:#666;';
+    var searchHint = document.createElement('div');
+    searchHint.id = 'cog-rec-search-hint';
+    searchHint.style.cssText = 'font-size:11px;color:#94a3b8;min-height:14px;margin-bottom:4px;';
+    searchWrap.appendChild(searchInput);
+    searchWrap.appendChild(searchClear);
+    panel.appendChild(searchWrap);
+    panel.appendChild(searchHint);
+
+    function _refreshSearchHint(totalCount, matchedCount) {
+      if (!searchQuery) {
+        searchHint.textContent = '';
+        return;
+      }
+      searchHint.textContent = '搜索: "' + searchQuery + '" · 匹配 ' + matchedCount + ' / ' + totalCount + ' 条';
+    }
+    function _applySearchAndRender() {
+      if (currentView === 'cloud') {
+        // 云端: 重新查询并过滤
+        if (cloudRecsCache && cloudRecsCache.length) {
+          _renderCloudRowsFiltered(listWrap, cloudRecsCache);
+        }
+      } else {
+        // 本机: 重新过滤 records
+        _renderLocalRowsFiltered(listWrap, records);
+      }
+    }
+    searchInput.addEventListener('input', function() {
+      searchQuery = searchInput.value;
+      _applySearchAndRender();
+    });
+    searchClear.addEventListener('click', function() {
+      searchInput.value = '';
+      searchQuery = '';
+      _applySearchAndRender();
+      searchInput.focus();
+    });
+
     // Token input for cloud
     var tokenWrap = document.createElement('div');
     tokenWrap.style.cssText = 'display:none;padding:8px 12px;background:#fffbe6;border-radius:8px;margin-bottom:10px;font-size:12px;';
@@ -3747,8 +3798,24 @@ import {
       });
     }
 
+    // 云端记录缓存 (搜索时复用, 避免重新 fetch)
+    var cloudRecsCache = null;
+
+    // 本机列表: 应用搜索过滤 + 渲染 + 更新提示
+    function _renderLocalRowsFiltered(wrap, recs) {
+      var filtered = filterRecords(recs, searchQuery);
+      _renderLocalRows(wrap, filtered);
+      _refreshSearchHint(recs.length, filtered.length);
+    }
+    // 云端列表: 应用搜索过滤 + 渲染 + 更新提示
+    function _renderCloudRowsFiltered(wrap, cloudRecs) {
+      var filtered = filterRecords(cloudRecs, searchQuery);
+      _renderCloudRows(wrap, filtered);
+      _refreshSearchHint(cloudRecs.length, filtered.length);
+    }
+
     // Initial render
-    _renderLocalRows(listWrap, records);
+    _renderLocalRowsFiltered(listWrap, records);
     panel.appendChild(listWrap);
 
     // Tab switching
@@ -3760,7 +3827,7 @@ import {
       cloudTab.style.background = '#f5f5f5'; cloudTab.style.color = '#999';
       tokenWrap.style.display = 'none';
       tokenBar.style.display = 'none';
-      _renderLocalRows(listWrap, records);
+      _renderLocalRowsFiltered(listWrap, records);
     });
     cloudTab.addEventListener('click', function() {
       if (currentView === 'cloud') return;
@@ -3776,9 +3843,11 @@ import {
       fetchCloudReports(function(cloudRecords, err) {
         if (err) {
           listWrap.innerHTML = '<div style="text-align:center;padding:30px 20px;color:#dc2626;font-size:13px;">⚠️ 云端加载失败 (' + _escHtml(String(err)) + ')<br><span style="color:#999;font-size:12px;">token 可能已失效或无权限，请点上方「修改」更新</span></div>';
+          _refreshSearchHint(0, 0);
           return;
         }
-        _renderCloudRows(listWrap, cloudRecords);
+        cloudRecsCache = cloudRecords;
+        _renderCloudRowsFiltered(listWrap, cloudRecords);
       });
     });
 

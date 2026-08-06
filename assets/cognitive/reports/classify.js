@@ -40,6 +40,41 @@ export function classifyByKind(records) {
 }
 
 /**
+ * 按关键字过滤记录. 支持维度:
+ * - 患者姓名 (子串, 区分大小写 — 中文环境)
+ * - 日期 (YYYY-MM-DD 或 YYYY/M/D, 子串匹配)
+ * - 类型 (中文: "认知" / "自评"; 也兼容 "questionnaire" / "cognitive")
+ * - quick6 关键词 "6" / "⚡6项" / "quick6" 匹配 isQuick6
+ * 空查询返回所有记录 (原数组引用).
+ * @param {Array<any>} records
+ * @param {string} query
+ * @returns {Array<any>}
+ */
+export function filterRecords(records, query) {
+  if (!Array.isArray(records)) return [];
+  const q = (query == null ? '' : String(query)).trim();
+  if (!q) return records;
+  // 类型关键词优先 (大小写不敏感)
+  const ql = q.toLowerCase();
+  if (q === '自评' || ql === 'questionnaire' || ql === 'qnr') {
+    return records.filter(function(r) { return getReportType(r) === 'questionnaire'; });
+  }
+  if (q === '认知' || ql === 'cognitive' || ql === 'cog') {
+    return records.filter(function(r) { return getReportType(r) === 'cognitive'; });
+  }
+  // 通用子串匹配: 区分大小写 (中文环境, 大小写敏感更安全)
+  return records.filter(function(r) {
+    if (!r || typeof r !== 'object') return false;
+    const name = (r.patientInfo && r.patientInfo.name) || '';
+    if (name && name.indexOf(q) >= 0) return true;
+    if (r.date && String(r.date).indexOf(q) >= 0) return true;
+    if (r.type && String(r.type).indexOf(q) >= 0) return true;
+    if (r.id && String(r.id).indexOf(q) >= 0) return true;
+    return false;
+  });
+}
+
+/**
  * 把 GitHub Contents API 返回的文件元数据 + 解码后的内容规范化为统一的云端记录.
  * 保留 _cloudPath (DELETE 必需), _cloudId (sha), _cloudFileName, _cloudUrl.
  * @param {object} raw
