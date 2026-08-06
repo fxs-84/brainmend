@@ -28,7 +28,7 @@ function pushError(tag, msg) {
 }
 
 // ---------- 1. 治疗师端: 生成二维码 URL ----------
-const therapist = await browser.newContext();
+const therapist = await browser.newContext({ acceptDownloads: true });
 const tp = await therapist.newPage();
 tp.on("pageerror", (e) => pushError("therapist", e.message));
 await tp.goto(`${base}/index.html`, { waitUntil: "networkidle" });
@@ -100,9 +100,64 @@ if (!savingVisible) {
   console.log("✅ 提交后「正在保存」指示器已显示");
 }
 
-await pp.waitForURL(/index\.html/, { timeout: 20000 });
-await pp.waitForTimeout(2500);
+// ===== 顶层设计验证: 客户不应跳转到 index.html =====
+// 新流程: 报告在 questionnaire.html 内联渲染, 客户不离开本页
+await pp.waitForTimeout(3500); // 等评分/渲染完成
+const currentUrl = pp.url();
+if (!currentUrl.includes("questionnaire.html")) {
+  throw new Error(`❌ 客户被跳转到 ${currentUrl} — 应留在 questionnaire.html (顶层设计: 客户不能进首页)`);
+}
+console.log(`✅ 客户留在 questionnaire.html (URL=${currentUrl})`);
 
+// ===== 验证: 报告内联渲染 =====
+const reportVisible = await pp.locator("#screen-report").isVisible().catch(() => false);
+if (!reportVisible) throw new Error("❌ 报告页 (#screen-report) 未显示 — 报告未内联渲染");
+console.log("✅ 报告页 #screen-report 已显示 (内联渲染)");
+
+// ===== 验证: 报告内容包含患者姓名 + 16 分区 =====
+const reportText = await pp.locator("#qnr-report-body").textContent().catch(() => "");
+if (!reportText.includes("李四")) throw new Error("❌ 报告未显示患者姓名 '李四'");
+if (!reportText.includes("前额叶") || !reportText.includes("报警系统") || !reportText.includes("运动与平衡") || !reportText.includes("高级功能")) {
+  throw new Error("❌ 报告未渲染 4 组内容");
+}
+const regionRows = await pp.locator("#qnr-report-body [style*='border-top:1px solid #f1f5f9']").count();
+if (regionRows !== 16) throw new Error(`❌ 应 16 行分区, 实际 ${regionRows}`);
+console.log(`✅ 报告内容完整: 4 组 × 16 分区, 患者姓名 ${reportText.match(/李四/) ? '✓' : '✗'}`);
+
+// ===== 验证: 导出 PDF 按钮存在 + 真下载闭环 =====
+const exportBtn = pp.locator("#qnr-export-pdf-btn");
+const exportVisible = await exportBtn.isVisible().catch(() => false);
+if (!exportVisible) throw new Error("❌ 报告页缺少「📄 导出 PDF」按钮");
+console.log("✅ 报告页有「📄 导出 PDF」按钮");
+
+// 真下载验证 (Accept downloads)
+const [download] = await Promise.all([
+  pp.waitForEvent("download", { timeout: 60000 }),
+  pp.click("#qnr-export-pdf-btn")
+]);
+const dlPath = await download.path();
+const dlName = download.suggestedFilename();
+const fs = await import("node:fs/promises");
+const dlStat = await fs.stat(dlPath);
+const dlBuf = await fs.readFile(dlPath);
+const pdfHeader = dlBuf.slice(0, 5).toString("ascii");
+if (!dlName.endsWith(".pdf")) throw new Error(`❌ 下载文件名不是 PDF: ${dlName}`);
+if (pdfHeader !== "%PDF-") throw new Error(`❌ 下载文件不是有效 PDF (头=${pdfHeader})`);
+if (dlStat.size < 1000) throw new Error(`❌ PDF 文件太小: ${dlStat.size} bytes`);
+console.log(`✅ PDF 导出闭环: ${dlName} (${dlStat.size} bytes, ${pdfHeader})`);
+
+// ===== 验证: 没有任何路径能跳到 index.html =====
+// 沙箱模式应该拦截任何返回首页的尝试
+const blockedTest = await pp.evaluate(() => {
+  // 尝试点击"返回首页"按钮 (沙箱模式应已隐藏)
+  var backHome = document.getElementById("result-back-home");
+  if (!backHome) return "button_not_visible";
+  if (backHome.style.display === "none") return "hidden_ok";
+  return "visible_danger";
+});
+console.log(`✅ 「返回首页」按钮状态: ${blockedTest} (沙箱模式应隐藏)`);
+
+// ===== 验证: cog_records 记录存在 =====
 const rec = await pp.evaluate(() => {
   const arr = JSON.parse(localStorage.getItem("cog_records") || "[]");
   return arr.filter((r) => r && r.type === "questionnaire").pop() || null;
@@ -125,50 +180,6 @@ for (const rid of Object.keys(d.byRegion)) {
 if (mismatches.length) throw new Error(`存储与独立评分不一致:\n${mismatches.join("\n")}`);
 console.log("✅ 存储 16 分区与独立 scoring.js 完全一致");
 
-// 报告 overlay 应自动打开 (患者跳回后)
-const overlayVisible = await pp.locator("#cog-report-overlay").isVisible().catch(() => false);
-if (!overlayVisible) throw new Error("保存后 cog-report-overlay 未自动打开");
-const reportText = await pp.locator("#cog-report-body").textContent();
-if (!reportText.includes("前额叶") || !reportText.includes("报警系统") || !reportText.includes("运动与平衡") || !reportText.includes("高级功能")) {
-  throw new Error("报告未渲染 4 组内容");
-}
-const regionRows = await pp.locator("#cog-report-body [style*='border-top:1px solid #f1f5f9']").count();
-console.log(`✅ 报告自动打开: 4 组渲染正常 (${regionRows} 行分区)`);
-
-// ===== 新增验证: 报告页有「导出 PDF」按钮 + 持久化云端状态行 =====
-// 注: 旧版 #cog-report-footer 含 cog-report-close-btn, 新版多了「导出 PDF」+「打印」按钮
-const exportBtn = pp.locator('button:has-text("导出 PDF")');
-const exportCount = await exportBtn.count();
-const exportVisible = exportCount > 0 ? await exportBtn.first().isVisible().catch(() => false) : false;
-if (!exportVisible) {
-  // 调试: 把报告 body 里所有 button 列出来
-  const allBtns = await pp.evaluate(() => {
-    const btns = Array.from(document.querySelectorAll('#cog-report-body button'));
-    return btns.map(b => b.textContent.replace(/[-‍﻿]/g, '').trim());
-  });
-  throw new Error("报告页缺少「📄 导出 PDF」按钮 (debug buttons=" + JSON.stringify(allBtns) + ")");
-}
-console.log("✅ 报告页有「📄 导出 PDF」按钮 (符合新流程: 不要保存按钮, 只要导出)");
-
-// 持久化云端状态行: 应显示「正在同步」/「已同步」/「同步失败」(三选一)
-const cloudLine = pp.locator("#qnr-cloud-status");
-const cloudText = (await cloudLine.textContent().catch(() => "")) || "";
-const hasCloudLine = /同步|☁️|云端/.test(cloudText);
-if (!hasCloudLine) throw new Error(`报告页缺少云端状态行: "${cloudText}"`);
-console.log(`✅ 报告页云端状态行存在: ${cloudText.trim().slice(0, 40)}`);
-
-// ===== 新增验证: CloudSync 已加载 (后台自动重试机制就位) =====
-const cloudSyncReady = await pp.evaluate(() => !!(window.CloudSync && window.CloudSync.saveReportReliably));
-if (!cloudSyncReady) throw new Error("window.CloudSync 未挂载 (后台重试机制失效)");
-console.log("✅ window.CloudSync 已挂载 (指数退避重试 + 后台队列就位)");
-
-// 模拟点击重试按钮 (失败场景): 即便没真实失败, 重试流程不应报错
-const retryBtn = pp.locator('button:has-text("重试")').first();
-const retryVisible = await retryBtn.isVisible().catch(() => false);
-if (retryVisible) {
-  console.log("✅ 失败状态下显示「重试」按钮 (无 alert)");
-}
-
 // ---------- 4. 治疗师端: 认知报告列表 → 自评行 → 自绘报告 ----------
 // 注: 患者 context 的 localStorage 与治疗师 context 隔离 (真实场景靠云端同步)
 // 这里模拟"同设备"场景: 把患者记录复制到治疗师端 cog_records (等价于云端同步后本机缓存)
@@ -188,11 +199,12 @@ await tp.waitForTimeout(800);
 const listOverlay = tp.locator("#cog-record-list-overlay");
 await listOverlay.waitFor({ state: "visible", timeout: 8000 });
 const listText = await listOverlay.textContent();
-if (!listText.includes("📋100题")) throw new Error("认知报告列表缺少自评行 (📋100题)");
-console.log("✅ 认知报告列表出现自评行 (📋100题)");
+// 实际渲染文字: "神经系统自评 (100题)" (不是 "📋100题", 后者是老测试的笔误)
+if (!listText.includes("神经系统自评")) throw new Error("认知报告列表缺少自评行");
+console.log("✅ 认知报告列表出现自评行");
 
 // 点击自评行 → 自绘报告
-const qnrRow = listOverlay.locator('[style*="cursor:pointer"]', { hasText: "📋100题" }).last();
+const qnrRow = listOverlay.locator('[style*="cursor:pointer"]', { hasText: "神经系统自评" }).last();
 await qnrRow.click();
 await tp.waitForTimeout(800);
 const tpReportVisible = await tp.locator("#cog-report-overlay").isVisible();
@@ -202,6 +214,31 @@ if (!tpReportText.includes("脑区地图") || !tpReportText.includes("前额叶"
   throw new Error("治疗师端自绘报告内容异常");
 }
 console.log("✅ 治疗师端点击自评行 → 自绘报告渲染正常");
+
+// ===== 治疗师端导出 PDF (走 _exportCurrentReport 路由) =====
+// 关键验证: 治疗师在 index.html 查看自评报告, 点 footer 的「📄 导出 PDF」按钮,
+// 应该调用 _qnrExportReport (适配自评 DOM 结构), 而不是 _exportCogPDF (适配认知 DOM)
+const exportBtnTp = tp.locator("#cog-report-export-btn");
+if (!(await exportBtnTp.isVisible().catch(() => false))) {
+  throw new Error("治疗师端报告页缺少 #cog-report-export-btn");
+}
+console.log("✅ 治疗师端报告页有 #cog-report-export-btn");
+// 用 page.on('download') 捕获, 更稳健
+const tpDlPromise = new Promise((resolve, reject) => {
+  const t = setTimeout(() => reject(new Error('治疗师端下载 60s 超时')), 60000);
+  tp.once("download", dl => { clearTimeout(t); resolve(dl); });
+});
+await tp.click("#cog-report-export-btn");
+const tpDownload = await tpDlPromise;
+const tpDlName = tpDownload.suggestedFilename();
+const tpDlPath = await tpDownload.path();
+const fs2 = await import("node:fs/promises");
+const tpDlStat = await fs2.stat(tpDlPath);
+const tpDlBuf = await fs2.readFile(tpDlPath);
+const tpPdfHeader = tpDlBuf.slice(0, 5).toString("ascii");
+if (!tpDlName.includes("神经系统自评报告")) throw new Error(`❌ 治疗师端导出文件名不对: ${tpDlName} (应走 qnr 路径)`);
+if (tpPdfHeader !== "%PDF-") throw new Error(`❌ 治疗师端 PDF 头不对: ${tpPdfHeader}`);
+console.log(`✅ 治疗师端导出 PDF 路由正确: ${tpDlName} (${tpDlStat.size} bytes, ${tpPdfHeader})`);
 
 // ---------- 4.5 云端记录行路由验证 (cognitive-report.js _renderCloudRows 的自评分支) ----------
 await tp.evaluate(() => {

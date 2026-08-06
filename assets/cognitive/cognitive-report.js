@@ -3272,6 +3272,8 @@ import {
   window._viewCogReport = function(recordIndex) {
     // 🔒 查看历史报告: 视为已确认患者信息, 跳过登记表单
     window._cogPatientConfirmed = true;
+    // 记录当前查看的报告 idx, 供 _exportCurrentReport 路由用 (认知 vs 自评)
+    window._lastCogReportIdx = recordIndex;
     try {
       var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
       if (records.length === 0) {

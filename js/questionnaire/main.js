@@ -333,6 +333,11 @@ document.getElementById("result-restart").addEventListener("click", () => {
 });
 
 document.getElementById("result-back-home").addEventListener("click", () => {
+  // 沙箱模式禁止跳首页 (客户不能进入治疗师后台) — 提示用户走正常完成流程
+  if (window.__qnrSandbox) {
+    alert('请填写上方"提交到评估报告"表单完成本次测评。');
+    return;
+  }
   window.location.href = "./index.html";
 });
 

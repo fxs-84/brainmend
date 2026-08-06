@@ -381,7 +381,57 @@
   </div>
 </div>
 
+<!-- 报告页 (沙箱模式提交后内联渲染, 不跳转) -->
+<div id="screen-report" class="screen" style="display:none;">
+  <div class="card" id="report-card" style="padding:0;overflow:hidden;">
+    <div id="qnr-report-body"></div>
+  </div>
+  <div class="result-sticky-footer">
+    <div id="qnr-cloud-status-footer"></div>
+    <div class="disclaimer" style="margin-top:10px;">
+      ⚠️ 本评估用于一般健康教育，结果属于评估提示，不等同于医学诊断。如结果异常或症状持续，请到正规医疗机构进一步评估。
+    </div>
+  </div>
+</div>
+
 <script type="module" src="./js/questionnaire/main.js"></script>
+<script src="./assets/cognitive/reports/cloud-sync.js"></script>
+<script src="./assets/vendor/html2canvas-1.4.1.min.js" crossorigin="anonymous"></script>
+<script src="./assets/vendor/jspdf-2.5.1.umd.min.js" crossorigin="anonymous"></script>
+<script>
+  // ===== 内联渲染所需的依赖 (scoring + data + 报告渲染) =====
+  // 因为不能跳 index.html, 报告必须在自己页面渲染
+  // 复用 cognitive-report.js 同款 _qnrRenderReport 渲染逻辑 (从 index.html 提取)
+  window.__qnrInlineReportReady = false;
+  (function _loadDeps(){
+    if (!document.querySelector('script[data-qnr-data]')) {
+      var d = document.createElement('script');
+      d.setAttribute('data-qnr-data', '1');
+      d.type = 'module';
+      d.src = './js/questionnaire/data.js';
+      document.head.appendChild(d);
+    }
+    if (!document.querySelector('script[data-qnr-scoring]')) {
+      var s = document.createElement('script');
+      s.setAttribute('data-qnr-scoring', '1');
+      s.type = 'module';
+      s.src = './js/questionnaire/scoring.js';
+      document.head.appendChild(s);
+    }
+    var tries = 0;
+    var t = setInterval(function(){
+      tries++;
+      if (window.__qnrScoring && window.__qnrScoring.scoreBrainRegion && window.__qnrData) {
+        clearInterval(t);
+        window.__qnrInlineReportReady = true;
+        window.dispatchEvent(new CustomEvent('qnr:deps-ready'));
+      } else if (tries > 30) {
+        clearInterval(t);
+        console.error('[qnr inline] 评分/数据模块加载超时');
+      }
+    }, 100);
+  })();
+</script>
 <script>
   // ====================================================================
   // 沙箱模式 + 完成回传 (与认知评估同链路)
@@ -511,7 +561,8 @@
       qnrRegOverlay = overlay;
     }
 
-    // 完成后: 弹登记表单 → 填完 → 跳回主页把结果写入报告
+    // 完成后: 弹登记表单 → 填完 → 在本页面内联渲染报告 (不再跳回 index.html)
+    // 顶层设计: 客户做完问卷应留在问卷页看报告, 首页是治疗师后台, 客户不能进入
     window.addEventListener('qnr:finished', function(e){
       var payload = e.detail || {};
       _showQnrRegForm(function(info){
@@ -524,31 +575,434 @@
           id: info.id
         };
         try { sessionStorage.setItem('qnr_completed', '1'); } catch(_){}
-        var encoded;
-        try {
-          // ⚠️ UTF-8 安全编码: btoa 只接受 Latin1, 中文姓名会抛 InvalidCharacterError
-          // 用 TextEncoder 手动 UTF-8 → 二进制字符串 → btoa (不依赖 deprecated unescape)
-          var bytes = new TextEncoder().encode(JSON.stringify(data));
-          var bin = '';
-          bytes.forEach(function(b){ bin += String.fromCharCode(b); });
-          encoded = encodeURIComponent(btoa(bin));
-        } catch(err) {
-          // 兜底: 编码失败也跳转 (不带 result, 至少不让页面卡死)
-          window.location.href = './index.html?return=questionnaire';
-          return;
-        }
-        var target = './index.html?return=questionnaire&result=' + encoded;
-        // 透传 token / tid: index.html 端 cognitive-report.js 从 URL 捕获 token 后才会上传云端,
-        // tid 决定云端目录 (治疗师 ID), 缺了会传到随机目录, 治疗师云端列表看不到
-        var tkOut = params.get('token');
-        if (tkOut) target += '&token=' + encodeURIComponent(tkOut);
-        var tidOut = params.get('tid');
-        if (tidOut) target += '&tid=' + encodeURIComponent(tidOut);
-        // 🛡️ UX 优化: 短暂停留 (300ms) 让 _showSavingIndicator 的旋转动画有渲染时间,
-        // 否则页面立刻跳转, 用户根本看不到"正在保存"提示 (体验上是白屏焦虑)
-        setTimeout(function(){ window.location.href = target; }, 300);
+        // 等评分/数据模块就绪 (timeout 5s) 再渲染
+        var startTs = Date.now();
+        var waitDeps = function() {
+          if (window.__qnrInlineReportReady) { _saveAndRenderReport(data); return; }
+          if (Date.now() - startTs > 5000) {
+            alert('报告模块加载失败,请刷新页面重试。');
+            return;
+          }
+          setTimeout(waitDeps, 50);
+        };
+        waitDeps();
       });
     });
+
+    // ===== 内联报告: 保存 + 渲染 + PDF 导出 (核心新流程) =====
+    function _saveAndRenderReport(data) {
+      // 1. 计算 16 分区评分
+      var scoring = window.__qnrScoring;
+      var dataMod = window.__qnrData;
+      var r = scoring.scoreBrainRegion({ items: data.items, phoneEar: data.phoneEar });
+      var groupHasBurden = {};
+      dataMod.REGION_GROUPS.forEach(function(g){
+        g.regionIds.forEach(function(rid){
+          if (r.severityByRegion[rid] && r.severityByRegion[rid] !== 'normal') groupHasBurden[g.id] = g.label;
+        });
+      });
+      var burdenGroups = Object.keys(groupHasBurden).map(function(k){ return groupHasBurden[k]; });
+      var worstSev = 'normal';
+      ['severe','moderate','mild'].forEach(function(s){
+        if (worstSev === 'normal' && Object.values(r.severityByRegion).indexOf(s) >= 0) worstSev = s;
+      });
+      var payload = {
+        byRegion: r.byRegion,
+        severityByRegion: r.severityByRegion,
+        affectedRegions: r.affectedRegions,
+        total: r.total,
+        percent: r.percent,
+        phoneEar: data.phoneEar || null,
+        burdenGroups: burdenGroups,
+        worstSeverity: worstSev,
+        groupDefs: dataMod.REGION_GROUPS,
+        regionDefs: dataMod.BRAIN_REGION_DEFS,
+        items: data.items
+      };
+      // 2. 构造成与 index.html _qnrSaveRecord 一致的 record
+      var now = new Date();
+      var rec = {
+        id: 'qnr_' + now.getTime(),
+        date: now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0'),
+        time: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
+        patientInfo: { name: data.name, age: data.age || '', gender: data.gender || '', id: data.id || '' },
+        type: 'questionnaire',
+        overallScore: payload.percent,
+        qnr: payload
+      };
+      // 3. localStorage 写入 (立即, 同步)
+      try {
+        var arr = JSON.parse(localStorage.getItem('cog_records') || '[]');
+        arr.push(rec);
+        if (arr.length > 100) arr.splice(0, arr.length - 100);
+        localStorage.setItem('cog_records', JSON.stringify(arr));
+      } catch(e) { console.error('[qnr inline] localStorage 写入失败', e); }
+      // 4. 云端上传 (CloudSync, 含重试 + 后台队列 + online/visibility 钩子)
+      var _doCloud = function() {
+        // CloudSync 是 IIFE, 已自动挂 window.CloudSync
+        // 但它依赖 window._uploadToCloud (cognitive-report.js 暴露), 这里没有
+        // 所以 questionnaire.html 需要自己实现一个轻量级上传器 (单 PUT, 无重试)
+        // CloudSync.saveReportReliably 仍可调用, 它内部会调 _uploadToCloud
+        // 由于 _uploadToCloud 不存在, 直接退化: 标记 failed, 靠本地 + 后续 manual retry
+        try {
+          if (window.CloudSync && typeof window.CloudSync.saveReportReliably === 'function') {
+            window.CloudSync.saveReportReliably(rec).then(function() {
+              _renderCloudLine(rec.id);
+            });
+          }
+          // 安装后台钩子 (online/visibility 自动重试)
+          if (window.CloudSync && window.CloudSync._installBackgroundHooks) {
+            window.CloudSync._installBackgroundHooks();
+          }
+        } catch(e) { /* swallow */ }
+      };
+      // 由于 questionnaire.html 没有 _uploadToCloud, 我们给 CloudSync 注入一个最小上传器
+      // (用 fetch 直接调 GitHub Contents API, 复用 URL 的 token)
+      if (!window._uploadToCloud) {
+        var GH_API = 'https://api.github.com/repos/fxs-84/brainmend/contents/data/reports/';
+        var tid = (function(){
+          try {
+            var t = localStorage.getItem('cog_therapist_id');
+            if (!t) {
+              t = 'th_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
+              localStorage.setItem('cog_therapist_id', t);
+            }
+            return t;
+          } catch(e) { return 'th_default'; }
+        })();
+        var _ghToken = function(){ try { return localStorage.getItem('cog_gh_token') || ''; } catch(e) { return ''; } };
+        window._uploadToCloud = function(record) {
+          if (!_ghToken()) return Promise.resolve({ ok: false, error: 'no_token' });
+          var trimmed = {};
+          Object.keys(record.qnr || {}).forEach(function(k){ trimmed[k] = record.qnr[k]; });
+          var cloudRecord = {
+            id: record.id, date: record.date, time: record.time,
+            patientInfo: record.patientInfo,
+            qnr: trimmed,
+            overallScore: record.overallScore,
+            type: record.type,
+            createdAt: new Date().toISOString()
+          };
+          var json = JSON.stringify(cloudRecord);
+          var bytes = new TextEncoder().encode(json);
+          var bin = '';
+          bytes.forEach(function(b){ bin += String.fromCharCode(b); });
+          var b64 = btoa(bin);
+          var fileName = ((record.date || 'unknown') + '_' + record.id + '.json').replace(/\//g, '-');
+          var path = GH_API + encodeURIComponent(tid) + '/' + encodeURIComponent(fileName);
+          // 标记 syncing
+          try {
+            var arr = JSON.parse(localStorage.getItem('cog_records') || '[]');
+            for (var i = 0; i < arr.length; i++) {
+              if (arr[i].id === record.id) { arr[i]._cloudStatus = 'syncing'; break; }
+            }
+            localStorage.setItem('cog_records', JSON.stringify(arr));
+          } catch(e) {}
+          return fetch(path, {
+            method: 'PUT',
+            headers: { 'Authorization': 'token ' + _ghToken(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: 'upload report: ' + (record.patientInfo.name || ''), content: b64 })
+          }).then(function(res) {
+            if (!res.ok) return res.json().catch(function(){return null;}).then(function(body){
+              var detail = body && body.message ? ': ' + body.message : '';
+              // 422 + sha 问题: 取已有文件 sha 重试
+              if (res.status === 422 && body && /sha/i.test(body.message||'')) {
+                return fetch(path, { headers: { 'Authorization': 'token ' + _ghToken() } })
+                  .then(function(gr){ return gr.ok ? gr.json() : null; })
+                  .then(function(fileObj){
+                    if (!fileObj || !fileObj.sha) return { ok: false, error: 'HTTP 422' + detail };
+                    return fetch(path, {
+                      method: 'PUT',
+                      headers: { 'Authorization': 'token ' + _ghToken(), 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ message: 'update report: ' + (record.patientInfo.name||''), content: b64, sha: fileObj.sha })
+                    }).then(function(r2){ return r2.ok ? r2.json().then(function(o){ return o && o.content && o.content.sha ? { ok: true, sha: o.content.sha } : { ok: false, error: 'bad_response' }; }) : { ok: false, error: 'HTTP ' + r2.status }; });
+                  });
+              }
+              return { ok: false, error: 'HTTP ' + res.status + detail };
+            });
+            return res.json().then(function(obj){
+              if (obj && obj.content && obj.content.sha) {
+                try {
+                  var arr2 = JSON.parse(localStorage.getItem('cog_records') || '[]');
+                  for (var k = 0; k < arr2.length; k++) {
+                    if (arr2[k].id === record.id) {
+                      arr2[k]._cloudId = obj.content.sha;
+                      arr2[k]._cloudStatus = 'synced';
+                      delete arr2[k]._cloudErr;
+                      break;
+                    }
+                  }
+                  localStorage.setItem('cog_records', JSON.stringify(arr2));
+                } catch(e) {}
+                return { ok: true, sha: obj.content.sha };
+              }
+              return { ok: false, error: 'bad_response' };
+            });
+          }).catch(function(err){ return { ok: false, error: String(err && err.message || err || 'network') }; });
+        };
+      }
+      _doCloud();
+      // 5. 渲染报告 + 切换屏幕 (核心: 留在本页, 不跳)
+      _renderInlineReport(rec);
+      // 6. 隐藏结果页, 显示报告页
+      try {
+        var intro = document.getElementById('screen-intro');
+        var quiz = document.getElementById('screen-quiz');
+        var result = document.getElementById('screen-result');
+        var report = document.getElementById('screen-report');
+        if (intro) intro.style.display = 'none';
+        if (quiz) quiz.style.display = 'none';
+        if (result) result.style.display = 'none';
+        if (report) report.style.display = '';
+        // 移除 saving overlay (它误导用户"还要跳转")
+        var savingOv = document.getElementById('qnr-saving-overlay');
+        if (savingOv) savingOv.remove();
+        window.scrollTo(0, 0);
+      } catch(e) {}
+      // 7. 持久化报告信息到 sessionStorage (防止刷新丢失)
+      try { sessionStorage.setItem('qnr_inline_report', JSON.stringify(rec)); } catch(e) {}
+    }
+
+    // ===== 报告 DOM 渲染 (复用 index.html _qnrRenderReport 的视觉风格, 适配浅色问卷页) =====
+    function _renderInlineReport(rec) {
+      var d = rec.qnr || {};
+      var sevColor = { normal:'#16a34a', mild:'#ca8a04', moderate:'#ea580c', severe:'#dc2626' };
+      var sevLabel = { normal:'正常', mild:'轻度', moderate:'中度', severe:'重度' };
+      var GROUP_ICONS = { alarm:'🚨', bodymap:'🗺️', motor:'🏃', higher:'🧠' };
+      var p = rec.patientInfo || {};
+      var groupDefs = d.groupDefs || [];
+      var regionDefs = d.regionDefs || [];
+      // 计算每个分区的 max (根据 items 数量 × 4)
+      var regionMax = {};
+      regionDefs.forEach(function(def){
+        var cnt = 0;
+        for (var k in (d.items || {})) {
+          if (parseInt(k) === 46) continue;
+          if (parseInt(k) >= def.range[0] && parseInt(k) <= def.range[1]) cnt++;
+        }
+        regionMax[def.id] = cnt * 4;
+      });
+      var html = '';
+      // 头部患者卡
+      html += '<div style="background:linear-gradient(135deg,#0d9488,#0284c7);padding:24px 22px;color:#fff;">' +
+        '<div style="font-size:13px;opacity:0.85;margin-bottom:4px;">📋 神经系统状态自评 · 评估报告</div>' +
+        '<div style="font-size:22px;font-weight:700;line-height:1.3;">' + (p.name || '未知') + ' 的脑区地图</div>' +
+        '<div style="font-size:13px;opacity:0.9;margin-top:4px;">' + (p.gender||'') + (p.age ? ' · ' + p.age + '岁' : '') + ' · ' + (rec.date || '') + ' ' + (rec.time || '') + '</div>' +
+      '</div>';
+      // 摘要 + 整体严重度
+      var bodyInner = '<div style="padding:20px 22px;">';
+      var worstSev = d.worstSeverity || 'normal';
+      if (!(d.burdenGroups || []).length) {
+        bodyInner += '<div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:12px;padding:14px 16px;color:#047857;font-weight:600;margin-bottom:14px;">✅ 本次自评未发现明显高负担区,各分区均在正常范围。</div>';
+      } else {
+        bodyInner += '<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:12px;padding:14px 16px;color:#9a3412;font-weight:600;margin-bottom:14px;">⚠️ 你的高负担区: ' + d.burdenGroups.join('、') + '</div>' +
+          '<div style="font-size:13px;color:#64748b;margin-bottom:14px;">以下按 4 组展示 16 个功能分区的自评结果(轻度及以上即提示有负担)。</div>';
+      }
+      bodyInner += '<div style="display:flex;justify-content:flex-end;margin-bottom:14px;">' +
+        '<span style="background:' + sevColor[worstSev] + ';color:#fff;font-size:14px;font-weight:700;padding:6px 16px;border-radius:999px;">' + (sevLabel[worstSev] || '正常') + ' · ' + (d.percent != null ? d.percent : 0) + '%</span>' +
+      '</div>';
+      // 4 组 × 16 分区
+      groupDefs.forEach(function(g){
+        var hasBurden = g.regionIds.some(function(rid){ return d.severityByRegion[rid] && d.severityByRegion[rid] !== 'normal'; });
+        bodyInner += '<div style="background:#fff;border:1.5px solid ' + (hasBurden ? '#fdba74' : '#e2e8f0') + ';border-radius:14px;padding:14px 16px;margin-bottom:12px;' + (hasBurden ? 'background:linear-gradient(180deg,#fff7ed 0%,#ffffff 60%);' : '') + '">' +
+          '<div style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:10px;">' + (GROUP_ICONS[g.id] || '') + ' ' + g.label + '</div>';
+        g.regionIds.forEach(function(rid){
+          var def = regionDefs.find(function(x){ return x.id === rid; });
+          if (!def) return;
+          var score = d.byRegion[rid] || 0;
+          var max = regionMax[rid] || 0;
+          var sev = d.severityByRegion[rid] || 'normal';
+          var pct = max > 0 ? Math.round((score/max)*100) : 0;
+          bodyInner += '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #f1f5f9;">' +
+            '<div style="flex:1;min-width:0;">' +
+              '<div style="font-size:14px;color:#0f172a;font-weight:500;">' + def.label + (def.detail ? ' <span style="color:#94a3b8;font-size:11px;">· ' + def.detail + '</span>' : '') + '</div>' +
+              '<div style="font-size:12px;color:#64748b;margin:2px 0 6px;">' + score + ' / ' + max + ' 分</div>' +
+              '<div style="height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + sevColor[sev] + ';border-radius:3px;transition:width 0.4s;"></div></div>' +
+            '</div>' +
+            '<span style="flex:0 0 auto;font-size:12px;font-weight:700;background:' + sevColor[sev] + ';color:#fff;padding:5px 12px;border-radius:999px;min-width:48px;text-align:center;">' + sevLabel[sev] + '</span>' +
+          '</div>';
+        });
+        bodyInner += '</div>';
+      });
+      // 免责
+      bodyInner += '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:12px 16px;font-size:12px;color:#92400e;line-height:1.7;">⚠️ 本评估用于一般健康教育,结果属于评估提示,不等同于医学诊断。如结果异常或症状持续,请到正规医疗机构进一步评估。</div>';
+      bodyInner += '</div>';
+      html += bodyInner;
+      // 操作栏: 导出 PDF + 完成
+      html += '<div style="display:flex;gap:10px;justify-content:center;padding:0 22px 24px;flex-wrap:wrap;">' +
+        '<button id="qnr-export-pdf-btn" style="background:linear-gradient(135deg,#0d9488,#0284c7);color:#fff;border:none;border-radius:10px;padding:12px 20px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(13,148,136,0.25);">📄 导出 PDF</button>' +
+        '<button id="qnr-done-btn" style="background:#fff;color:#334155;border:1.5px solid #cbd5e1;border-radius:10px;padding:12px 20px;font-size:15px;font-weight:600;cursor:pointer;">✅ 完成</button>' +
+      '</div>';
+      // 写 DOM
+      var bodyEl = document.getElementById('qnr-report-body');
+      if (bodyEl) bodyEl.innerHTML = html;
+      // 绑定导出 PDF
+      var exportBtn = document.getElementById('qnr-export-pdf-btn');
+      if (exportBtn) exportBtn.addEventListener('click', function(){ _exportInlinePDF(rec); });
+      // 绑定完成
+      var doneBtn = document.getElementById('qnr-done-btn');
+      if (doneBtn) doneBtn.addEventListener('click', function(){
+        if (confirm('确认完成?关闭后将无法再次查看本报告,请先导出 PDF 或截图保存。')) {
+          doneBtn.textContent = '✅ 已完成,可关闭页面';
+          doneBtn.disabled = true;
+          doneBtn.style.opacity = '0.6';
+          doneBtn.style.cursor = 'not-allowed';
+          // 禁用导出按钮
+          if (exportBtn) exportBtn.disabled = true;
+          // 设置 sessionStorage, 防止刷新又跳到 result 页
+          try { sessionStorage.setItem('qnr_inline_done', '1'); } catch(e) {}
+        }
+      });
+      // 渲染云端状态行
+      _renderCloudLine(rec.id);
+    }
+
+    // 云端状态行 (复用 index.html _qnrCloudLineHtml 风格, 但浅色)
+    function _renderCloudLine(recId) {
+      var arr = []; try { arr = JSON.parse(localStorage.getItem('cog_records') || '[]'); } catch(e) {}
+      var rec = null;
+      for (var i = 0; i < arr.length; i++) if (arr[i].id === recId) { rec = arr[i]; break; }
+      if (!rec) return;
+      var status = rec._cloudStatus || (rec._cloudId ? 'synced' : (rec._cloudErr ? 'failed' : 'pending'));
+      var html = '';
+      if (status === 'synced' || rec._cloudId) {
+        html = '<div style="font-size:13px;color:#047857;font-weight:600;display:flex;align-items:center;gap:6px;">' +
+          '<span style="display:inline-block;width:8px;height:8px;background:#16a34a;border-radius:50%;"></span>' +
+          '<span>☁️ 已同步到云端</span>' +
+        '</div>';
+      } else if (status === 'syncing') {
+        html = '<div style="font-size:13px;color:#0284c7;font-weight:600;display:flex;align-items:center;gap:6px;">' +
+          '<span style="display:inline-block;width:10px;height:10px;border:2px solid #0284c7;border-top-color:transparent;border-radius:50%;animation:qnr-spin 0.8s linear infinite;"></span>' +
+          '<span>☁️ 正在同步到云端…</span>' +
+          '<span style="color:#64748b;font-weight:400;">(本机已保存,网络恢复后自动重试)</span>' +
+        '</div>';
+      } else if (status === 'failed') {
+        var errHint = rec._cloudErr ? ' · ' + String(rec._cloudErr).replace(/[<>&"\'"]/g,'') : '';
+        html = '<div style="font-size:13px;color:#dc2626;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+          '<span style="display:inline-flex;align-items:center;gap:4px;">' +
+            '<span style="display:inline-block;width:8px;height:8px;background:#dc2626;border-radius:50%;"></span>' +
+            '<span>☁️ 同步失败' + errHint + '</span>' +
+          '</span>' +
+          '<button id="qnr-retry-btn" style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:12px;padding:4px 10px;border-radius:999px;cursor:pointer;font-weight:600;">↻ 重试</button>' +
+        '</div>';
+      } else {
+        html = '<div style="font-size:13px;color:#64748b;display:flex;align-items:center;gap:6px;">' +
+          '<span style="display:inline-block;width:8px;height:8px;background:#94a3b8;border-radius:50%;"></span>' +
+          '<span>☁️ 等待同步…</span>' +
+        '</div>';
+      }
+      var footer = document.getElementById('qnr-cloud-status-footer');
+      if (footer) footer.innerHTML = html;
+      // 绑定重试按钮
+      var retryBtn = document.getElementById('qnr-retry-btn');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', function(){
+          retryBtn.disabled = true;
+          retryBtn.textContent = '⏳ 重试中…';
+          if (window.CloudSync && typeof window.CloudSync.saveReportReliably === 'function') {
+            window.CloudSync.saveReportReliably(rec).then(function(){
+              _renderCloudLine(recId);
+            });
+          } else if (window._uploadToCloud) {
+            Promise.resolve(window._uploadToCloud(rec)).then(function(){
+              _renderCloudLine(recId);
+            });
+          }
+        });
+      }
+      // 订阅 CloudSync 状态变化 → 自动刷新
+      if (window.CloudSync && typeof window.CloudSync.onPendingChange === 'function' && !window.__qnrCloudLineSubscribed) {
+        window.__qnrCloudLineSubscribed = true;
+        window.CloudSync.onPendingChange(function(pending){
+          (pending || []).forEach(function(p){
+            try { _renderCloudLine(p.id); } catch(e) {}
+          });
+        });
+      }
+    }
+
+    // ===== PDF 导出 (复用 html2canvas + jsPDF) =====
+    function _exportInlinePDF(rec) {
+      var btn = document.getElementById('qnr-export-pdf-btn');
+      var setBtn = function(text, disabled) { if (btn) { btn.disabled = disabled; btn.textContent = text; } };
+      var origText = btn ? btn.textContent : '📄 导出 PDF';
+      try {
+        if (typeof html2canvas !== 'function') throw new Error('html2canvas 未加载');
+        if (!window.jspdf || !window.jspdf.jsPDF) throw new Error('jsPDF 未加载');
+        setBtn('⏳ 准备中…', true);
+        var bodyEl = document.getElementById('qnr-report-body');
+        if (!bodyEl) throw new Error('报告内容不存在');
+        // 离屏 wrap
+        var wrap = document.createElement('div');
+        wrap.style.cssText = 'position:absolute;left:-9999px;top:0;width:794px;padding:24px;background:#fff;font-family:"PingFang SC","Microsoft YaHei",sans-serif;color:#0f172a;box-sizing:border-box;';
+        wrap.innerHTML = bodyEl.innerHTML;
+        document.body.appendChild(wrap);
+        setBtn('⏳ 截图中…', true);
+        html2canvas(wrap, { scale: 1.6, backgroundColor: '#ffffff', logging: false, useCORS: true }).then(function(canvas){
+          document.body.removeChild(wrap);
+          setBtn('⏳ 生成 PDF…', true);
+          var pdf = new window.jspdf.jsPDF('p', 'mm', 'a4');
+          var pdfW = pdf.internal.pageSize.getWidth();
+          var pdfH = pdf.internal.pageSize.getHeight();
+          var margin = 10;
+          var imgW = pdfW - margin * 2;
+          var imgData = canvas.toDataURL('image/jpeg', 0.92);
+          var imgH = (canvas.height * imgW) / canvas.width;
+          var pageH = pdfH - margin * 2;
+          if (imgH <= pageH) {
+            pdf.addImage(imgData, 'JPEG', margin, margin, imgW, imgH);
+          } else {
+            var y = 0;
+            while (y < imgH) {
+              pdf.addImage(imgData, 'JPEG', margin, margin - y, imgW, imgH);
+              y += pageH;
+              if (y < imgH) pdf.addPage();
+            }
+          }
+          var name = (rec.patientInfo && rec.patientInfo.name) || '未知';
+          var safeName = String(name).replace(/[\\/:*?"<>|]/g, '_');
+          var dateStr = (rec.date || 'unknown').replace(/\//g, '-');
+          pdf.save('神经系统自评报告_' + safeName + '_' + dateStr + '.pdf');
+          setBtn('✅ 已导出', false);
+          setTimeout(function(){ setBtn(origText, false); }, 1500);
+        }).catch(function(err){
+          setBtn('❌ 导出失败', false);
+          setTimeout(function(){ setBtn(origText, false); }, 2000);
+          alert('PDF 导出失败: ' + (err && err.message || err));
+        });
+      } catch(e) {
+        setBtn('❌ 导出失败', false);
+        setTimeout(function(){ setBtn(origText, false); }, 2000);
+        alert('PDF 导出失败: ' + (e && e.message || e));
+      }
+    }
+
+    // ===== 初始化: 如果 sessionStorage 已有报告 (刷新场景), 重新渲染 =====
+    (function _restoreInlineReport(){
+      try {
+        if (sessionStorage.getItem('qnr_inline_done') === '1') return; // 用户已点完成
+        var raw = sessionStorage.getItem('qnr_inline_report');
+        if (!raw) return;
+        var rec = JSON.parse(raw);
+        if (!rec || !rec.id) return;
+        var waitDeps = function(){
+          if (window.__qnrInlineReportReady) {
+            _renderInlineReport(rec);
+            var intro = document.getElementById('screen-intro');
+            var quiz = document.getElementById('screen-quiz');
+            var result = document.getElementById('screen-result');
+            var report = document.getElementById('screen-report');
+            if (intro) intro.style.display = 'none';
+            if (quiz) quiz.style.display = 'none';
+            if (result) result.style.display = 'none';
+            if (report) report.style.display = '';
+          } else {
+            setTimeout(waitDeps, 100);
+          }
+        };
+        waitDeps();
+      } catch(e) {}
+    })();
   })();
 </script>
 </body>

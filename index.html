@@ -298,7 +298,7 @@
           <span id="cog-rec-info" style="font-size:13px;color:#888;min-width:80px;"></span>
           <button id="cog-rec-next" style="padding:6px 14px;background:#f0f0f0;border:1px solid #ccc;border-radius:6px;cursor:pointer;font-size:13px;">下一条 →</button>
         </div>
-        <button onclick="window._exportCogPDF()" style="padding:10px 30px;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">📄 导出 PDF</button>
+        <button id="cog-report-export-btn" onclick="window._exportCurrentReport()" style="padding:10px 30px;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">📄 导出 PDF</button>
         <button onclick="window._closeCogReport()" style="padding:10px 30px;background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">返回首页</button>
       </div>
     </div>
@@ -2067,6 +2067,36 @@
         // 复用 cognitive-report.js 同款 html2canvas + jsPDF 链路 (assets/vendor/* 已在 index.html 加载)
         // A4 纵向 + 头页(患者信息 + 云端状态) + 内容页(4 组 16 分区), 多页自动分页
         // 文件名: 神经系统自评报告_<姓名>_<日期>.pdf
+        window._exportCurrentReport = function() {
+            // 路由: 根据当前显示的报告类型调不同的导出函数
+            // · 自评报告 (type=questionnaire) → _qnrExportReport (新版, 适配浅色 DOM)
+            // · 认知报告 (其他) → _exportCogPDF (老版, 适配深色 overlay)
+            var currentRecId = null;
+            try {
+                var arr = JSON.parse(localStorage.getItem('cog_records') || '[]');
+                // 找最近一次显示的报告: 取 _viewCogReport 的 idx
+                if (typeof window._lastCogReportIdx === 'number' && arr[window._lastCogReportIdx]) {
+                    currentRecId = arr[window._lastCogReportIdx].id;
+                }
+            } catch(e) {}
+            if (currentRecId && typeof window._qnrExportReport === 'function') {
+                // 查记录类型
+                var rec = null;
+                try {
+                    var arr2 = JSON.parse(localStorage.getItem('cog_records') || '[]');
+                    for (var i = 0; i < arr2.length; i++) if (arr2[i].id === currentRecId) { rec = arr2[i]; break; }
+                } catch(e) {}
+                if (rec && rec.type === 'questionnaire') {
+                    window._qnrExportReport(currentRecId);
+                    return;
+                }
+            }
+            // 认知报告走老路径
+            if (typeof window._exportCogPDF === 'function') {
+                window._exportCogPDF();
+            }
+        };
+
         window._qnrExportReport = async function(recId) {
             // 找按钮 (做禁用 + 进度提示)
             var btn = document.querySelector('button[onclick*="_qnrExportReport(\'' + recId + '\')"]');
@@ -2353,11 +2383,8 @@
             });
             // 免责
             html += '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:12px 16px;font-size:12px;color:#92400e;line-height:1.7;">⚠️ 本评估用于一般健康教育，结果属于评估提示，不等同于医学诊断。如结果异常或症状持续，请到正规医疗机构进一步评估。</div>';
-            // 操作栏: 导出 PDF + 打印 (无"保存到评估报告"按钮 — 数据已在生成报告时自动同步)
-            html += '<div style="display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap;">' +
-                '<button onclick="window._qnrExportReport(\'' + rec.id + '\')" style="background:linear-gradient(135deg,#0d9488,#0284c7);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(13,148,136,0.25);">📄 导出 PDF</button>' +
-                '<button onclick="window.print()" style="background:#fff;color:#334155;border:1.5px solid #cbd5e1;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;">🖨️ 打印</button>' +
-            '</div>';
+            // 注: 导出按钮已在 footer 的 cog-report-export-btn (智能路由 _exportCurrentReport) 处理
+            // 这里不再重复按钮, 避免两处「📄 导出 PDF」
             body.innerHTML = html;
             overlay.scrollTop = 0;
         }
@@ -2369,6 +2396,8 @@
             var wrapped = function(idx) {
                 var records = _qnrReadRecords();
                 var rec = records[idx];
+                // 记录当前查看的报告 idx, 供 _exportCurrentReport 路由用 (认知 vs 自评)
+                window._lastCogReportIdx = idx;
                 if (rec && rec.type === 'questionnaire') { _qnrRenderReport(rec); return; }
                 orig.apply(this, arguments);
             };
