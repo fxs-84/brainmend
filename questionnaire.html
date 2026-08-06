@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>神经系统状态自评 · 脑优化</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
+<style>
+  :root {
+    --bg-grad-1: #eef2ff;
+    --bg-grad-2: #f5f3ff;
+    --bg-grad-3: #fff7ed;
+    --surface: #ffffff;
+    --surface-muted: #f1f5f9;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --text: #0f172a;
+    --text-secondary: #334155;
+    --text-muted: #64748b;
+    --text-subtle: #94a3b8;
+    --accent: #0d9488;
+    --accent-2: #0284c7;
+    --accent-bg: #ccfbf1;
+    --accent-bg-soft: #f0fdfa;
+    --warn-bg: #fffbeb;
+    --warn-text: #92400e;
+    --warn-border: #fcd34d;
+    --burden-bg: #fff7ed;
+    --burden-text: #9a3412;
+    --burden-border: #fdba74;
+    --ok-bg: #ecfdf5;
+    --ok-text: #047857;
+    --ok-border: #6ee7b7;
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+    --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.06);
+    --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.10);
+    --shadow-btn: 0 6px 20px rgba(13, 148, 136, 0.28);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  body {
+    background: linear-gradient(135deg, var(--bg-grad-1) 0%, var(--bg-grad-2) 50%, var(--bg-grad-3) 100%);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
+    min-height: 100vh;
+    padding: 28px 16px 40px;
+  }
+  .screen { max-width: 680px; margin: 0 auto; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 28px 24px;
+    margin-top: 14px;
+    box-shadow: var(--shadow-md);
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-bg);
+    border-radius: 999px;
+    padding: 5px 14px;
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-size: 28px; line-height: 1.35;
+    color: var(--text);
+    margin-bottom: 14px;
+    letter-spacing: -0.01em;
+    font-weight: 700;
+  }
+  .lead {
+    font-size: 16px; line-height: 1.85;
+    color: var(--text-secondary);
+  }
+  .lead b {
+    color: var(--accent);
+    font-weight: 700;
+    background: linear-gradient(transparent 62%, var(--accent-bg) 62%);
+    padding: 0 3px;
+    border-radius: 2px;
+  }
+  .tips {
+    margin: 18px 0; padding: 16px 18px 16px 40px;
+    background: var(--surface-muted);
+    border-radius: 12px;
+    color: var(--text-secondary); font-size: 14px; line-height: 2;
+    list-style: disc;
+  }
+  .tips li { margin-left: 4px; }
+  .disclaimer {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--warn-text);
+    line-height: 1.75;
+    margin: 18px 0;
+  }
+
+  .btn-primary {
+    display: block; width: 100%;
+    padding: 16px; margin-top: 8px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    color: #fff;
+    border: none; border-radius: 12px;
+    font-size: 17px; font-weight: 700;
+    cursor: pointer;
+    box-shadow: var(--shadow-btn);
+    transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(13, 148, 136, 0.34); }
+  .btn-primary:active { transform: translateY(0); opacity: 0.95; }
+  .btn-secondary {
+    display: block; width: 100%;
+    padding: 14px; margin-top: 10px;
+    background: var(--surface); color: var(--accent);
+    border: 1.5px solid var(--accent);
+    border-radius: 12px;
+    font-size: 16px; font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .btn-secondary:hover { background: var(--accent-bg); }
+  .btn-ghost {
+    padding: 10px 18px;
+    background: var(--surface);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .btn-ghost:hover { background: var(--surface-muted); color: var(--text); border-color: var(--text-subtle); }
+  .btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* 答题页 */
+  .quiz-progress-wrap { padding: 4px 4px 0; }
+  .quiz-progress-text {
+    font-size: 13px; color: var(--text-muted);
+    margin-bottom: 8px;
+    display: flex; justify-content: space-between;
+    font-weight: 500;
+  }
+  .quiz-progress-bar {
+    height: 8px;
+    background: var(--surface-muted);
+    border-radius: 4px;
+    overflow: hidden;
+    box-shadow: inset 0 1px 2px rgba(15,23,42,0.04);
+  }
+  #quiz-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+    transition: width 0.35s ease;
+    width: 0;
+    border-radius: 4px;
+  }
+  .quiz-region-tag {
+    display: inline-block;
+    font-size: 12px; font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-bg);
+    padding: 4px 12px;
+    border-radius: 999px;
+    margin-bottom: 14px;
+  }
+  #quiz-q-number {
+    font-size: 13px; color: var(--text-muted);
+    margin-bottom: 8px; font-weight: 500;
+  }
+  #quiz-q-text {
+    font-size: 21px; line-height: 1.55;
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  #quiz-q-side {
+    font-size: 12px; color: var(--accent);
+    margin-top: 6px; font-weight: 500;
+  }
+  #quiz-options {
+    display: flex; flex-direction: column;
+    gap: 10px; margin-top: 20px;
+  }
+  .q-option {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 16px 18px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    color: var(--text);
+    font-size: 16px;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    transition: all 0.15s;
+  }
+  .q-option:hover {
+    border-color: var(--accent);
+    background: var(--accent-bg-soft);
+  }
+  .q-option.selected {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-weight: 600;
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+  }
+  .q-option-sub { font-size: 13px; color: var(--text-muted); }
+  .q-option.selected .q-option-sub { color: var(--accent); }
+  .quiz-nav {
+    display: flex; justify-content: space-between;
+    margin-top: 22px; gap: 12px;
+  }
+
+  /* 结果页 */
+  #result-summary { margin-bottom: 20px; }
+  .result-summary-burden {
+    background: var(--burden-bg);
+    border: 1px solid var(--burden-border);
+    border-radius: 14px;
+    padding: 16px 18px;
+    font-size: 16px; font-weight: 600;
+    color: var(--burden-text);
+    line-height: 1.65;
+  }
+  .result-summary-ok {
+    background: var(--ok-bg);
+    border: 1px solid var(--ok-border);
+    border-radius: 14px;
+    padding: 16px 18px;
+    font-size: 16px; font-weight: 600;
+    color: var(--ok-text);
+  }
+  .result-summary-hint {
+    font-size: 13px; color: var(--text-muted);
+    margin-top: 10px; line-height: 1.7;
+  }
+  .result-group {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow-sm);
+  }
+  .result-group.has-burden {
+    border-color: var(--burden-border);
+    background: linear-gradient(180deg, var(--burden-bg) 0%, var(--surface) 60%);
+  }
+  .result-group-title {
+    font-size: 17px;
+    color: var(--text);
+    font-weight: 700;
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .result-region {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+  }
+  .result-region:first-of-type { border-top: none; padding-top: 4px; }
+  .result-region-info { flex: 1; min-width: 0; }
+  .result-region-name { font-size: 14px; color: var(--text); font-weight: 500; }
+  .result-region-meta { font-size: 12px; color: var(--text-muted); margin: 2px 0 6px; }
+  .result-region-bar {
+    height: 6px;
+    background: var(--surface-muted);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .result-region-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+  }
+  .severity-chip {
+    flex: 0 0 auto;
+    font-size: 12px; font-weight: 700;
+    color: #0f172a;
+    border-radius: 999px;
+    padding: 4px 12px;
+    min-width: 48px; text-align: center;
+  }
+  .result-sticky-footer {
+    position: sticky; bottom: 12px;
+    margin-top: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    border-radius: 16px;
+    padding: 16px 20px;
+  }
+  .result-sticky-footer .disclaimer { margin: 0 0 12px; }
+  .screenshot-tip {
+    text-align: center;
+    font-size: 15px; font-weight: 600;
+    color: var(--accent);
+    padding: 12px;
+    border: 1.5px dashed var(--accent);
+    border-radius: 12px;
+    margin-bottom: 10px;
+    background: var(--accent-bg-soft);
+  }
+  .result-actions { display: flex; gap: 10px; justify-content: center; margin-top: 16px; }
+
+  @media (max-width: 480px) {
+    body { padding: 16px 12px 28px; }
+    .card { padding: 22px 18px; border-radius: 18px; }
+    h1 { font-size: 24px; }
+    #quiz-q-text { font-size: 18px; }
+    .quiz-nav { flex-direction: row; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 开场说明页 -->
+<div id="screen-intro" class="screen">
+  <div class="card">
+    <div class="badge">脑优化 · 教育版</div>
+    <h1>神经系统状态自评</h1>
+    <p class="lead">这份问卷共 <b>100 题</b>，大约需要 <b>15-20 分钟</b>。每道题描述一个身体或状态信号，请根据<b>最近一段时间</b>的真实情况，选择它出现的频率。</p>
+    <ul class="tips">
+      <li>凭第一感觉作答，不要反复斟酌</li>
+      <li>找一个安静、不被打扰的环境</li>
+      <li>答错可以返回上一题修改</li>
+      <li>中途退出也不怕，回来可以接着答</li>
+    </ul>
+    <div class="disclaimer">
+      ⚠️ 本评估用于一般健康教育，结果属于评估提示，不等同于医学诊断。如结果异常或症状持续，请到正规医疗机构进一步评估。你的答案只保存在本机，不会上传。
+    </div>
+    <button class="btn-primary" id="intro-start">开始测评</button>
+    <button class="btn-secondary" id="intro-resume" style="display:none;">继续上次作答</button>
+  </div>
+</div>
+
+<!-- 答题页 -->
+<div id="screen-quiz" class="screen" style="display:none;">
+  <div class="quiz-progress-wrap">
+    <div class="quiz-progress-text" id="quiz-progress-text"><span>已答 0 / 100</span><span>0%</span></div>
+    <div class="quiz-progress-bar"><div id="quiz-progress-fill"></div></div>
+  </div>
+  <div class="card">
+    <div class="quiz-region-tag" id="quiz-region-tag"></div>
+    <div id="quiz-q-number">第 1 / 100 题</div>
+    <div id="quiz-q-text"></div>
+    <div id="quiz-q-side" style="display:none;"></div>
+    <div id="quiz-options"></div>
+    <div class="quiz-nav">
+      <button class="btn-ghost" id="quiz-prev" type="button">‹ 上一题</button>
+      <button class="btn-ghost" id="quiz-next" type="button" disabled>下一题 ›</button>
+    </div>
+  </div>
+</div>
+
+<!-- 结果页 -->
+<div id="screen-result" class="screen" style="display:none;">
+  <div class="card">
+    <div class="badge">自评结果 · 评估提示</div>
+    <h1>你的脑区地图</h1>
+    <div id="result-summary"></div>
+    <div id="result-groups"></div>
+    <div class="result-actions">
+      <button class="btn-ghost" id="result-restart" type="button">重新测评</button>
+      <button class="btn-ghost" id="result-back-home" type="button">返回首页</button>
+    </div>
+  </div>
+  <div class="result-sticky-footer">
+    <div class="screenshot-tip">📸 请截图本页发给老付</div>
+    <div class="disclaimer">
+      ⚠️ 本评估用于一般健康教育，结果属于评估提示，不等同于医学诊断。如结果异常或症状持续，请到正规医疗机构进一步评估。
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./js/questionnaire/main.js"></script>
+<script>
+  // ====================================================================
+  // 沙箱模式 + 完成回传 (与认知评估同链路)
+  // ?sandbox=1&name=&age=&gender=&tid=  → 隐藏外链入口,只保留作答
+  // ?return=1 → 完成时把结果 base64 后跳到 index.html?return=questionnaire&result=...
+  // ====================================================================
+  (function(){
+    var params = new URLSearchParams(window.location.search);
+    var sandbox = params.get('sandbox') === '1';
+
+    // 云端链路: 捕获二维码携带的 token / tid 到 localStorage
+    // (认知评估在 index.html mode=cognitive 分支捕获; 自评入口是本页, 必须自己捕获,
+    //  否则完成跳回 index.html 后 _uploadToCloud 因无 token 静默跳过, 结果不会上传云端)
+    try {
+      var tk = params.get('token');
+      if (tk) localStorage.setItem('cog_gh_token', tk);
+      var tidParam = params.get('tid');
+      if (tidParam) localStorage.setItem('cog_therapist_id', tidParam);
+    } catch(e) {}
+
+    var patient = {
+      name: params.get('name') || '',
+      age: params.get('age') || '',
+      gender: params.get('gender') || '',
+      id: params.get('id') || ''
+    };
+
+    // 沙箱 UI 调整
+    if (sandbox) {
+      try {
+        // 隐藏 intro 页的 "返回首页" 风格提示, 把顶部 "脑优化 · 教育版" badge 改为 "患者作答"
+        var badge = document.querySelector('.badge');
+        if (badge) badge.textContent = '患者作答 · 教育版';
+        // 隐藏 intro 页"凭第一感觉作答"等 tips 中关于续作的提示 (因为沙箱无意义)
+        var tips = document.querySelector('.tips');
+        if (tips) {
+          var items = tips.querySelectorAll('li');
+          if (items[3]) items[3].textContent = '答案只保存在本机,完成后会同步给您的治疗师';
+        }
+        // 记录"已扫码" 状态到 sessionStorage, 治疗师端可观察 (此页本身看不到)
+        try { sessionStorage.setItem('qnr_patient_info', JSON.stringify(patient)); } catch(e) {}
+        // 屏蔽 backspace/ESC
+        window.addEventListener('keydown', function(e){
+          if (e.key === 'Escape' || (e.key === 'Backspace' && !['INPUT','TEXTAREA','SELECT'].includes((e.target||{}).tagName))) {
+            e.preventDefault(); e.stopPropagation();
+          }
+        }, true);
+        // 屏蔽 browser back
+        history.pushState({qnr_sandbox:1}, '', location.href);
+        window.addEventListener('popstate', function(){
+          if (sessionStorage.getItem('qnr_completed') !== '1') {
+            history.pushState({qnr_sandbox:1}, '', location.href);
+          }
+        });
+      } catch(e) { console.error('[qnr sandbox] UI 调整失败', e); }
+    }
+
+    // 暴露患者信息给 main.js 用
+    window.__qnrPatient = patient;
+    window.__qnrSandbox = sandbox;
+
+    // ============ 客户信息登记表单 (对齐认知评估 _showPatientRegForm) ============
+    // 完成页点"保存到评估报告" → 先弹表单填姓名/年龄/性别 → 提交才跳回主页
+    var qnrRegOverlay = null;
+
+    // 提交后"正在同步"提示 (透明遮罩 + 旋转图标 + 文案)
+    // 作用: 告诉患者"已经收到登记, 正在保存到云端, 别关页面", 缓解跳转前的等待焦虑
+    function _showSavingIndicator() {
+      if (document.getElementById('qnr-saving-overlay')) return;
+      var ind = document.createElement('div');
+      ind.id = 'qnr-saving-overlay';
+      ind.style.cssText = 'position:fixed;inset:0;z-index:31000;background:rgba(255,255,255,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;';
+      ind.innerHTML =
+        '<div style="width:48px;height:48px;border:4px solid #e2e8f0;border-top-color:#0d9488;border-radius:50%;animation:qnr-spin 0.9s linear infinite;"></div>' +
+        '<div style="color:#0f172a;font-size:16px;font-weight:600;">正在保存您的报告…</div>' +
+        '<div style="color:#64748b;font-size:13px;">请勿关闭页面, 同步完成后自动跳转</div>' +
+        '<style>@keyframes qnr-spin{to{transform:rotate(360deg)}}</style>';
+      document.body.appendChild(ind);
+    }
+    function _showQnrRegForm(onSubmit) {
+      var existing = document.getElementById('qnr-reg-overlay');
+      if (existing) existing.remove();
+      var overlay = document.createElement('div');
+      overlay.id = 'qnr-reg-overlay';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:30000;background:rgba(15,23,42,0.55);display:flex;align-items:center;justify-content:center;padding:20px;';
+      var card = document.createElement('div');
+      card.style.cssText = 'background:#fff;border-radius:20px;padding:28px 24px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(15,23,42,0.25);';
+      card.innerHTML =
+        '<h3 style="color:#0f172a;text-align:center;margin:0 0 6px;font-size:20px;font-weight:700;">📝 登记患者信息</h3>' +
+        '<p style="color:#64748b;text-align:center;font-size:13px;margin:0 0 22px;">自评已完成 · 填写信息后提交到评估报告</p>' +
+        '<div style="margin-bottom:14px;">' +
+          '<label style="display:block;color:#334155;font-size:12px;margin-bottom:6px;">姓名 *</label>' +
+          '<input id="qnr-reg-name" type="text" placeholder="如：张三" value="' + (patient.name || '') + '" style="width:100%;padding:12px 14px;background:#f8fafc;border:1.5px solid #e2e8f0;color:#0f172a;border-radius:10px;font-size:15px;box-sizing:border-box;outline:none;">' +
+        '</div>' +
+        '<div style="margin-bottom:14px;">' +
+          '<label style="display:block;color:#334155;font-size:12px;margin-bottom:6px;">年龄</label>' +
+          '<input id="qnr-reg-age" type="number" min="3" max="120" placeholder="如：35" value="' + (patient.age || '') + '" style="width:100%;padding:12px 14px;background:#f8fafc;border:1.5px solid #e2e8f0;color:#0f172a;border-radius:10px;font-size:15px;box-sizing:border-box;outline:none;">' +
+        '</div>' +
+        '<div style="margin-bottom:22px;">' +
+          '<label style="display:block;color:#334155;font-size:12px;margin-bottom:6px;">性别</label>' +
+          '<select id="qnr-reg-gender" style="width:100%;padding:12px 14px;background:#f8fafc;border:1.5px solid #e2e8f0;color:#0f172a;border-radius:10px;font-size:15px;box-sizing:border-box;outline:none;">' +
+            '<option value="">请选择</option>' +
+            '<option value="男"' + (patient.gender === '男' ? ' selected' : '') + '>男</option>' +
+            '<option value="女"' + (patient.gender === '女' ? ' selected' : '') + '>女</option>' +
+            '<option value="其他"' + (patient.gender === '其他' ? ' selected' : '') + '>其他</option>' +
+          '</select>' +
+        '</div>' +
+        '<button id="qnr-reg-submit" style="display:block;width:100%;padding:14px;background:linear-gradient(135deg,#0d9488,#0284c7);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:16px;font-weight:700;">提交到评估报告</button>';
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+      setTimeout(function(){ var n = document.getElementById('qnr-reg-name'); if (n) n.focus(); }, 50);
+      document.getElementById('qnr-reg-submit').addEventListener('click', function() {
+        var name = (document.getElementById('qnr-reg-name').value || '').trim();
+        if (!name) {
+          var n2 = document.getElementById('qnr-reg-name');
+          n2.style.borderColor = '#e11d48';
+          n2.focus();
+          return;
+        }
+        var age = (document.getElementById('qnr-reg-age').value || '').trim();
+        var gender = document.getElementById('qnr-reg-gender').value;
+        overlay.remove();
+        // 显示"正在同步"提示, 让患者知道接下来在保存 (避免白屏以为是卡死)
+        _showSavingIndicator();
+        onSubmit({ name: name, age: age, gender: gender, id: patient.id });
+      });
+      qnrRegOverlay = overlay;
+    }
+
+    // 完成后: 弹登记表单 → 填完 → 跳回主页把结果写入报告
+    window.addEventListener('qnr:finished', function(e){
+      var payload = e.detail || {};
+      _showQnrRegForm(function(info){
+        var data = {
+          items: payload.items || {},
+          phoneEar: payload.phoneEar || null,
+          name: info.name,
+          age: info.age,
+          gender: info.gender,
+          id: info.id
+        };
+        try { sessionStorage.setItem('qnr_completed', '1'); } catch(_){}
+        var encoded;
+        try {
+          // ⚠️ UTF-8 安全编码: btoa 只接受 Latin1, 中文姓名会抛 InvalidCharacterError
+          // 用 TextEncoder 手动 UTF-8 → 二进制字符串 → btoa (不依赖 deprecated unescape)
+          var bytes = new TextEncoder().encode(JSON.stringify(data));
+          var bin = '';
+          bytes.forEach(function(b){ bin += String.fromCharCode(b); });
+          encoded = encodeURIComponent(btoa(bin));
+        } catch(err) {
+          // 兜底: 编码失败也跳转 (不带 result, 至少不让页面卡死)
+          window.location.href = './index.html?return=questionnaire';
+          return;
+        }
+        var target = './index.html?return=questionnaire&result=' + encoded;
+        // 透传 token / tid: index.html 端 cognitive-report.js 从 URL 捕获 token 后才会上传云端,
+        // tid 决定云端目录 (治疗师 ID), 缺了会传到随机目录, 治疗师云端列表看不到
+        var tkOut = params.get('token');
+        if (tkOut) target += '&token=' + encodeURIComponent(tkOut);
+        var tidOut = params.get('tid');
+        if (tidOut) target += '&tid=' + encodeURIComponent(tidOut);
+        // 🛡️ UX 优化: 短暂停留 (300ms) 让 _showSavingIndicator 的旋转动画有渲染时间,
+        // 否则页面立刻跳转, 用户根本看不到"正在保存"提示 (体验上是白屏焦虑)
+        setTimeout(function(){ window.location.href = target; }, 300);
+      });
+    });
+  })();
+</script>
+</body>
+</html>
