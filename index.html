@@ -984,7 +984,6 @@
 <script src="./assets/cognitive/cognitive-observation.js"></script>
 <script src="./assets/vendor/html2canvas-1.4.1.min.js" crossorigin="anonymous"></script>
 <script src="./assets/vendor/jspdf-2.5.1.umd.min.js" crossorigin="anonymous"></script>
-<script src="./assets/cognitive/cognitive-report.js?v=20260805a"></script>
 <!-- 步态分析模块 (基于 ANRM 步态分析手册) -->
 <script src="./assets/gait-params.js"></script>
 <script src="./assets/gait-analysis.js"></script>
@@ -2243,34 +2242,15 @@
             window._viewCogReport = wrapped;
         }
 
-        // ---------- 包装 _showCogRecordList (自评行显示 📋100题) ----------
+        // ---------- 包装 _showCogRecordList (认知报告脚本已按 type 分类渲染, 此处保留包装以维持旧入口兼容) ----------
         function _wrapShowCogRecordList() {
             var orig = window._showCogRecordList;
             if (!orig || orig.__qnrWrapped) return;
             var wrapped = function() {
                 orig.apply(this, arguments);
-                setTimeout(_qnrBeautifyList, 80);
             };
             wrapped.__qnrWrapped = true;
             window._showCogRecordList = wrapped;
-        }
-        function _qnrBeautifyList() {
-            var overlay = document.getElementById('cog-record-list-overlay');
-            if (!overlay) return;
-            var recs = _qnrReadRecords().filter(function(r){ return r && r.type === 'questionnaire'; });
-            if (!recs.length) return;
-            var keys = {};
-            recs.forEach(function(r){ keys[r.date + ' ' + r.time] = true; });
-            var rows = overlay.querySelectorAll('[style*="cursor:pointer"]');
-            rows.forEach(function(el){
-                var t = el.textContent || '';
-                for (var k in keys) {
-                    if (t.indexOf(k) >= 0) {
-                        el.innerHTML = el.innerHTML.replace('📊12项', '📋100题');
-                        break;
-                    }
-                }
-            });
         }
 
         // ---------- 启动: cognitive-report.js 已先于此脚本执行, 直接包装; 失败则轮询 ----------
@@ -2297,5 +2277,6 @@
     })();
 
 </script>
+<script type="module" src="./assets/cognitive/cognitive-report.js?v=20260805b"></script>
 </body>
 </html>
