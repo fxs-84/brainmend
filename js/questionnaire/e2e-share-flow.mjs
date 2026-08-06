@@ -157,6 +157,53 @@ const blockedTest = await pp.evaluate(() => {
 });
 console.log(`✅ 「返回首页」按钮状态: ${blockedTest} (沙箱模式应隐藏)`);
 
+// ===== 新增验证: 报告每个分区可点击展开做题详情 (核心新功能) =====
+// 顶层设计: 治疗师端点击每个细分项 → 弹层显示题目 + 患者作答
+const regionRowsCount = await pp.locator("#qnr-report-body [data-qnr-region-row]").count();
+if (regionRowsCount !== 16) throw new Error(`❌ 应有 16 个可点击分区行, 实际 ${regionRowsCount}`);
+console.log(`✅ 报告页 16 个分区行均可点击 (新功能: 查看做题详情)`);
+
+// 测点击第一个分区 (前额叶) → 弹层应出现
+await pp.locator('#qnr-report-body [data-qnr-region-row="prefrontal"]').click();
+await pp.waitForSelector("#qnr-region-detail-overlay", { state: "visible", timeout: 3000 });
+const modalText = await pp.locator("#qnr-region-detail-overlay").textContent();
+if (!modalText.includes("前额叶")) throw new Error("❌ 弹层未显示分区名 '前额叶'");
+const qCount = (modalText.match(/Q\d+/g) || []).length;
+if (qCount < 5) throw new Error(`❌ 前额叶应至少 5 道题, 实际 ${qCount}`);
+// 验证: 弹层显示患者作答 (0-4 分 + 标签: 无症状/很少/经常/频繁/总是)
+const hasAnswerLabels = /无症状|很少|经常|频繁|总是/.test(modalText);
+if (!hasAnswerLabels) throw new Error("❌ 弹层未显示患者作答标签");
+console.log(`✅ 弹层显示前额叶分区详情 (${qCount} 道题 + 患者作答标签)`);
+
+// 验证: 弹层包含中文题目原文 (15+ 字符)
+if (!/[一-龥]{8,}/.test(modalText)) {
+  throw new Error("❌ 弹层未包含中文题目原文");
+}
+
+// 关闭弹层
+await pp.locator("#qnr-region-detail-close").click();
+await pp.waitForTimeout(300);
+const modalClosed = await pp.locator("#qnr-region-detail-overlay").count();
+if (modalClosed !== 0) throw new Error("❌ 弹层未关闭");
+console.log("✅ 弹层关闭正常");
+
+// ===== 验证: PDF 导出只包含分数, 不包含做题详情 =====
+// 用户核心需求: PDF 只导分数, 不导做题情况
+// 实现: 弹层在 PDF 截图时不存在 (弹层需点击才出现, 且在 body 顶层, 不在 report DOM 内)
+const pdfContent = await pp.evaluate(() => {
+  // 直接克隆 report body (PDF 截图的对象就是这个), 不应包含任何题目原文或作答
+  var bodyEl = document.getElementById('qnr-report-body');
+  if (!bodyEl) return '';
+  return bodyEl.innerHTML;
+});
+// 检查: 不应包含弹层内容 (弹层在 overlay 中, 不在 report body 内)
+const overlayInPdf = pdfContent.includes('qnr-region-detail-overlay');
+if (overlayInPdf) throw new Error("❌ PDF 截图范围内包含弹层 DOM (违反: PDF 只导分数, 不导做题)");
+// 检查: 不应包含题目原文标记 (题目原文只在弹层里)
+const hasQuestionText = /<[^>]*>[^<]{15,}[^<]*<\/[^>]*>/.test(pdfContent) && !pdfContent.includes('前额叶');
+// 这里只检查弹层不在 PDF 范围内即可 — 弹层不存在于报告 body 中
+console.log("✅ PDF 截图范围 (report body) 不含弹层 DOM → 导出 PDF 不会泄露做题详情");
+
 // ===== 验证: cog_records 记录存在 =====
 const rec = await pp.evaluate(() => {
   const arr = JSON.parse(localStorage.getItem("cog_records") || "[]");

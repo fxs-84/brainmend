@@ -396,6 +396,7 @@
 
 <script type="module" src="./js/questionnaire/main.js"></script>
 <script src="./assets/cognitive/reports/cloud-sync.js"></script>
+<script src="./assets/cognitive/reports/qnr-region-detail.js"></script>
 <script src="./assets/vendor/html2canvas-1.4.1.min.js" crossorigin="anonymous"></script>
 <script src="./assets/vendor/jspdf-2.5.1.umd.min.js" crossorigin="anonymous"></script>
 <script>
@@ -765,6 +766,8 @@
 
     // ===== 报告 DOM 渲染 (复用 index.html _qnrRenderReport 的视觉风格, 适配浅色问卷页) =====
     function _renderInlineReport(rec) {
+      // 暴露当前报告记录到 window, 供区域行 click 弹层用 (PDF 导出与弹层互不干扰)
+      window.__qnrCurrentReportRec = rec;
       var d = rec.qnr || {};
       var sevColor = { normal:'#16a34a', mild:'#ca8a04', moderate:'#ea580c', severe:'#dc2626' };
       var sevLabel = { normal:'正常', mild:'轻度', moderate:'中度', severe:'重度' };
@@ -813,13 +816,16 @@
           var max = regionMax[rid] || 0;
           var sev = d.severityByRegion[rid] || 'normal';
           var pct = max > 0 ? Math.round((score/max)*100) : 0;
-          bodyInner += '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #f1f5f9;">' +
+          // 🔍 可点击展开: 点行 → 弹层显示该分区下的题目 + 患者作答
+          // PDF 导出不会包含弹层 (弹层 fixed 定位, 在 body 顶层, 不在 report DOM 内)
+          bodyInner += '<div data-qnr-region-row="' + rid + '" onclick="window._qnrShowRegionDetail(window.__qnrCurrentReportRec, \'' + rid + '\')" style="display:flex;align-items:center;gap:12px;padding:10px 8px;margin:0 -8px;border-top:1px solid #f1f5f9;cursor:pointer;border-radius:6px;transition:background 0.15s;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'transparent\'" title="点击查看该分区的题目与作答">' +
             '<div style="flex:1;min-width:0;">' +
-              '<div style="font-size:14px;color:#0f172a;font-weight:500;">' + def.label + (def.detail ? ' <span style="color:#94a3b8;font-size:11px;">· ' + def.detail + '</span>' : '') + '</div>' +
+              '<div style="font-size:14px;color:#0f172a;font-weight:500;">' + def.label + (def.detail ? ' <span style="color:#94a3b8;font-size:11px;">· ' + def.detail + '</span>' : '') + ' <span style="color:#94a3b8;font-size:11px;font-weight:400;">点击查看详情</span></div>' +
               '<div style="font-size:12px;color:#64748b;margin:2px 0 6px;">' + score + ' / ' + max + ' 分</div>' +
               '<div style="height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + sevColor[sev] + ';border-radius:3px;transition:width 0.4s;"></div></div>' +
             '</div>' +
             '<span style="flex:0 0 auto;font-size:12px;font-weight:700;background:' + sevColor[sev] + ';color:#fff;padding:5px 12px;border-radius:999px;min-width:48px;text-align:center;">' + sevLabel[sev] + '</span>' +
+            '<span style="flex:0 0 auto;color:#94a3b8;font-size:18px;line-height:1;margin-left:4px;">›</span>' +
           '</div>';
         });
         bodyInner += '</div>';

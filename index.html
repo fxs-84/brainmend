@@ -2306,6 +2306,8 @@
         // ---------- 自绘自评报告 (复用 cog-report-overlay 壳) ----------
         function _qnrRenderReport(rec) {
             var d = rec.qnr || {};
+            // 暴露当前记录到 window, 供区域行 click 弹层用 (PDF 导出时使用 _qnrCurrentReportRec 不影响)
+            window.__qnrCurrentReportRec = rec;
             var overlay = document.getElementById('cog-report-overlay');
             if (!overlay) return;
             var nav = document.getElementById('cog-report-nav');
@@ -2370,13 +2372,16 @@
                     var max = regionMax[rid] || 0;
                     var sev = d.severityByRegion[rid] || 'normal';
                     var pct = max > 0 ? Math.round((score/max)*100) : 0;
-                    html += '<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid #f1f5f9;">' +
+                    // 🔍 可点击展开: 治疗师点行 → 弹层显示该分区下的题目 + 患者作答
+                    // PDF 导出不会包含弹层 (弹层在 body 顶层 fixed 定位, 不在 report DOM 内)
+                    html += '<div data-qnr-region-row="' + rid + '" onclick="window._qnrShowRegionDetail(window.__qnrCurrentReportRec, \'' + rid + '\')" style="display:flex;align-items:center;gap:12px;padding:10px 8px;margin:0 -8px;border-top:1px solid #f1f5f9;cursor:pointer;border-radius:6px;transition:background 0.15s;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'transparent\'" title="点击查看该分区的题目与作答">' +
                         '<div style="flex:1;min-width:0;">' +
-                            '<div style="font-size:13px;color:#0f172a;">' + def.label + (def.detail ? ' <span style="color:#94a3b8;font-size:11px;">· ' + def.detail + '</span>' : '') + '</div>' +
+                            '<div style="font-size:13px;color:#0f172a;">' + def.label + (def.detail ? ' <span style="color:#94a3b8;font-size:11px;">· ' + def.detail + '</span>' : '') + ' <span style="color:#94a3b8;font-size:11px;">点击查看详情</span></div>' +
                             '<div style="font-size:11px;color:#64748b;margin:2px 0 4px;">' + score + ' / ' + max + ' 分</div>' +
                             '<div style="height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + sevColor[sev] + ';border-radius:3px;transition:width 0.4s;"></div></div>' +
                         '</div>' +
-                        '<span style="flex:0 0 auto;font-size:12px;font-weight:700;color:#0f172a;background:' + sevColor[sev] + ';color:#fff;padding:4px 12px;border-radius:999px;min-width:48px;text-align:center;">' + sevLabel[sev] + '</span>' +
+                        '<span style="flex:0 0 auto;font-size:12px;font-weight:700;background:' + sevColor[sev] + ';color:#fff;padding:4px 12px;border-radius:999px;min-width:48px;text-align:center;">' + sevLabel[sev] + '</span>' +
+                        '<span style="flex:0 0 auto;color:#94a3b8;font-size:18px;line-height:1;margin-left:4px;">›</span>' +
                     '</div>';
                 });
                 html += '</div>';
@@ -2442,6 +2447,7 @@
 </script>
 <script type="module" src="./assets/cognitive/cognitive-report.js?v=20260805b"></script>
 <script src="./assets/cognitive/reports/cloud-sync.js?v=20260806a"></script>
+<script src="./assets/cognitive/reports/qnr-region-detail.js?v=20260807a"></script>
 <script>
   // ===== 神经系统自评 · 云端可靠保存 (替换原 setTimeout(_uploadToCloud, 0) 单次尝试) =====
   (function(){
