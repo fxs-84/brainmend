@@ -123,9 +123,62 @@
       .replace(/'/g, '&#39;');
   }
 
+  // 等待数据模块加载 (data.js + scoring.js 都挂 window 后才算就绪)
+  function _waitForData(timeoutMs, cb) {
+    var startTs = Date.now();
+    function _poll() {
+      if (_getData() && _getScoring()) { cb(true); return; }
+      if (Date.now() - startTs > timeoutMs) { cb(false); return; }
+      setTimeout(_poll, 80);
+    }
+    _poll();
+  }
+
   // 显示弹层
   function showRegionDetail(rec, regionId) {
-    // 已有则先关
+    // 数据未就绪 → 等一下再弹 (治疗师端从云端记录点开, data.js 可能还在加载中)
+    if (!_getData() || !_getScoring()) {
+      _waitForData(8000, function(ok) {
+        if (!ok) {
+          // 真的没加载到, 显示加载态提示
+          _showLoadingState(rec, regionId, true);
+          // 5s 后重试一次 (此时 data.js 可能刚加载完)
+          setTimeout(function() {
+            if (_getData() && _getScoring()) {
+              closeRegionDetail();
+              showRegionDetail(rec, regionId);
+            }
+          }, 5000);
+          return;
+        }
+        _showLoadingState(rec, regionId, false);
+        _renderAndShow(rec, regionId);
+      });
+      return;
+    }
+    _renderAndShow(rec, regionId);
+  }
+
+  // 加载态显示 (数据未就绪时的兜底)
+  function _showLoadingState(rec, regionId, isError) {
+    closeRegionDetail();
+    var overlay = document.createElement('div');
+    overlay.id = 'qnr-region-detail-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:35000;background:rgba(15,23,42,0.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+    var card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:16px;max-width:400px;width:100%;padding:32px 24px;text-align:center;box-shadow:0 24px 60px rgba(15,23,42,0.35);position:relative;';
+    if (isError) {
+      card.innerHTML = '<div style="font-size:32px;margin-bottom:12px;">⏳</div>' +
+        '<div style="font-size:16px;font-weight:600;color:#0f172a;margin-bottom:8px;">数据加载中...</div>' +
+        '<div style="font-size:13px;color:#64748b;line-height:1.6;">题目数据模块尚未就绪。<br>通常是首次进入页面时首次访问。<br>5 秒后将自动重试。</div>' +
+        '<button onclick="window._qnrCloseRegionDetail()" style="margin-top:16px;padding:8px 20px;background:#f1f5f9;color:#475569;border:none;border-radius:8px;cursor:pointer;font-size:14px;">关闭</button>';
+    }
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  }
+
+  // 真正渲染弹层
+  function _renderAndShow(rec, regionId) {
     closeRegionDetail();
     var overlay = document.createElement('div');
     overlay.id = 'qnr-region-detail-overlay';

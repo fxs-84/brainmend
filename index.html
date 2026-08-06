@@ -2449,6 +2449,49 @@
 <script src="./assets/cognitive/reports/cloud-sync.js?v=20260806a"></script>
 <script src="./assets/cognitive/reports/qnr-region-detail.js?v=20260807a"></script>
 <script>
+  // ===== 神经系统自评 · 数据/评分模块预加载 =====
+  // 顶层设计: 治疗师在云端记录列表打开自评报告时, 点击分区行需要 __qnrData + __qnrScoring
+  // 旧实现只在 URL 带 ?return=questionnaire 时才加载 → 治疗师直接点云端记录时点不开
+  // 这里启动时立即预加载, 不依赖 URL 参数 (异步, 不阻塞首页渲染)
+  (function _preloadQnrData(){
+    function _check() {
+      if (window.__qnrData && window.__qnrScoring) {
+        console.log('[qnr preload] 数据模块就绪');
+        return;
+      }
+      if (!document.querySelector('script[data-qnr-data]')) {
+        var d = document.createElement('script');
+        d.setAttribute('data-qnr-data', '1');
+        d.type = 'module';
+        d.src = './js/questionnaire/data.js';
+        document.head.appendChild(d);
+      }
+      if (!document.querySelector('script[data-qnr-scoring]')) {
+        var s = document.createElement('script');
+        s.setAttribute('data-qnr-scoring', '1');
+        s.type = 'module';
+        s.src = './js/questionnaire/scoring.js';
+        document.head.appendChild(s);
+      }
+      // 轮询直到就绪
+      var tries = 0;
+      var t = setInterval(function() {
+        tries++;
+        if (window.__qnrData && window.__qnrScoring) {
+          clearInterval(t);
+          console.log('[qnr preload] 数据/评分模块加载完成 (try=' + tries + ')');
+        } else if (tries > 50) {
+          clearInterval(t);
+          console.warn('[qnr preload] 数据模块加载超时 (50 次) — 分区详情弹层将不可用');
+        }
+      }, 100);
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', _check);
+    } else { _check(); }
+  })();
+</script>
+<script>
   // ===== 神经系统自评 · 云端可靠保存 (替换原 setTimeout(_uploadToCloud, 0) 单次尝试) =====
   (function(){
     function _wire() {
