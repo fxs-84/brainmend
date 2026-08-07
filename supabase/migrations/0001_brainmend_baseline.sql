@@ -179,12 +179,14 @@ $$;
 -- ============================================================
 -- 7. therapists: 治疗师只能读自己的账号, admin 可读全部
 -- ============================================================
+drop policy if exists therapists_select_own on public.therapists;
 create policy therapists_select_own on public.therapists
   for select using (
     id = auth.uid()
     or exists (select 1 from public.therapists where id = auth.uid() and role = 'admin')
   );
 
+drop policy if exists therapists_update_own on public.therapists;
 create policy therapists_update_own on public.therapists
   for update using (id = auth.uid())
   with check (id = auth.uid());
@@ -192,19 +194,23 @@ create policy therapists_update_own on public.therapists
 -- ============================================================
 -- 8. patients: 治疗师只能 CRUD 自己的患者
 -- ============================================================
+drop policy if exists patients_select_own on public.patients;
 create policy patients_select_own on public.patients
   for select using (
     therapist_id = auth.uid()
     and deleted_at is null
   );
 
+drop policy if exists patients_insert_own on public.patients;
 create policy patients_insert_own on public.patients
   for insert with check (therapist_id = auth.uid());
 
+drop policy if exists patients_update_own on public.patients;
 create policy patients_update_own on public.patients
   for update using (therapist_id = auth.uid())
   with check (therapist_id = auth.uid());
 
+drop policy if exists patients_delete_own on public.patients;
 create policy patients_delete_own on public.patients
   for delete using (therapist_id = auth.uid());
 
@@ -212,22 +218,27 @@ create policy patients_delete_own on public.patients
 -- 9. qnr_share_links: 治疗师可 CRUD, 患者可读有效 token
 -- ============================================================
 -- 治疗师 CRUD
+drop policy if exists qnr_share_links_select_own on public.qnr_share_links;
 create policy qnr_share_links_select_own on public.qnr_share_links
   for select using (therapist_id = auth.uid());
 
+drop policy if exists qnr_share_links_insert_own on public.qnr_share_links;
 create policy qnr_share_links_insert_own on public.qnr_share_links
   for insert with check (therapist_id = auth.uid());
 
+drop policy if exists qnr_share_links_update_own on public.qnr_share_links;
 create policy qnr_share_links_update_own on public.qnr_share_links
   for update using (therapist_id = auth.uid())
   with check (therapist_id = auth.uid());
 
+drop policy if exists qnr_share_links_delete_own on public.qnr_share_links;
 create policy qnr_share_links_delete_own on public.qnr_share_links
   for delete using (therapist_id = auth.uid());
 
 -- 患者 anon-key: 可读取 token 用于校验 (但必须未过期未撤销)
 -- 注: anon-key 用户的 auth.uid() 为 NULL, 所以 therapist_id = auth.uid() 不匹配
 -- 需要单独策略:anon 用户按 token 查, 且只能查未过期未撤销的
+drop policy if exists qnr_share_links_select_anon on public.qnr_share_links;
 create policy qnr_share_links_select_anon on public.qnr_share_links
   for select to anon
   using (revoked = false and expires_at > now());
@@ -236,14 +247,17 @@ create policy qnr_share_links_select_anon on public.qnr_share_links
 -- 10. qnr_self_assessments: 治疗师可读自己的, 患者通过 RPC 提交
 -- ============================================================
 -- 治疗师读自己治疗的患者记录
+drop policy if exists qnr_self_assessments_select_own on public.qnr_self_assessments;
 create policy qnr_self_assessments_select_own on public.qnr_self_assessments
   for select using (therapist_id = auth.uid());
 
 -- 治疗师可改/软删自己的记录
+drop policy if exists qnr_self_assessments_update_own on public.qnr_self_assessments;
 create policy qnr_self_assessments_update_own on public.qnr_self_assessments
   for update using (therapist_id = auth.uid())
   with check (therapist_id = auth.uid());
 
+drop policy if exists qnr_self_assessments_delete_own on public.qnr_self_assessments;
 create policy qnr_self_assessments_delete_own on public.qnr_self_assessments
   for delete using (therapist_id = auth.uid());
 
@@ -323,9 +337,6 @@ grant execute on function public.submit_qnr_self_assessment to anon, authenticat
 
 comment on function public.submit_qnr_self_assessment is
   '患者 anon-key 提交自评 RPC。therapist_id 由 token 派生, 不可伪造。返回评估 ID。';
-
-create policy qnr_self_assessments_delete_own on public.qnr_self_assessments
-  for delete using (therapist_id = auth.uid());
 
 -- ============================================================
 -- 12. RPC: 治疗师管理 share_links (创建 + 撤销)
