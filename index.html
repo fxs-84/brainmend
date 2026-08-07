@@ -1268,9 +1268,6 @@
             var tid = '';
             try { tid = localStorage.getItem('cog_therapist_id') || 'default'; } catch(e) {}
             params.push('tid=' + encodeURIComponent(tid));
-            var tk = '';
-            try { tk = localStorage.getItem('cog_gh_token') || ''; } catch(e) {}
-            if (tk) params.push('token=' + encodeURIComponent(tk));
             // 加时间戳用于过期校验 (30分钟有效)
             params.push('t=' + Date.now());
             // 加 cache-bust 防止患者手机浏览器用缓存的旧 JS
@@ -1825,10 +1822,6 @@
             var tid = '';
             try { tid = localStorage.getItem('cog_therapist_id') || 'default'; } catch(e) {}
             params.push('tid=' + encodeURIComponent(tid));
-            // 带 GitHub token: 患者扫码后 cognitive-report.js 自动存 cog_gh_token → 结果可上传云端
-            var tk = '';
-            try { tk = localStorage.getItem('cog_gh_token') || ''; } catch(e) {}
-            if (tk) params.push('token=' + encodeURIComponent(tk));
             return baseUrl + '?' + params.join('&');
         }
 
@@ -1906,7 +1899,7 @@
             var now = new Date();
             var rec = {
                 id: 'qnr_' + now.getTime(),
-                // 与认知记录同格式 YYYY-MM-DD (斜杠会进云端文件名被 GitHub 拒绝)
+                // 与认知记录同格式 YYYY-MM-DD
                 date: now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0'),
                 time: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
                 patientInfo: {
@@ -1923,56 +1916,16 @@
             arr.push(rec);
             if (arr.length > 100) arr.splice(0, arr.length - 100);
             _writeRecords(arr);
-            // ===== 神经系统自评 · 云端可靠保存 (核心改造) =====
-            // 不再依赖 _uploadToCloud 单次 PUT — 改走 CloudSync.saveReportReliably:
-            //   · localStorage 已落地, 不会丢数据
-            //   · 云端 PUT 用指数退避重试 (0s / 3s / 10s), AbortController 15s 超时
-            //   · 失败入队, online/visibilitychange 后台自动重试
-            //   · 状态写回 _cloudStatus (pending/syncing/synced/failed), UI 行实时刷新
-            try {
-                if (window.CloudSync && typeof window.CloudSync.saveReportReliably === 'function') {
-                    window.CloudSync.saveReportReliably(rec).then(function(res) {
-                        if (typeof window._qnrUpdateCloudLine === 'function') window._qnrUpdateCloudLine(rec.id);
-                    });
-                } else if (typeof window._uploadToCloud === 'function') {
-                    // 兜底: CloudSync 不可用时退化到旧逻辑 (单次 PUT), 行为不退化
-                    setTimeout(function() {
-                        Promise.resolve(window._uploadToCloud(rec)).then(function(res2) {
-                            if (res2 && res2.ok === false) {
-                                rec._cloudErr = res2.error || 'unknown';
-                                var arr2 = _readRecords();
-                                for (var i = 0; i < arr2.length; i++) { if (arr2[i].id === rec.id) { arr2[i]._cloudErr = rec._cloudErr; break; } }
-                                _writeRecords(arr2);
-                            }
-                            if (typeof window._qnrUpdateCloudLine === 'function') window._qnrUpdateCloudLine(rec.id);
-                        });
-                    }, 0);
-                } else {
-                    rec._cloudErr = 'no_uploader';
-                }
-            } catch(e) { /* swallow: localStorage 已存, 用户可手动重试 */ }
+            // 云端上传已迁移到 Supabase (questionnaire.html 内联流程, 需 share_token)。
+            // 本函数服务的 ?return=questionnaire 回传流程无 share_token, 仅本机保存。
             return rec;
         }
         window._qnrSaveRecord = _qnrSaveRecord;
 
-        // 云端错误码 → 用户可读原因
-        function _qnrCloudErrText(err) {
-            if (!err) return '未知原因';
-            if (err === 'no_token') return '二维码未携带云端密钥 (token)。请治疗师先在「认知报告 → ☁️云端记录」配置 GitHub token，再重新生成二维码。';
-            if (err === 'no_uploader') return '上传模块未加载，请刷新页面后在报告页点「☁️ 重试上传云端」。';
-            if (err.indexOf('HTTP 401') === 0) return '云端密钥已失效 (HTTP 401)，请治疗师更新 GitHub token。';
-            if (err.indexOf('HTTP 403') === 0) return '云端密钥无仓库写入权限 (HTTP 403)，请治疗师检查 token 权限。';
-            if (err.indexOf('HTTP 404') === 0) return '云端仓库或目录不存在 (HTTP 404)，请治疗师检查仓库配置。';
-            if (/fetch|network|Failed|timed out|abort/i.test(err)) return '本机网络无法连接 api.github.com（请求被拦截或超时）。';
-            return err;
-        }
         // 保存后云端结果检查: 失败时不再弹 alert (避免打断报告阅读), 仅刷新云端状态行
-        //   旧版会在 8s 后弹 alert — 改为静默, 因为 CloudSync 后台会自动重试,
-        //   报告页有内联重试按钮, 不需要打断式提醒
         function _qnrCloudCheck(recId) {
             if (typeof window._qnrUpdateCloudLine === 'function') window._qnrUpdateCloudLine(recId);
         }
-        // 注: window._qnrRetryCloud 已在下方新版 (内联无 alert) 覆盖, 旧版删除
         function _qnrRenderReportById(recId) {
             var arr = _readRecords();
             for (var i = 0; i < arr.length; i++) { if (arr[i].id === recId) { window._viewCogReport(i); return; } }
@@ -2016,42 +1969,10 @@
             '</div>';
         };
 
-        // 重试上传 (内联, 不弹 alert) — 同时支持原 _qnrRetryCloud 调用
+        // 重试上传 — 云端已迁移到 Supabase (questionnaire.html 内联流程)。
+        // 本机遗留的 GitHub 时代失败记录无法在此重传, 明确告知用户。
         window._qnrRetryCloud = function(recId) {
-            var arr = _readRecords();
-            var rec = null;
-            for (var i = 0; i < arr.length; i++) { if (arr[i].id === recId) { rec = arr[i]; break; } }
-            if (!rec) return;
-            // 标记 syncing 状态, UI 行立即变化
-            rec._cloudStatus = 'syncing';
-            delete rec._cloudErr;
-            var arr2 = _readRecords();
-            for (var j = 0; j < arr2.length; j++) if (arr2[j].id === recId) { arr2[j]._cloudStatus = 'syncing'; delete arr2[j]._cloudErr; }
-            _writeRecords(arr2);
-            if (typeof window._qnrUpdateCloudLine === 'function') window._qnrUpdateCloudLine(recId);
-
-            function _after(res) {
-                if (res && res.ok) {
-                    if (typeof window._qnrUpdateCloudLine === 'function') window._qnrUpdateCloudLine(recId);
-                    // 重渲染整张报告, 让 _cloudId 写回后顶部患者卡的 sha 显示一致
-                    var arr3 = _readRecords();
-                    var recFresh = null;
-                    for (var k = 0; k < arr3.length; k++) if (arr3[k].id === recId) { recFresh = arr3[k]; break; }
-                    if (recFresh && typeof _qnrRenderReport === 'function') _qnrRenderReport(recFresh);
-                } else {
-                    var err = (res && res.error) || 'unknown';
-                    var arr4 = _readRecords();
-                    for (var m = 0; m < arr4.length; m++) if (arr4[m].id === recId) { arr4[m]._cloudErr = err; arr4[m]._cloudStatus = 'failed'; }
-                    _writeRecords(arr4);
-                    if (typeof window._qnrUpdateCloudLine === 'function') window._qnrUpdateCloudLine(recId);
-                }
-            }
-            // 优先走 CloudSync (含重试), 没有则退化
-            if (window.CloudSync && typeof window.CloudSync.saveReportReliably === 'function') {
-                window.CloudSync.saveReportReliably(rec).then(_after);
-            } else if (typeof window._uploadToCloud === 'function') {
-                Promise.resolve(window._uploadToCloud(rec)).then(_after);
-            }
+            alert('云端存储已迁移到 Supabase 新流程，旧的云端上传通道已下线。\n本机记录不受影响，可在「认知报告记录」中查看。');
         };
         // 上传完成后实时刷新报告页状态行 (报告是静态渲染的, 不刷新会一直显示旧状态)
         window._qnrUpdateCloudLine = function(recId) {
@@ -2438,25 +2359,24 @@
             try { return JSON.parse(localStorage.getItem('cog_records')) || []; } catch(e) { return []; }
         }
         window._qnrReadRecords = _qnrReadRecords;
-        // 云端自评记录渲染入口 (cognitive-report.js _renderCloudRows 调用)
+        // 自评记录渲染入口 (供测试/遗留云端记录查看复用)
         window._qnrRenderCloud = function(rec) {
             _qnrRenderReport(rec);
         };
     })();
 
 </script>
-<script type="module" src="./assets/cognitive/cognitive-report.js?v=20260805b"></script>
+<script type="module" src="./assets/cognitive/cognitive-report.js?v=20260807a"></script>
 <!-- Supabase 配置 (真实值不入 git, 见 assets/config/supabase-config.example.js) -->
 <!-- ⚠️ 必须在 qnr-supabase.js 之前加载, 否则 URL/KEY 是 undefined -->
 <script src="./assets/config/supabase-config.js" onerror="console.warn('[brainmend] supabase-config.js 未配置')"></script>
-<script src="./assets/cognitive/reports/cloud-sync.js?v=20260806a"></script>
 <script src="./assets/cognitive/reports/qnr-supabase.js?v=20260806a"></script>
 <script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260807b"></script>
 <script src="./assets/cognitive/reports/qnr-region-detail.js?v=20260807a"></script>
 <script>
   // ===== 神经系统自评 · 数据/评分模块预加载 =====
-  // 顶层设计: 治疗师在云端记录列表打开自评报告时, 点击分区行需要 __qnrData + __qnrScoring
-  // 旧实现只在 URL 带 ?return=questionnaire 时才加载 → 治疗师直接点云端记录时点不开
+  // 查看自评报告时点分区行需要 __qnrData + __qnrScoring
+  // 旧实现只在 URL 带 ?return=questionnaire 时才加载 → 直接打开记录时点不开
   // 这里启动时立即预加载, 不依赖 URL 参数 (异步, 不阻塞首页渲染)
   (function _preloadQnrData(){
     function _check() {
@@ -2497,32 +2417,6 @@
   })();
 </script>
 <script>
-  // ===== 神经系统自评 · 云端可靠保存 (替换原 setTimeout(_uploadToCloud, 0) 单次尝试) =====
-  (function(){
-    function _wire() {
-      if (typeof window._uploadToCloud !== 'function') { setTimeout(_wire, 50); return; }
-      if (!window.CloudSync) return;
-      // 1. 装后台钩子 (online/visibility/pagehide/定时扫描)
-      if (window.CloudSync._installBackgroundHooks) window.CloudSync._installBackgroundHooks();
-      // 2. 订阅队列变化 → 实时刷新打开中的报告页状态行
-      if (window.CloudSync.onPendingChange) {
-        window.CloudSync.onPendingChange(function(pending) {
-          if (typeof window._qnrUpdateCloudLine === 'function') {
-            // pending 是未同步记录数组, 触发对应记录的状态行刷新
-            (pending || []).forEach(function(p) {
-              try { window._qnrUpdateCloudLine(p.id); } catch (e) {}
-            });
-          }
-        });
-      }
-      // 3. 页面加载时主动 flush 一次遗留未同步记录
-      try { window.CloudSync.flushPendingReports(); } catch (e) {}
-    }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', _wire);
-    } else { _wire(); }
-  })();
-
   // ===== 治疗师工作台 (Supabase 登录 + share_link 管理 + 报告列表) =====
   (function _initTherapistUI(){
     function _boot() {

@@ -55,13 +55,12 @@
 | 浏览器 Console 无 Supabase 配置错误 | ✅ |
 | 患者提交后 `qnr_self_assessments` 有新行 | ✅ |
 
-## 🗑️ 清理旧路径 (后续 Sprint)
+## 🗑️ 清理旧路径 (Sprint 2 已完成)
 
-完成 Sprint 0 验证后,再做:
-1. 删除 `data/reports/*.json` (仓库里已上传的患者数据)
-2. 删除 GitHub 上传代码 (`_uploadToCloud` GitHub Contents API 路径)
-3. 删除 GitHub PAT 流程 (扫码不再带 `?token=PAT`)
-4. 改成 QR 只带 Supabase share_token (数据库生成)
+1. ~~删除 `data/reports/*.json` (仓库里已上传的患者数据)~~ ✅ 已从 git 删除
+2. ~~删除 GitHub 上传代码 (`_uploadToCloud` GitHub Contents API 路径)~~ ✅ Sprint 2 任务 3 已删 (含 cloud-sync.js / cloud-api.js / 云端记录 tab)
+3. ~~删除 GitHub PAT 流程 (扫码不再带 `?token=PAT`)~~ ✅ QR 不再携带 token
+4. ~~改成 QR 只带 Supabase share_token (数据库生成)~~ ✅ 治疗师工作台生成
 
 ## 🐛 故障排查
 

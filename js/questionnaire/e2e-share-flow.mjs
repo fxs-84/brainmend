@@ -287,9 +287,9 @@ if (!tpDlName.includes("神经系统自评报告")) throw new Error(`❌ 治疗�
 if (tpPdfHeader !== "%PDF-") throw new Error(`❌ 治疗师端 PDF 头不对: ${tpPdfHeader}`);
 console.log(`✅ 治疗师端导出 PDF 路由正确: ${tpDlName} (${tpDlStat.size} bytes, ${tpPdfHeader})`);
 
-// ---------- 4.5 云端记录行路由验证 (cognitive-report.js _renderCloudRows 的自评分支) ----------
+// ---------- 4.5 遗留云端记录渲染验证 (_qnrRenderCloud 的自评分支) ----------
 await tp.evaluate(() => {
-  // 构造云端自评记录 (fetchCloudReports 映射后的结构), 直接调 _qnrRenderCloud
+  // 构造遗留云端自评记录, 直接调 _qnrRenderCloud
   const cloudRec = {
     id: "cloud_test", date: "2026/8/4", time: "12:00",
     patientInfo: { name: "云端患者", age: "40", gender: "女", id: "" },

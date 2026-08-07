@@ -1,5 +1,5 @@
 // tests/e2e/report-categorize.spec.mjs
-// E2E 验证: 认知报告与神经系统自评报告在列表中分类显示 + 云端删除按钮可用
+// E2E 验证: 认知报告与神经系统自评报告在列表中分类显示 + 本机删除按钮可用
 import { chromium } from 'playwright';
 
 const URL = process.env.TEST_URL || 'http://127.0.0.1:5199/';
@@ -115,85 +115,10 @@ async function main() {
   // 8) 截图证据
   await page.screenshot({ path: 'tests/e2e/screenshots/report-categorize-local.png', fullPage: false });
 
-  // 9) 切到云端 tab + 用 Playwright page.route() 模拟 GitHub API
-  //    (不能用 window.fetch mock — 模块加载时 fetch 闭包已绑定到原生 fetch, 后续替换 window.fetch 不影响)
-  await page.evaluate(() => {
-    localStorage.setItem('cog_gh_token', 'ghp_test_e2e_token_xxx');
-  });
-
-  // 设置路由拦截 — 在浏览器网络层拦截, 不依赖 window.fetch
-  const sampleB64 = (obj) => Buffer.from(JSON.stringify(obj), 'utf-8').toString('base64');
-  const cogRec = { id: 'cog_cloud_1', date: '2026-08-05', time: '11:00', patientInfo: { name: '云端认知' }, overallScore: 110, isQuick6: false, createdAt: '2026-08-05T03:00:00Z' };
-  const qnrRec = { id: 'qnr_cloud_1', date: '2026-08-06', time: '08:00', patientInfo: { name: '云端自评' }, type: 'questionnaire', overallScore: 70, qnr: { percent: 70, worstSeverity: 'mild' }, createdAt: '2026-08-06T00:00:00Z' };
-  const listJson = JSON.stringify([
-    { type: 'file', name: '2026-08-05_cog_cloud_1.json', path: 'data/reports/th_test_e2e/2026-08-05_cog_cloud_1.json', sha: 'sha_cog_1', url: 'https://api.github.com/repos/fxs-84/brainmend/contents/data/reports/th_test_e2e/2026-08-05_cog_cloud_1.json', size: 100 },
-    { type: 'file', name: '2026-08-06_qnr_cloud_1.json', path: 'data/reports/th_test_e2e/2026-08-06_qnr_cloud_1.json', sha: 'sha_qnr_1', url: 'https://api.github.com/repos/fxs-84/brainmend/contents/data/reports/th_test_e2e/2026-08-06_qnr_cloud_1.json', size: 100 }
-  ]);
-  const cogFileJson = JSON.stringify({ content: sampleB64(cogRec) });
-  const qnrFileJson = JSON.stringify({ content: sampleB64(qnrRec) });
-
-  await page.route('**/api.github.com/**', async (route) => {
-    const req = route.request();
-    const url = req.url();
-    const method = req.method();
-    if (method === 'DELETE') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ content: { sha: 'new_sha_after_delete' } }) });
-      return;
-    }
-    if (url.includes('cog_cloud_1.json')) {
-      console.log('[route] returning cogFileJson, length:', cogFileJson.length, 'starts with:', cogFileJson.substring(0, 50));
-      await route.fulfill({ status: 200, contentType: 'application/json', body: cogFileJson });
-      return;
-    }
-    if (url.includes('qnr_cloud_1.json')) {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: qnrFileJson });
-      return;
-    }
-    // 目录列表请求
-    await route.fulfill({ status: 200, contentType: 'application/json', body: listJson });
-  });
-
-  // 10) 点击云端 tab
-  const cloudTabClicked = await page.evaluate(() => {
-    const overlay = document.getElementById('cog-record-list-overlay');
-    if (!overlay) return false;
-    const btns = overlay.querySelectorAll('button');
-    for (const b of btns) { if (b.textContent.includes('云端记录')) { b.click(); return true; } }
-    return false;
-  });
-  check('云端 tab 可点击', cloudTabClicked);
-  await page.waitForTimeout(2000); // wait for fetchCloudReports
-
-  // 11) 验证云端行 + 删除按钮
-  const cloudRows = await page.$$eval('#cog-record-list-overlay [data-record-kind]', els =>
-    els.map(e => ({ kind: e.dataset.recordKind, id: e.dataset.recordId }))
-  );
-  const cloudCog = cloudRows.filter(r => r.kind === 'cognitive').length;
-  const cloudQnr = cloudRows.filter(r => r.kind === 'questionnaire').length;
-  check('云端认知行 = 1', cloudCog === 1, JSON.stringify(cloudRows));
-  check('云端自评行 = 1', cloudQnr === 1, JSON.stringify(cloudRows));
-
-  const cloudDelBtns = await page.$$eval('#cog-record-list-overlay .cog-rec-del-cloud', els => els.length);
-  check('云端删除按钮数量 = 2', cloudDelBtns === 2, `actual=${cloudDelBtns}`);
-
-  await page.screenshot({ path: 'tests/e2e/screenshots/report-categorize-cloud.png', fullPage: false });
-
-  // 12) 点击云端删除按钮 (拦截 confirm)
-  page.on('dialog', dialog => dialog.accept());
-  await page.evaluate(() => {
-    const btns = document.querySelectorAll('#cog-record-list-overlay .cog-rec-del-cloud');
-    if (btns.length > 0) btns[0].click();
-  });
-  await page.waitForTimeout(1500);
-  const remainingCloudRows = await page.$$eval('#cog-record-list-overlay [data-record-kind]', els => els.length);
-  check('云端删除后行数减少 (从 2 → 1)', remainingCloudRows === 1, `actual=${remainingCloudRows}`);
-
-  await page.screenshot({ path: 'tests/e2e/screenshots/report-categorize-cloud-after-delete.png', fullPage: false });
-
-  // 13) 验证无 JS 报错
+  // 9) 验证无 JS 报错
   check('无 console 错误', consoleErrors.length === 0, JSON.stringify(consoleErrors));
 
-  // 14) XSS 防护: 恶意患者名不应执行
+  // 10) XSS 防护: 恶意患者名不应执行
   const pwned = await page.evaluate(() => window.__pwned === true);
   check('XSS 防护: 恶意患者名未执行 onerror', pwned === false, `pwned=${pwned}`);
 

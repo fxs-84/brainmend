@@ -95,25 +95,11 @@ async function main() {
   const searchValue = await page.inputValue('#cog-rec-search-input');
   check('清空后搜索框值为空', searchValue === '', `value="${searchValue}"`);
 
-  // 10) 跨 tab 保留: 搜索"李" 后切到云端, 再切回本机, 搜索状态保留
+  // 10) 按姓名 "李" → 匹配李四 + 李四妹 = 2 条
   await page.fill('#cog-rec-search-input', '李');
   await page.waitForTimeout(100);
   rowKinds = await page.$$eval('#cog-record-list-overlay [data-record-kind]', els => els.map(e => e.dataset.recordId));
   check('搜索"李" → 2 条 (李四 + 李四妹)', rowKinds.length === 2 && rowKinds.includes('c2') && rowKinds.includes('c3'), `ids=${JSON.stringify(rowKinds)}`);
-
-  // 切到云端 tab (需要 token, 先设置)
-  await page.evaluate(() => localStorage.setItem('cog_gh_token', 'ghp_search_test'));
-  // 切回本机 tab 验证搜索状态保留
-  await page.evaluate(() => {
-    const overlay = document.getElementById('cog-record-list-overlay');
-    const btns = overlay.querySelectorAll('button');
-    for (const b of btns) { if (b.textContent.includes('本机记录')) { b.click(); break; } }
-  });
-  await page.waitForTimeout(200);
-  const searchAfterSwitch = await page.inputValue('#cog-rec-search-input');
-  check('跨 tab 切换后搜索值保留', searchAfterSwitch === '李', `value="${searchAfterSwitch}"`);
-  rowKinds = await page.$$eval('#cog-record-list-overlay [data-record-kind]', els => els.map(e => e.dataset.recordId));
-  check('跨 tab 切换后本机仍过滤为 2 条', rowKinds.length === 2 && rowKinds.includes('c2') && rowKinds.includes('c3'), `ids=${JSON.stringify(rowKinds)}`);
 
   // 11) 截图证据
   await page.screenshot({ path: 'tests/e2e/screenshots/report-search.png', fullPage: false });

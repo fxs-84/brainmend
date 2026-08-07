@@ -1,21 +1,13 @@
-// 云端报告分类与路径校验 (纯函数模块, 由 cognitive-report.js 复用)
+// 报告分类与搜索过滤 (纯函数模块, 由 cognitive-report.js 复用)
 import {
   getReportType,
-  getReportTypeLabel,
   classifyByKind,
-  normalizeCloudRecord,
-  isDeletableCloudPath,
-  decodeGhContent,
   filterRecords
 } from './reports/classify.js';
-import {
-  deleteCloudReport as _deleteCloudReportRaw,
-  cloudErrorText
-} from './reports/cloud-api.js';
 
 (function(){
   // 版本标记 (用于诊断缓存问题, 浏览器控制台输入 window.__cogFlowVersion 验证)
-  window.__cogFlowVersion = 'v5-cloud-delete-2026-08-06';
+  window.__cogFlowVersion = 'v6-supabase-only-2026-08-07';
   // ========== CONFIG ==========
   // 模块描述取自对应测试题文件的 fillText 真源 (非编造)
   // 来源: dist-stable/assets/cognitive/cognitive-*.js
@@ -89,19 +81,6 @@ import {
     visual:       { left: 0.20, right: 0.80 },  // 主右 (视觉空间右枕)
     observation:  { left: 0.30, right: 0.70 }   // 主右 (整体观察偏右枕)
   };
-
-  // ========== CLOUD CONFIG (GitHub API — 报告存仓库 data/reports/) ==========
-  var CLOUD_ENABLED = true;
-  var GH_REPO = 'fxs-84/brainmend';
-  var GH_API = 'https://api.github.com/repos/' + GH_REPO + '/contents/data/reports/';
-  function _ghToken() { try { return localStorage.getItem('cog_gh_token') || ''; } catch(e) { return ''; } }
-  // URL传token: ?token=xxx 或 &token=xxx (QR码场景, 患者扫码自动获取)
-  (function(){
-    try {
-      var m = location.search.match(/[?&]token=([^&]+)/);
-      if (m && m[1]) { localStorage.setItem('cog_gh_token', decodeURIComponent(m[1])); }
-    } catch(e) {}
-  })();
 
   // ========== 年龄分层常模 (儿童发育校正系数) ==========
   // 乘数: 儿童原始分 × 系数 = 成人等效分, 用于阈值比较
@@ -2504,103 +2483,6 @@ import {
     return record;
   }
 
-  // ========== CLOUD (GitHub API — 报告存仓库 data/reports/) ==========
-  function _getTherapistId() {
-    try { return localStorage.getItem('cog_therapist_id') || ''; } catch(e) { return ''; }
-  }
-  function _ensureTherapistId() {
-    var tid = _getTherapistId();
-    if (!tid) {
-      tid = 'th_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
-      try { localStorage.setItem('cog_therapist_id', tid); } catch(e) {}
-    }
-    return tid;
-  }
-  function _ghHeaders() { var t = _ghToken(); if (!t) return null; return { 'Authorization': 'token ' + t, 'Content-Type': 'application/json' }; }
-
-  function uploadToCloud(record) {
-    if (!CLOUD_ENABLED || !_ghToken()) {
-      window._lastCloudError = 'no_token';
-      return Promise.resolve({ ok: false, error: 'no_token' });
-    }
-    var tid = _getTherapistId() || _ensureTherapistId();
-    var trimmedRaw = {};
-    try {
-      Object.keys(record.rawScores || {}).forEach(function(modId) {
-        var r = record.rawScores[modId] || {};
-        trimmedRaw[modId] = { score: r.score, correct: r.correct, trials: r.trials, completionRate: r.completionRate, digitCount: r.digitCount, totalIcons: r.totalIcons, totalCards: r.totalCards, rtTotal: r.rtTotal, rtAvg: r.rtAvg, level: r.level };
-      });
-    } catch(e) { trimmedRaw = {}; }
-    var cloudRecord = {
-      id: record.id, date: record.date, time: record.time,
-      patientInfo: record.patientInfo, normalizedScores: record.normalizedScores, rawScores: trimmedRaw,
-      brainRegions: record.brainRegions, riskIndex: record.riskIndex, overallScore: record.overallScore, isQuick6: record.isQuick6,
-      type: record.type || '', qnr: record.qnr || null,
-      createdAt: new Date().toISOString()
-    };
-    var json = JSON.stringify(cloudRecord);
-    var b64 = btoa(unescape(encodeURIComponent(json)));
-    // ⚠️ 文件名不能含 '/': 旧自评记录 date 为 "2026/8/5" 斜杠格式, 进 URL 变 %2F 被 GitHub 拒绝 (HTTP 422)
-    // 统一替换为 '-' (与认知记录 "2026-08-05" 格式一致)
-    var fileName = ((record.date || 'unknown') + '_' + (record.id || Date.now()) + '.json').replace(/\//g, '-');
-    var path = GH_API + encodeURIComponent(tid) + '/' + encodeURIComponent(fileName);
-    var patientName = (record.patientInfo && record.patientInfo.name) || '';
-
-    function _markSynced(sha) {
-      try {
-        var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
-        for (var i = 0; i < records.length; i++) { if (records[i].id === record.id) { records[i]._cloudId = sha; delete records[i]._cloudErr; break; } }
-        localStorage.setItem('cog_records', JSON.stringify(records));
-      } catch(e2) {}
-    }
-    function _putBody(sha) {
-      var body = { message: (sha ? 'update' : 'upload') + ' report: ' + patientName, content: b64 };
-      if (sha) body.sha = sha;
-      return JSON.stringify(body);
-    }
-    function _handleRes(res, isUpdate) {
-      if (!res.ok) {
-        // 带上 GitHub 返回的具体 message (如 "Invalid request"), 便于定位
-        return res.json().catch(function() { return null; }).then(function(body) {
-          var detail = body && body.message ? ': ' + body.message : '';
-          // 文件已存在 ("sha" wasn't supplied): 取已有文件 sha 覆盖更新, 重试幂等
-          if (res.status === 422 && !isUpdate && body && /sha/i.test(body.message || '')) {
-            return fetch(path, { headers: _ghHeaders() })
-              .then(function(gr) { return gr.ok ? gr.json() : null; })
-              .then(function(fileObj) {
-                if (!fileObj || !fileObj.sha) {
-                  window._lastCloudError = 'HTTP 422' + detail;
-                  return { ok: false, error: 'HTTP 422' + detail };
-                }
-                return fetch(path, { method: 'PUT', headers: _ghHeaders(), body: _putBody(fileObj.sha) })
-                  .then(function(res2) { return _handleRes(res2, true); });
-              });
-          }
-          window._lastCloudError = 'HTTP ' + res.status + detail;
-          return { ok: false, error: 'HTTP ' + res.status + detail };
-        });
-      }
-      return res.json().then(function(obj) {
-        if (obj && obj.content && obj.content.sha) {
-          _markSynced(obj.content.sha);
-          window._lastCloudError = '';
-          return { ok: true, sha: obj.content.sha };
-        }
-        window._lastCloudError = 'bad_response';
-        return { ok: false, error: 'bad_response' };
-      });
-    }
-
-    return fetch(path, { method: 'PUT', headers: _ghHeaders(), body: _putBody() })
-      .then(function(res) { return _handleRes(res, false); })
-      .catch(function(err) {
-        window._lastCloudError = String(err && err.message || err);
-        return { ok: false, error: window._lastCloudError };
-      });
-  }
-  // 导出供神经系统自评复用 (自评保存后同步上传云端)
-  window._uploadToCloud = uploadToCloud;
-
   // HTML 转义, 防患者名等用户输入触发 XSS (报告数据从 localStorage / 云端加载, 患者可能输入恶意字符串)
   function _escHtml(s) {
     return String(s == null ? '' : s)
@@ -2609,94 +2491,6 @@ import {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
-  }
-
-  // ========== CLOUD DELETE (GitHub Contents API) ==========
-  // 包装 cloud-api.js 的 deleteCloudReport, 注入本地依赖 (token, baseUrl)
-  function deleteCloudReportLocal(record) {
-    return _deleteCloudReportRaw(record, {
-      token: _ghToken(),
-      baseUrl: GH_API,
-      ref: 'main'
-    });
-  }
-  window._deleteCloudReport = deleteCloudReportLocal;
-  window._cloudErrorText = cloudErrorText;
-
-  function fetchCloudReports(callback) {
-    if (!CLOUD_ENABLED) { callback([]); return; }
-    var tid = _getTherapistId();
-    if (!tid) { callback([]); return; }
-    // 递归收集目录下所有 .json 文件条目 (兼容早期斜杠日期文件名产生的嵌套目录, 如 default/2026/8/)
-    // 错误聚合: 子目录失败不会静默吞掉, 通过 errors 数组传递到顶层 done, 顶层展示给用户
-    function _listFiles(url, depth, out, errors, done) {
-      fetch(url, { headers: _ghHeaders() })
-        .then(function(res) {
-          if (!res.ok) {
-            errors.push('HTTP ' + res.status + ' (depth=' + depth + ')');
-            done();
-            return null;
-          }
-          return res.json();
-        })
-        .then(function(data) {
-          if (data === null) return;
-          if (!Array.isArray(data)) { done(); return; }
-          data.forEach(function(f) { if (f.type === 'file' && f.name.endsWith('.json')) out.push(f); });
-          var dirs = data.filter(function(f) { return f.type === 'dir'; });
-          if (!dirs.length || depth >= 3) { done(); return; }
-          var pending = dirs.length;
-          dirs.forEach(function(d) {
-            _listFiles(d.url, depth + 1, out, errors, function() {
-              pending--;
-              if (pending === 0) done();
-            });
-          });
-        })
-        .catch(function(err) {
-          errors.push(String(err && err.message || err) + ' (depth=' + depth + ')');
-          done();
-        });
-    }
-    // 顶层包装: 把 errors 数组汇总为单个 error 字符串或 null
-    function _listFilesWithErrors(url, depth, out, done) {
-      var errors = [];
-      _listFiles(url, depth, out, errors, function() {
-        done(errors.length ? errors.join('; ') : null);
-      });
-    }
-    var files = [];
-    var doneCalled = false;
-    _listFilesWithErrors(GH_API + encodeURIComponent(tid), 0, files, function(err) {
-      if (doneCalled) return;
-      doneCalled = true;
-      if (err) { callback([], err); return; }
-      if (files.length === 0) { callback([]); return; }
-      var results = []; var loaded = 0;
-      files.forEach(function(f) {
-        fetch(f.url, { headers: _ghHeaders() })
-          .then(function(res) { return res.ok ? res.json() : null; })
-          .then(function(fileData) {
-            loaded++;
-            if (fileData && fileData.content) {
-              try {
-                // 用 classify.js 的 decodeGhContent 替代内联 escape/atob, 统一 Node/浏览器路径
-                // decodeGhContent 已返回 parsed object, 不需要再 JSON.parse
-                var r = decodeGhContent(fileData.content);
-                if (r) {
-                  // 使用 classify.js 的 normalizeCloudRecord 保留 _cloudPath/_cloudFileName/_cloudUrl
-                  // (DELETE 必需的元数据 — 老实现只存了 _cloudId, 导致无法删除)
-                  results.push(normalizeCloudRecord(r, f, fileData));
-                }
-              } catch(e2) {}
-            }
-            if (loaded >= files.length) {
-              results.sort(function(a, b) { return (b._cloudCreatedAt || 0) - (a._cloudCreatedAt || 0); });
-              callback(results);
-            }
-          }).catch(function() { loaded++; if (loaded >= files.length) callback(results); });
-      });
-    });
   }
 
   function loadHistory() {
@@ -2725,8 +2519,7 @@ import {
   function _doRenderReport(rawLog, isQuick6) {
     var history = loadHistory();
     var record = saveRecord(rawLog, isQuick6);
-    // 云端上传 — restful-api.dev (CORS-friendly)
-    setTimeout(function() { uploadToCloud(record); }, 0);
+    // 云端上传已迁移: 神经系统自评走 Supabase (questionnaire.html), 认知报告仅本机保存
     history = loadHistory();
     var reportTime = record && record.date && record.time ? (record.date + ' ' + record.time) : null;
     renderReport(rawLog, history, isQuick6, reportTime);
@@ -3442,20 +3235,7 @@ import {
     title.appendChild(closeBtn);
     panel.appendChild(title);
 
-    // Tab bar: 本机 / 云端
-    var tabRow = document.createElement('div');
-    tabRow.style.cssText = 'display:flex;gap:0;margin-bottom:12px;border-radius:8px;overflow:hidden;border:1px solid #ddd;';
-    var localTab = document.createElement('button');
-    localTab.textContent = '📋 本机记录';
-    var tabBtnStyle = 'flex:1;padding:8px 12px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:background 0.2s;';
-    localTab.style.cssText = tabBtnStyle + 'background:#1a1a2e;color:#fff;';
-    var cloudTab = document.createElement('button');
-    cloudTab.textContent = '☁️ 云端记录';
-    cloudTab.style.cssText = tabBtnStyle + 'background:#f5f5f5;color:#999;';
-    tabRow.appendChild(localTab); tabRow.appendChild(cloudTab);
-    panel.appendChild(tabRow);
-
-    // 搜索框 (本机/云端 tab 共用, overlay 内跨 tab 保留, 关闭 overlay 时随闭包释放)
+    // 搜索框 (overlay 内保留, 关闭 overlay 时随闭包释放)
     var searchQuery = '';
     var searchWrap = document.createElement('div');
     searchWrap.style.cssText = 'display:flex;gap:6px;margin-bottom:10px;align-items:center;';
@@ -3484,15 +3264,7 @@ import {
       searchHint.textContent = '搜索: "' + searchQuery + '" · 匹配 ' + matchedCount + ' / ' + totalCount + ' 条';
     }
     function _applySearchAndRender() {
-      if (currentView === 'cloud') {
-        // 云端: 重新查询并过滤
-        if (cloudRecsCache && cloudRecsCache.length) {
-          _renderCloudRowsFiltered(listWrap, cloudRecsCache);
-        }
-      } else {
-        // 本机: 重新过滤 records
-        _renderLocalRowsFiltered(listWrap, records);
-      }
+      _renderLocalRowsFiltered(listWrap, records);
     }
     searchInput.addEventListener('input', function() {
       searchQuery = searchInput.value;
@@ -3505,51 +3277,11 @@ import {
       searchInput.focus();
     });
 
-    // Token input for cloud
-    var tokenWrap = document.createElement('div');
-    tokenWrap.style.cssText = 'display:none;padding:8px 12px;background:#fffbe6;border-radius:8px;margin-bottom:10px;font-size:12px;';
-    tokenWrap.innerHTML = '<div style="color:#b8860b;margin-bottom:6px;">需要 GitHub Token 才能访问云端记录</div>'
-      + '<div style="display:flex;gap:6px;"><input id="cog-gh-token-input" type="password" placeholder="ghp_... 或 github_pat_..." style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">'
-      + '<button id="cog-gh-token-save" style="padding:6px 14px;background:#1a1a2e;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">保存</button></div>'
-      + '<div style="color:#999;margin-top:4px;font-size:11px;">创建 token: GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → 仅选 fxs-84/brainmend 仓库 + Contents: Read and Write</div>';
-    panel.appendChild(tokenWrap);
-
-    // Token 管理栏: 已存 token 时也显示 (脱敏 + 修改入口), 避免旧 token 失效后无法更换
-    var tokenBar = document.createElement('div');
-    tokenBar.style.cssText = 'display:none;padding:6px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;margin-bottom:10px;font-size:12px;color:#166534;';
-    panel.appendChild(tokenBar);
-    function _renderTokenBar() {
-      var t = '';
-      try { t = localStorage.getItem('cog_gh_token') || ''; } catch(e) {}
-      if (!t) { tokenBar.style.display = 'none'; return; }
-      var masked = t.length > 12 ? t.slice(0, 7) + '****' + t.slice(-4) : '****';
-      tokenBar.innerHTML = '🔑 Token: <span style="font-family:monospace;">' + masked + '</span> <a href="javascript:void 0" id="cog-gh-token-edit" style="color:#1d4ed8;margin-left:8px;">修改</a>';
-      tokenBar.style.display = 'block';
-      var editLink = document.getElementById('cog-gh-token-edit');
-      if (editLink) editLink.addEventListener('click', function() { tokenWrap.style.display = 'block'; });
-    }
-
     var listWrap = document.createElement('div');
     listWrap.style.cssText = 'overflow-y:auto;flex:1;';
 
-    // Token save button
-    setTimeout(function() {
-      var input = document.getElementById('cog-gh-token-input');
-      var saveBtn = document.getElementById('cog-gh-token-save');
-      if (input && saveBtn) {
-        // Pre-fill if saved
-        try { var saved = localStorage.getItem('cog_gh_token'); if (saved) input.value = saved; } catch(e) {}
-        saveBtn.addEventListener('click', function() {
-          var val = input.value.trim();
-          if (val) { try { localStorage.setItem('cog_gh_token', val); } catch(e) {} tokenWrap.style.display = 'none'; currentView = null; cloudTab.click(); }
-        });
-      }
-    }, 100);
-
-    // 通用行构建: 本机/云端共用, kind 与删除按钮可选
-    function _buildRecordRow(rec, opts) {
-      opts = opts || {};
-      var isCloud = !!opts.isCloud;
+    // 通用行构建: kind 与删除按钮按类型生成
+    function _buildRecordRow(rec) {
       var kind = getReportType(rec);
       var row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #f0f0f0;border-radius:8px;margin-bottom:2px;transition:background 0.15s;';
@@ -3561,14 +3293,14 @@ import {
       var p = rec.patientInfo || {};
       var patientName = (p.name && p.name !== '未知') ? p.name : '';
       // 老记录兜底: 若 name 为空/未知, 尝试从当前 localStorage 或 DOM 读取
-      if (!patientName && !isCloud) {
+      if (!patientName) {
         try { var ci = JSON.parse(localStorage.getItem('cervical_current_client')||'{}'); if (ci.name) patientName = ci.name; } catch(e) {}
       }
-      if (!patientName && !isCloud) {
+      if (!patientName) {
         var el = document.getElementById('current-patient');
         if (el) { var t = el.textContent.trim().replace(/^👤\s*/,'').replace(/\s*#[^\s]+\s*$/,'').trim(); if (t && t!=='点击登录') patientName = t; }
       }
-      if (!patientName) patientName = isCloud ? '未登录' : '未登录';
+      if (!patientName) patientName = '未登录';
       var patientMeta = (p.gender || p.age) ? (' · ' + (p.gender||'') + ' ' + (p.age||'') + '岁') : '';
 
       var subLine;
@@ -3581,7 +3313,6 @@ import {
         var typeLabel = rec.isQuick6 ? '⚡6项' : '📊12项';
         subLine = (rec.date || '') + ' ' + (rec.time || '') + ' · ' + typeLabel;
       }
-      if (isCloud) subLine += ' ☁️';
       var scoreStr = (kind === 'questionnaire') ? '' : (rec.overallScore != null ? rec.overallScore + '分' : '');
 
       var leftHtml = '<div style="flex:1;min-width:0;cursor:pointer;">'
@@ -3589,12 +3320,7 @@ import {
         + '<div style="font-size:11px;color:#999;">'+_escHtml(subLine)+'</div>'
         + '</div>';
 
-      var rightHtml = '';
-      if (isCloud) {
-        rightHtml = '<button class="cog-rec-del-cloud" data-rec-id="'+_escHtml(rec.id||'')+'" title="删除云端记录" style="flex-shrink:0;margin-left:8px;background:none;border:none;font-size:16px;cursor:pointer;color:#ccc;padding:4px 8px;border-radius:4px;transition:color 0.15s;" onmouseenter="this.style.color=\'#e74c3c\'" onmouseleave="this.style.color=\'#ccc\'">🗑️</button>';
-      } else {
-        rightHtml = '<button class="cog-rec-del" data-rec-id="'+_escHtml(rec.id||'')+'" title="删除本机记录" style="flex-shrink:0;margin-left:8px;background:none;border:none;font-size:16px;cursor:pointer;color:#ccc;padding:4px 8px;border-radius:4px;transition:color 0.15s;" onmouseenter="this.style.color=\'#e74c3c\'" onmouseleave="this.style.color=\'#ccc\'">🗑️</button>';
-      }
+      var rightHtml = '<button class="cog-rec-del" data-rec-id="'+_escHtml(rec.id||'')+'" title="删除本机记录" style="flex-shrink:0;margin-left:8px;background:none;border:none;font-size:16px;cursor:pointer;color:#ccc;padding:4px 8px;border-radius:4px;transition:color 0.15s;" onmouseenter="this.style.color=\'#e74c3c\'" onmouseleave="this.style.color=\'#ccc\'">🗑️</button>';
       row.innerHTML = leftHtml + rightHtml;
       return { row: row, patientName: patientName };
     }
@@ -3631,7 +3357,7 @@ import {
         wrap.appendChild(_buildGroupEmpty('认知报告'));
       } else {
         grouped.cognitive.forEach(function(rec) {
-          var built = _buildRecordRow(rec, { isCloud: false });
+          var built = _buildRecordRow(rec);
           wrap.appendChild(built.row);
           _bindLocalRowEvents(built.row, rec, built.patientName, wrap);
         });
@@ -3642,7 +3368,7 @@ import {
         wrap.appendChild(_buildGroupEmpty('神经系统自评报告'));
       } else {
         grouped.questionnaire.forEach(function(rec) {
-          var built = _buildRecordRow(rec, { isCloud: false });
+          var built = _buildRecordRow(rec);
           wrap.appendChild(built.row);
           _bindLocalRowEvents(built.row, rec, built.patientName, wrap);
         });
@@ -3667,7 +3393,7 @@ import {
       });
       row.querySelector('.cog-rec-del').addEventListener('click', function(e) {
         e.stopPropagation();
-        if (!confirm('确定删除 ' + patientName + ' 的这份本机报告吗？\n(本机删除不会影响云端)')) return;
+        if (!confirm('确定删除 ' + patientName + ' 的这份本机报告吗？')) return;
         try {
           var recs = JSON.parse(localStorage.getItem('cog_records') || '[]');
           var newRecs = recs.filter(function(r) { return r.id !== rec.id; });
@@ -3683,178 +3409,16 @@ import {
       });
     }
 
-    // 云端分组标题
-    function _renderCloudRows(wrap, cloudRecs) {
-      wrap.innerHTML = '';
-      if (!cloudRecs || cloudRecs.length === 0) {
-        var empty = document.createElement('div');
-        empty.style.cssText = 'text-align:center;padding:40px 20px;color:#999;';
-        var tid = _getTherapistId() || _ensureTherapistId();
-        empty.innerHTML = '<div style="font-size:48px;margin-bottom:12px;">☁️</div>'
-          + '<div style="font-size:15px;color:#999;">云端暂无评估报告</div>'
-          + '<div style="font-size:12px;margin-top:6px;color:#bbb;">完成认知测试或神经系统自评后会自动同步到云端</div>'
-          + '<div style="font-size:11px;margin-top:12px;color:#aaa;">治疗师 ID: ' + _escHtml(tid) + '</div>';
-        wrap.appendChild(empty); return;
-      }
-      var grouped = classifyByKind(cloudRecs);
-      wrap.appendChild(_buildGroupHeader('认知报告', '🧠', 'cognitive', grouped.cognitive.length));
-      if (grouped.cognitive.length === 0) {
-        wrap.appendChild(_buildGroupEmpty('认知报告'));
-      } else {
-        grouped.cognitive.forEach(function(rec) {
-          var built = _buildRecordRow(rec, { isCloud: true });
-          wrap.appendChild(built.row);
-          _bindCloudRowEvents(built.row, rec, built.patientName, wrap);
-        });
-      }
-      wrap.appendChild(_buildGroupHeader('神经系统自评报告', '📋', 'questionnaire', grouped.questionnaire.length));
-      if (grouped.questionnaire.length === 0) {
-        wrap.appendChild(_buildGroupEmpty('神经系统自评报告'));
-      } else {
-        grouped.questionnaire.forEach(function(rec) {
-          var built = _buildRecordRow(rec, { isCloud: true });
-          wrap.appendChild(built.row);
-          _bindCloudRowEvents(built.row, rec, built.patientName, wrap);
-        });
-      }
-    }
-
-    // 刷新云端分组的标题计数与空状态 (单条删除后调用, 避免完全重渲染)
-    // 用 [data-group] 属性选择器定位, 不依赖 textContent 匹配
-    function _refreshCloudGroupHeaders(wrap) {
-      var groupDefs = [
-        { label: '认知报告', kind: 'cognitive', icon: '🧠' },
-        { label: '神经系统自评报告', kind: 'questionnaire', icon: '📋' }
-      ];
-      groupDefs.forEach(function(g) {
-        var header = wrap.querySelector('[data-group="' + g.kind + '"]');
-        if (!header) return;
-        var rows = wrap.querySelectorAll('[data-record-kind="' + g.kind + '"]');
-        var count = rows.length;
-        // 更新计数 span
-        var countSpan = header.querySelector('[data-group-count]');
-        if (countSpan) countSpan.textContent = count + ' 条';
-        // 检查紧跟其后的元素, 维护空状态
-        var next = header.nextElementSibling;
-        var isEmptyState = next && next.textContent === '暂无' + g.label;
-        if (count === 0 && !isEmptyState) {
-          header.parentNode.insertBefore(_buildGroupEmpty(g.label), header.nextSibling);
-        } else if (count > 0 && isEmptyState) {
-          next.remove();
-        }
-      });
-      // 检查整个列表是否清空
-      var all = wrap.querySelectorAll('[data-record-id]');
-      if (all.length === 0) {
-        // 全部清空, 显示空状态
-        wrap.innerHTML = '';
-        var empty = document.createElement('div');
-        empty.style.cssText = 'text-align:center;padding:40px 20px;color:#999;';
-        var tid = _getTherapistId() || _ensureTherapistId();
-        empty.innerHTML = '<div style="font-size:48px;margin-bottom:12px;">☁️</div>'
-          + '<div style="font-size:15px;color:#999;">云端暂无评估报告</div>'
-          + '<div style="font-size:12px;margin-top:6px;color:#bbb;">完成认知测试或神经系统自评后会自动同步到云端</div>'
-          + '<div style="font-size:11px;margin-top:12px;color:#aaa;">治疗师 ID: ' + _escHtml(tid) + '</div>';
-        wrap.appendChild(empty);
-      }
-    }
-
-    // 云端行事件绑定
-    function _bindCloudRowEvents(row, rec, patientName, wrap) {
-      row.querySelector('[style*="cursor:pointer"]').addEventListener('click', function() {
-        overlay.remove();
-        if (getReportType(rec) === 'questionnaire' && window._qnrRenderCloud) {
-          window._qnrRenderCloud(rec);
-          return;
-        }
-        var reportTime = rec.date && rec.time ? (rec.date + ' ' + rec.time) : null;
-        renderReport(rec.rawScores, null, rec.isQuick6, reportTime, rec.patientInfo);
-      });
-      var delBtn = row.querySelector('.cog-rec-del-cloud');
-      if (!delBtn) return;
-      delBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        var typeLabel = getReportTypeLabel(rec);
-        var confirmMsg = '确定从云端删除这份报告吗？\n\n患者: ' + patientName + '\n类型: ' + typeLabel + '\n时间: ' + (rec.date || '') + ' ' + (rec.time || '') + '\n\n删除后无法从云端恢复, 本机记录不会被删除。';
-        if (!confirm(confirmMsg)) return;
-        // 禁用按钮, 显示删除中
-        delBtn.disabled = true;
-        delBtn.textContent = '⏳';
-        delBtn.style.color = '#94a3b8';
-        if (typeof window._deleteCloudReport !== 'function') {
-          alert('云端删除模块未加载, 请刷新页面重试');
-          delBtn.disabled = false; delBtn.textContent = '🗑️'; delBtn.style.color = '';
-          return;
-        }
-        Promise.resolve(window._deleteCloudReport(rec)).then(function(res) {
-          if (res && res.ok) {
-            // 立即移除行, 同时更新分组标题计数与空状态 (保持 UX 即时反馈, 避免感知卡顿)
-            row.remove();
-            _refreshCloudGroupHeaders(wrap);
-          } else {
-            var msg = (window._cloudErrorText && window._cloudErrorText(res)) || '删除失败';
-            alert('云端删除失败: ' + msg);
-            delBtn.disabled = false; delBtn.textContent = '🗑️'; delBtn.style.color = '';
-          }
-        }).catch(function(err) {
-          alert('云端删除异常: ' + (err && err.message ? err.message : String(err)));
-          delBtn.disabled = false; delBtn.textContent = '🗑️'; delBtn.style.color = '';
-        });
-      });
-    }
-
-    // 云端记录缓存 (搜索时复用, 避免重新 fetch)
-    var cloudRecsCache = null;
-
     // 本机列表: 应用搜索过滤 + 渲染 + 更新提示
     function _renderLocalRowsFiltered(wrap, recs) {
       var filtered = filterRecords(recs, searchQuery);
       _renderLocalRows(wrap, filtered);
       _refreshSearchHint(recs.length, filtered.length);
     }
-    // 云端列表: 应用搜索过滤 + 渲染 + 更新提示
-    function _renderCloudRowsFiltered(wrap, cloudRecs) {
-      var filtered = filterRecords(cloudRecs, searchQuery);
-      _renderCloudRows(wrap, filtered);
-      _refreshSearchHint(cloudRecs.length, filtered.length);
-    }
 
     // Initial render
     _renderLocalRowsFiltered(listWrap, records);
     panel.appendChild(listWrap);
-
-    // Tab switching
-    var currentView = 'local';
-    localTab.addEventListener('click', function() {
-      if (currentView === 'local') return;
-      currentView = 'local';
-      localTab.style.background = '#1a1a2e'; localTab.style.color = '#fff';
-      cloudTab.style.background = '#f5f5f5'; cloudTab.style.color = '#999';
-      tokenWrap.style.display = 'none';
-      tokenBar.style.display = 'none';
-      _renderLocalRowsFiltered(listWrap, records);
-    });
-    cloudTab.addEventListener('click', function() {
-      if (currentView === 'cloud') return;
-      var hasToken = false;
-      try { hasToken = !!(localStorage.getItem('cog_gh_token')); } catch(e) {}
-      if (!hasToken) { tokenBar.style.display = 'none'; tokenWrap.style.display = 'block'; listWrap.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#999;">请先设置 GitHub Token</div>'; return; }
-      currentView = 'cloud';
-      cloudTab.style.background = '#1a1a2e'; cloudTab.style.color = '#fff';
-      localTab.style.background = '#f5f5f5'; localTab.style.color = '#999';
-      tokenWrap.style.display = 'none';
-      _renderTokenBar();
-      listWrap.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#999;">⏳ 加载中...</div>';
-      fetchCloudReports(function(cloudRecords, err) {
-        if (err) {
-          listWrap.innerHTML = '<div style="text-align:center;padding:30px 20px;color:#dc2626;font-size:13px;">⚠️ 云端加载失败 (' + _escHtml(String(err)) + ')<br><span style="color:#999;font-size:12px;">token 可能已失效或无权限，请点上方「修改」更新</span></div>';
-          _refreshSearchHint(0, 0);
-          return;
-        }
-        cloudRecsCache = cloudRecords;
-        _renderCloudRowsFiltered(listWrap, cloudRecords);
-      });
-    });
 
     overlay.appendChild(panel);
     document.body.appendChild(overlay);

@@ -76,22 +76,21 @@ curl -sI https://fxs-84.github.io/brainmend/data/reports/default/2026-08-05_qnr_
 - ⚠️ 患者仍能扫码做题 (不影响)
 - ⚠️ 前端代码含 anon key (公开安全, RLS 保护)
 
-## 🟡 任务 3: 删除 GitHub Contents API 上传路径
+## 🟡 任务 3: 删除 GitHub Contents API 上传路径 — ✅ 已完成 (2026-08-07)
 
 **现状**: 前端仍保留 GitHub 兜底上传 (兼容旧流程), 但已无必要
 
-**要删的**:
-1. `assets/cognitive/cognitive-report.js` 里的 `uploadToCloud` GitHub 实现 (约 2518-2599 行)
-2. `questionnaire.html` 里的 GitHub 兜底路径 (搜 `GH_API`)
-3. `index.html` 里 CloudSync 的 GitHub 相关
-4. `data/reports/` 相关引用
+**已删的**:
+1. ~~`assets/cognitive/cognitive-report.js` 里的 `uploadToCloud` GitHub 实现~~ ✅ (连 `fetchCloudReports` / 云端删除 / 云端记录 tab / token 配置 UI 一并移除)
+2. ~~`questionnaire.html` 里的 GitHub 兜底路径 (搜 `GH_API`)~~ ✅ (只走 Supabase, 失败标记 `no_share_token` / `supabase_not_configured` / 服务端错误)
+3. ~~`index.html` 里 CloudSync 的 GitHub 相关~~ ✅ (QR 不再携带 `?token=PAT`; `_qnrSaveRecord` 回传流程仅本机保存)
+4. ~~`data/reports/` 相关引用~~ ✅ (写/上传路径全删; classify.js 保留纯函数, 已无生产调用方)
+5. 连带删除: `assets/cognitive/reports/cloud-sync.js`、`assets/cognitive/reports/cloud-api.js`、`tests/reports/cloud-api.test.js`、`js/questionnaire/probe-cloud-sync.mjs`、`js/questionnaire/probe-cloud-save.mjs`
 
 **保留的**:
 - `assets/cognitive/reports/qnr-supabase.js` (Supabase 客户端)
 - `assets/cognitive/reports/qnr-therapist-ui.js` (治疗师 UI)
-- `assets/cognitive/reports/cloud-sync.js` (可保留, 只走 Supabase 或删)
-
-**注意**: 删除时检查有没有其他依赖 `_uploadToCloud` 的地方, 需要同步改
+- `assets/cognitive/reports/classify.js` (纯函数: 报告分类/搜索过滤, 本地列表仍在用)
 
 ## 🟡 任务 4: 治疗师 UI 增强 (可选)
 

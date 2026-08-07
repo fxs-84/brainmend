@@ -397,8 +397,7 @@
 <script type="module" src="./js/questionnaire/main.js"></script>
 <!-- Supabase 配置 (从独立文件加载, 真实值不入 git) -->
 <!-- ⚠️ 必须在 qnr-supabase.js 之前加载, 否则 URL/KEY 是 undefined -->
-<script src="./assets/config/supabase-config.js" onerror="console.warn('[qnr] supabase-config.js 未配置, 将使用 GitHub 兜底路径')"></script>
-<script src="./assets/cognitive/reports/cloud-sync.js"></script>
+<script src="./assets/config/supabase-config.js" onerror="console.error('[qnr] supabase-config.js 未配置, 云端上传不可用')"></script>
 <script src="./assets/cognitive/reports/qnr-supabase.js"></script>
 <script src="./assets/cognitive/reports/qnr-region-detail.js"></script>
 <script src="./assets/vendor/html2canvas-1.4.1.min.js" crossorigin="anonymous"></script>
@@ -447,12 +446,8 @@
     var params = new URLSearchParams(window.location.search);
     var sandbox = params.get('sandbox') === '1';
 
-    // 云端链路: 捕获二维码携带的 token / tid 到 localStorage
-    // (认知评估在 index.html mode=cognitive 分支捕获; 自评入口是本页, 必须自己捕获,
-    //  否则完成跳回 index.html 后 _uploadToCloud 因无 token 静默跳过, 结果不会上传云端)
+    // 云端链路: 捕获二维码携带的 tid 到 localStorage (记录命名空间, 区分治疗师)
     try {
-      var tk = params.get('token');
-      if (tk) localStorage.setItem('cog_gh_token', tk);
       var tidParam = params.get('tid');
       if (tidParam) localStorage.setItem('cog_therapist_id', tidParam);
     } catch(e) {}
@@ -594,6 +589,63 @@
       });
     });
 
+    // ===== 云端上传: 只走 Supabase (无 GitHub 兜底) =====
+    // 状态写回 cog_records 并刷新报告页云端状态行
+    function _markCloudStatus(recId, status, err, cloudId) {
+      try {
+        var arr = JSON.parse(localStorage.getItem('cog_records') || '[]');
+        for (var i = 0; i < arr.length; i++) {
+          if (arr[i].id === recId) {
+            arr[i]._cloudStatus = status;
+            if (cloudId) { arr[i]._cloudId = cloudId; arr[i]._cloudSource = 'supabase'; }
+            if (err) arr[i]._cloudErr = err; else delete arr[i]._cloudErr;
+            break;
+          }
+        }
+        localStorage.setItem('cog_records', JSON.stringify(arr));
+      } catch(e) {}
+      _renderCloudLine(recId);
+    }
+    // 提交到 Supabase (走 RPC, therapist_id 由 share_token 派生)
+    // 失败时给明确错误标记 (supabase_not_configured / no_share_token / 服务端 message)
+    function _qnrSubmitCloud(rec) {
+      if (!(window.SupabaseClient && window.SupabaseClient.isConfigured())) {
+        console.error('[qnr inline] Supabase 未配置, 无法上传云端');
+        _markCloudStatus(rec.id, 'failed', 'supabase_not_configured');
+        return;
+      }
+      // share_token 由治疗师工作台生成的 QR 链接携带 (新 Supabase 流程)
+      var shareToken = params.get('share_token') || '';
+      if (!shareToken) {
+        console.warn('[qnr inline] 缺少 share_token, 无法上传云端');
+        _markCloudStatus(rec.id, 'failed', 'no_share_token');
+        return;
+      }
+      _markCloudStatus(rec.id, 'syncing');
+      var info = rec.patientInfo || {};
+      var q = rec.qnr || {};
+      window.SupabaseClient.submitQnrAssessment({
+        token: shareToken,
+        name: info.name,
+        age: info.age,
+        gender: info.gender,
+        responses: q.items || {},
+        byRegion: q.byRegion,
+        severityByRegion: q.severityByRegion,
+        affectedRegions: q.affectedRegions,
+        totalScore: q.total,
+        percent: q.percent,
+        worstSeverity: q.worstSeverity,
+        burdenGroups: q.burdenGroups,
+        phoneEar: q.phoneEar
+      }).then(function(assessmentId) {
+        _markCloudStatus(rec.id, 'synced', null, assessmentId);
+      }).catch(function(err) {
+        console.error('[qnr inline] Supabase 提交失败:', err);
+        _markCloudStatus(rec.id, 'failed', String(err && err.message || err));
+      });
+    }
+
     // ===== 内联报告: 保存 + 渲染 + PDF 导出 (核心新流程) =====
     function _saveAndRenderReport(data) {
       // 1. 计算 16 分区评分
@@ -642,190 +694,8 @@
         if (arr.length > 100) arr.splice(0, arr.length - 100);
         localStorage.setItem('cog_records', JSON.stringify(arr));
       } catch(e) { console.error('[qnr inline] localStorage 写入失败', e); }
-      // 4. 云端上传 — 优先 Supabase (新), 否则 GitHub Contents API (旧, 保留兼容)
-      var _doCloud = function() {
-        // 路径 A: Supabase (推荐, PII 安全)
-        if (window.SupabaseClient && window.SupabaseClient.isConfigured()) {
-          // 检查 share_token (QR 链接携带, 新 Supabase 流程)
-          // 兼容旧 GitHub 流程的 ?token=PAT (留作兜底, 后续 Sprint 清理)
-          var shareToken = params.get('share_token') || params.get('token') || '';
-          if (!shareToken) {
-            console.warn('[qnr inline] Supabase 模式但缺少 share_token, 跳过云端上传');
-            // 标记 failed 让用户知道
-            try {
-              var arr0 = JSON.parse(localStorage.getItem('cog_records') || '[]');
-              for (var i0 = 0; i0 < arr0.length; i0++) {
-                if (arr0[i0].id === rec.id) {
-                  arr0[i0]._cloudErr = 'no_share_token';
-                  arr0[i0]._cloudStatus = 'failed';
-                  break;
-                }
-              }
-              localStorage.setItem('cog_records', JSON.stringify(arr0));
-              _renderCloudLine(rec.id);
-            } catch(e) {}
-            return;
-          }
-          // 标记 syncing
-          try {
-            var arrS = JSON.parse(localStorage.getItem('cog_records') || '[]');
-            for (var iS = 0; iS < arrS.length; iS++) {
-              if (arrS[iS].id === rec.id) { arrS[iS]._cloudStatus = 'syncing'; break; }
-            }
-            localStorage.setItem('cog_records', JSON.stringify(arrS));
-          } catch(e) {}
-          // 提交到 Supabase (走 RPC, therapist_id 由 token 派生)
-          window.SupabaseClient.submitQnrAssessment({
-            token: shareToken,
-            name: data.name,
-            age: data.age,
-            gender: data.gender,
-            responses: data.items || {},
-            byRegion: payload.byRegion,
-            severityByRegion: payload.severityByRegion,
-            affectedRegions: payload.affectedRegions,
-            totalScore: payload.total,
-            percent: payload.percent,
-            worstSeverity: payload.worstSeverity,
-            burdenGroups: payload.burdenGroups,
-            phoneEar: data.phoneEar
-          }).then(function(assessmentId) {
-            // 标记 synced + 写回 supabase record id
-            try {
-              var arr2 = JSON.parse(localStorage.getItem('cog_records') || '[]');
-              for (var i2 = 0; i2 < arr2.length; i2++) {
-                if (arr2[i2].id === rec.id) {
-                  arr2[i2]._cloudStatus = 'synced';
-                  arr2[i2]._cloudId = assessmentId;
-                  arr2[i2]._cloudSource = 'supabase';
-                  delete arr2[i2]._cloudErr;
-                  break;
-                }
-              }
-              localStorage.setItem('cog_records', JSON.stringify(arr2));
-              _renderCloudLine(rec.id);
-            } catch(e) {}
-          }).catch(function(err) {
-            console.error('[qnr inline] Supabase 提交失败:', err);
-            try {
-              var arr3 = JSON.parse(localStorage.getItem('cog_records') || '[]');
-              for (var i3 = 0; i3 < arr3.length; i3++) {
-                if (arr3[i3].id === rec.id) {
-                  arr3[i3]._cloudErr = String(err && err.message || err);
-                  arr3[i3]._cloudStatus = 'failed';
-                  break;
-                }
-              }
-              localStorage.setItem('cog_records', JSON.stringify(arr3));
-              _renderCloudLine(rec.id);
-            } catch(e) {}
-          });
-          return;
-        }
-        // 路径 B: GitHub Contents API (旧, 保留兼容, 后续可弃)
-        // CloudSync 是 IIFE, 已自动挂 window.CloudSync
-        // 但它依赖 window._uploadToCloud (cognitive-report.js 暴露), 这里没有
-        // 所以 questionnaire.html 需要自己实现一个轻量级上传器 (单 PUT, 无重试)
-        // CloudSync.saveReportReliably 仍可调用, 它内部会调 _uploadToCloud
-        // 由于 _uploadToCloud 不存在, 直接退化: 标记 failed, 靠本地 + 后续 manual retry
-        try {
-          if (window.CloudSync && typeof window.CloudSync.saveReportReliably === 'function') {
-            window.CloudSync.saveReportReliably(rec).then(function() {
-              _renderCloudLine(rec.id);
-            });
-          }
-          // 安装后台钩子 (online/visibility 自动重试)
-          if (window.CloudSync && window.CloudSync._installBackgroundHooks) {
-            window.CloudSync._installBackgroundHooks();
-          }
-        } catch(e) { /* swallow */ }
-      };
-      // 由于 questionnaire.html 没有 _uploadToCloud, 我们给 CloudSync 注入一个最小上传器
-      // (用 fetch 直接调 GitHub Contents API, 复用 URL 的 token)
-      if (!window._uploadToCloud) {
-        var GH_API = 'https://api.github.com/repos/fxs-84/brainmend/contents/data/reports/';
-        var tid = (function(){
-          try {
-            var t = localStorage.getItem('cog_therapist_id');
-            if (!t) {
-              t = 'th_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
-              localStorage.setItem('cog_therapist_id', t);
-            }
-            return t;
-          } catch(e) { return 'th_default'; }
-        })();
-        var _ghToken = function(){ try { return localStorage.getItem('cog_gh_token') || ''; } catch(e) { return ''; } };
-        window._uploadToCloud = function(record) {
-          if (!_ghToken()) return Promise.resolve({ ok: false, error: 'no_token' });
-          var trimmed = {};
-          Object.keys(record.qnr || {}).forEach(function(k){ trimmed[k] = record.qnr[k]; });
-          var cloudRecord = {
-            id: record.id, date: record.date, time: record.time,
-            patientInfo: record.patientInfo,
-            qnr: trimmed,
-            overallScore: record.overallScore,
-            type: record.type,
-            createdAt: new Date().toISOString()
-          };
-          var json = JSON.stringify(cloudRecord);
-          var bytes = new TextEncoder().encode(json);
-          var bin = '';
-          bytes.forEach(function(b){ bin += String.fromCharCode(b); });
-          var b64 = btoa(bin);
-          var fileName = ((record.date || 'unknown') + '_' + record.id + '.json').replace(/\//g, '-');
-          var path = GH_API + encodeURIComponent(tid) + '/' + encodeURIComponent(fileName);
-          // 标记 syncing
-          try {
-            var arr = JSON.parse(localStorage.getItem('cog_records') || '[]');
-            for (var i = 0; i < arr.length; i++) {
-              if (arr[i].id === record.id) { arr[i]._cloudStatus = 'syncing'; break; }
-            }
-            localStorage.setItem('cog_records', JSON.stringify(arr));
-          } catch(e) {}
-          return fetch(path, {
-            method: 'PUT',
-            headers: { 'Authorization': 'token ' + _ghToken(), 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: 'upload report: ' + (record.patientInfo.name || ''), content: b64 })
-          }).then(function(res) {
-            if (!res.ok) return res.json().catch(function(){return null;}).then(function(body){
-              var detail = body && body.message ? ': ' + body.message : '';
-              // 422 + sha 问题: 取已有文件 sha 重试
-              if (res.status === 422 && body && /sha/i.test(body.message||'')) {
-                return fetch(path, { headers: { 'Authorization': 'token ' + _ghToken() } })
-                  .then(function(gr){ return gr.ok ? gr.json() : null; })
-                  .then(function(fileObj){
-                    if (!fileObj || !fileObj.sha) return { ok: false, error: 'HTTP 422' + detail };
-                    return fetch(path, {
-                      method: 'PUT',
-                      headers: { 'Authorization': 'token ' + _ghToken(), 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ message: 'update report: ' + (record.patientInfo.name||''), content: b64, sha: fileObj.sha })
-                    }).then(function(r2){ return r2.ok ? r2.json().then(function(o){ return o && o.content && o.content.sha ? { ok: true, sha: o.content.sha } : { ok: false, error: 'bad_response' }; }) : { ok: false, error: 'HTTP ' + r2.status }; });
-                  });
-              }
-              return { ok: false, error: 'HTTP ' + res.status + detail };
-            });
-            return res.json().then(function(obj){
-              if (obj && obj.content && obj.content.sha) {
-                try {
-                  var arr2 = JSON.parse(localStorage.getItem('cog_records') || '[]');
-                  for (var k = 0; k < arr2.length; k++) {
-                    if (arr2[k].id === record.id) {
-                      arr2[k]._cloudId = obj.content.sha;
-                      arr2[k]._cloudStatus = 'synced';
-                      delete arr2[k]._cloudErr;
-                      break;
-                    }
-                  }
-                  localStorage.setItem('cog_records', JSON.stringify(arr2));
-                } catch(e) {}
-                return { ok: true, sha: obj.content.sha };
-              }
-              return { ok: false, error: 'bad_response' };
-            });
-          }).catch(function(err){ return { ok: false, error: String(err && err.message || err || 'network') }; });
-        };
-      }
-      _doCloud();
+      // 4. 云端上传 — 只走 Supabase (PII 安全); 失败明确标记状态行, 无 GitHub 兜底
+      _qnrSubmitCloud(rec);
       // 5. 渲染报告 + 切换屏幕 (核心: 留在本页, 不跳)
       _renderInlineReport(rec);
       // 6. 隐藏结果页, 显示报告页
@@ -963,7 +833,7 @@
         html = '<div style="font-size:13px;color:#0284c7;font-weight:600;display:flex;align-items:center;gap:6px;">' +
           '<span style="display:inline-block;width:10px;height:10px;border:2px solid #0284c7;border-top-color:transparent;border-radius:50%;animation:qnr-spin 0.8s linear infinite;"></span>' +
           '<span>☁️ 正在同步到云端…</span>' +
-          '<span style="color:#64748b;font-weight:400;">(本机已保存,网络恢复后自动重试)</span>' +
+          '<span style="color:#64748b;font-weight:400;">(本机已保存, 若失败可点下方重试)</span>' +
         '</div>';
       } else if (status === 'failed') {
         var errHint = rec._cloudErr ? ' · ' + String(rec._cloudErr).replace(/[<>&"\'"]/g,'') : '';
@@ -982,30 +852,13 @@
       }
       var footer = document.getElementById('qnr-cloud-status-footer');
       if (footer) footer.innerHTML = html;
-      // 绑定重试按钮
+      // 绑定重试按钮 (重新走 Supabase 提交)
       var retryBtn = document.getElementById('qnr-retry-btn');
       if (retryBtn) {
         retryBtn.addEventListener('click', function(){
           retryBtn.disabled = true;
           retryBtn.textContent = '⏳ 重试中…';
-          if (window.CloudSync && typeof window.CloudSync.saveReportReliably === 'function') {
-            window.CloudSync.saveReportReliably(rec).then(function(){
-              _renderCloudLine(recId);
-            });
-          } else if (window._uploadToCloud) {
-            Promise.resolve(window._uploadToCloud(rec)).then(function(){
-              _renderCloudLine(recId);
-            });
-          }
-        });
-      }
-      // 订阅 CloudSync 状态变化 → 自动刷新
-      if (window.CloudSync && typeof window.CloudSync.onPendingChange === 'function' && !window.__qnrCloudLineSubscribed) {
-        window.__qnrCloudLineSubscribed = true;
-        window.CloudSync.onPendingChange(function(pending){
-          (pending || []).forEach(function(p){
-            try { _renderCloudLine(p.id); } catch(e) {}
-          });
+          _qnrSubmitCloud(rec);
         });
       }
     }

@@ -19,7 +19,7 @@ page.on("pageerror", (e) => errors.push("[PE] " + e.message));
 page.on("console", (m) => { if (m.type() === "error") errors.push("[CONSOLE.ERR] " + m.text()); });
 
 await page.goto(base + "/index.html", { waitUntil: "commit", timeout: 60000 });
-await page.waitForTimeout(15000); // 等大 bundle + 预加载 (CloudSync 后台 setInterval 让 networkidle 永不达成)
+await page.waitForTimeout(15000); // 等大 bundle + 预加载 (后台定时器让 networkidle 永不达成)
 
 // 等数据模块加载 (这是关键!)
 console.log("=== 等待 __qnrData + __qnrScoring 加载 ===");
@@ -35,7 +35,7 @@ if (!dataReady) {
   process.exit(1);
 }
 
-// 构造一条云端记录 (模拟治疗师从 GitHub 拉下来的自评报告)
+// 构造一条云端记录 (模拟遗留的云端自评报告结构)
 await page.evaluate(() => {
   const cloudRec = {
     id: "cloud_qnr_test_001",
@@ -57,7 +57,7 @@ await page.evaluate(() => {
       items: { 1: 0, 2: 2, 3: 4, 4: 1, 5: 3, 18: 1, 19: 2 }
     },
     _isCloud: true,
-    _cloudPath: "data/reports/th_default/cloud_qnr_test_001.json",
+    _cloudPath: "legacy/cloud_qnr_test_001.json",
     _cloudId: "abc123"
   };
   // 注入到 cog_records (模拟"从云端列表打开")
