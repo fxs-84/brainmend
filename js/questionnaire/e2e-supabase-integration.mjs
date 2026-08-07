@@ -67,12 +67,21 @@ try {
   const tp = await tCtx.newPage();
   tp.on("pageerror", (e) => pushErr("therapist", e.message));
   await tp.goto(base + "/index.html", { waitUntil: "commit", timeout: 30000 });
-  // 等关键脚本就绪 (LIVE CDN 慢, 固定等待不可靠)
-  await tp.waitForFunction(
-    () => window.BmTherapistUI && window.SupabaseClient && window.SupabaseClient.isConfigured(),
-    null,
-    { timeout: 90000 }
-  );
+  // 等关键脚本就绪 (LIVE CDN 慢/偶发 HTML 截断, 固定等待不可靠; 最多重载 3 次)
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await tp.waitForFunction(
+        () => window.BmTherapistUI && window.SupabaseClient && window.SupabaseClient.isConfigured(),
+        null,
+        { timeout: 90000 }
+      );
+      break;
+    } catch (e) {
+      if (attempt === 3) throw e;
+      console.log("  ⚠️ 治疗师页未就绪 (可能 HTML 截断), 重载", attempt, "/3");
+      await tp.reload({ waitUntil: "commit" });
+    }
+  }
   // 打开登录 modal
   await tp.evaluate(() => window.BmTherapistUI && window.BmTherapistUI.openAuth());
   await tp.waitForSelector("#bm-auth-modal", { state: "visible", timeout: 5000 });

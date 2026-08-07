@@ -180,8 +180,11 @@ try {
   const cogCtx = await browser.newContext();
   const cp = await cogCtx.newPage();
   cp.on("pageerror", (e) => pushErr("cog-patient", e.message));
-  // 等 cognitive-report.js 加载 (暴露 _showCognitiveReport); HTML 截断则自动重载
-  await gotoReady(cp, cogUrl, () => typeof window._showCognitiveReport === "function", "认知患者页");
+  // 等 cognitive-report.js + Supabase 客户端加载; HTML 截断则自动重载
+  // (SupabaseClient 在页面尾部, 能加载说明 HTML 完整)
+  await gotoReady(cp, cogUrl,
+    () => typeof window._showCognitiveReport === "function" && window.SupabaseClient && window.SupabaseClient.isConfigured(),
+    "认知患者页");
   // share_token 应由 deep-link 解析写入 sessionStorage
   const cogTokenSaved = await cp.evaluate(() => sessionStorage.getItem("bm_cog_share_token") || "");
   assert("患者端 share_token 已存 sessionStorage", cogTokenSaved === cogToken);
@@ -261,9 +264,11 @@ try {
     const gaitCtx = await browser.newContext();
     const gp = await gaitCtx.newPage();
     gp.on("pageerror", (e) => pushErr("gait-patient", e.message));
-    // 等 gait-analysis.js 加载 (暴露 __gaitAnalysis.saveAssessment); HTML 截断则自动重载
+    // 等 gait-analysis.js + Supabase 客户端加载; HTML 截断则自动重载
+    // (SupabaseClient 在页面尾部, 能加载说明 HTML 完整)
     await gotoReady(gp, gaitUrl,
-      () => window.__gaitAnalysis && typeof window.__gaitAnalysis.saveAssessment === "function",
+      () => window.__gaitAnalysis && typeof window.__gaitAnalysis.saveAssessment === "function"
+        && window.SupabaseClient && window.SupabaseClient.isConfigured(),
       "步态患者页");
     const gaitTokenSaved = await gp.evaluate(() => sessionStorage.getItem("bm_gait_share_token") || "");
     assert("患者端步态 share_token 已存 sessionStorage", gaitTokenSaved === gaitToken);
