@@ -1,0 +1,51 @@
+✅ Supabase 配置已读取
+   URL: https://bydijxssezoetquounqo.supabase.co
+   KEY: sb_publishable_4o9Pi...
+
+=== 1. 治疗师注册 + 登录 ===
+  ✅ 注册成功, 已自动登录
+  ✅ 治疗师登录成功 (session 有 access_token) 
+
+=== 2. 创建认知 share_link ===
+  认知链接: http://localhost:8765/index.html?mode=cognitive&start=full&share_token=9010417ba8884e8594992f4eee371486
+  ✅ 认知链接已生成 
+  ✅ 认知链接含 mode=cognitive + start=full + share_token 
+  ✅ 认知 share_token 已生成 (32 位) 9010417ba8884e8594992f4eee371486
+
+=== 3. 患者端认知报告提交 ===
+  ✅ 患者端 share_token 已存 sessionStorage 
+  登记表单已提交, 等待云端同步...
+  ✅ 认知记录云端状态 = synced status=synced
+
+=== 4. 验证 cognitive_assessments ===
+  ✅ Supabase 中找到本 share_token 的认知记录 
+  ✅ patient_name 正确 认知患者李四
+  ✅ overall_score 非空 score=29
+  ✅ is_quick6 = false 
+  ✅ payload 非空且含 normalizedScores 
+  ✅ payload 无 phaseSnapshots 类大字段 
+
+=== 5. 步态报告链路 ===
+  步态链接: http://localhost:8765/index.html?mode=gait&share_token=74d7b2cecaff4e2ba00694610a1be064
+  ✅ 步态链接含 mode=gait + share_token (无 start 参数) 
+  ✅ 步态 share_token 已生成 (32 位) 74d7b2cecaff4e2ba00694610a1be064
+  ✅ 患者端步态 share_token 已存 sessionStorage 
+  步态登记表单已提交, 等待云端同步...
+  ✅ 步态记录本地已保存 
+  ✅ 步态记录云端状态 = synced status=synced
+  ✅ Supabase 中找到本 share_token 的步态记录 
+  ✅ patient_name 正确 步态患者王五
+  ✅ classification_primary 正确 e2e_test_gait
+  ✅ payload 非空且含 parameters 
+  ✅ payload 已剥离 phaseSnapshots 
+  ✅ payload 无截图 marker 泄漏 
+
+=== 6. 治疗师列表查看 (认知 / 步态 tab) ===
+  ✅ 认知 tab 显示新报告 认知患者李四 · 40岁 女📊12项 · 29分2026/8/7 15:55:05 · 点击查看报告
+  ✅ 认知 tab 显示总分徽标 
+  ✅ 步态 tab 显示新报告 步态患者王五 · 66岁 男e2e_test_gait2026/8/7 15:55:11 · 点击查看报告
+  ✅ 步态 tab 显示分类徽标 
+  ✅ 自评 tab 正常加载 (无报错) 还没有自评报告。等患者扫码提交...
+
+══════════════════════════════════════════════════
+  通过 28 / 失败 0

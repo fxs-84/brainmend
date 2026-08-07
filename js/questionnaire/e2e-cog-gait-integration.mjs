@@ -82,6 +82,21 @@ async function waitCloudStatus(page, storageKey, idField, idValue, timeoutMs) {
   return "timeout";
 }
 
+// 带重试的页面加载: GitHub Pages 连接不稳定时 HTML 可能被截断
+// (尾部内联脚本没执行, 全局函数不存在), 重载最多 3 次
+async function gotoReady(page, url, readyFn, label) {
+  for (var attempt = 1; attempt <= 3; attempt++) {
+    await page.goto(url, { waitUntil: "commit", timeout: 60000 });
+    try {
+      await page.waitForFunction(readyFn, null, { timeout: 90000 });
+      return;
+    } catch (e) {
+      console.log("  ⚠️", label, "页面未就绪 (可能 HTML 截断), 重试", attempt, "/3");
+    }
+  }
+  throw new Error(label + " 页面加载重试 3 次后仍未就绪");
+}
+
 // 治疗师 REST 查询 (auth, RLS 只允许看自己的)
 async function restSelect(session, table, query) {
   const res = await fetch(SUPABASE_URL + "/rest/v1/" + table + "?" + query, {
@@ -165,9 +180,8 @@ try {
   const cogCtx = await browser.newContext();
   const cp = await cogCtx.newPage();
   cp.on("pageerror", (e) => pushErr("cog-patient", e.message));
-  await cp.goto(cogUrl, { waitUntil: "commit", timeout: 60000 });
-  // 等 cognitive-report.js 加载 (暴露 _showCognitiveReport)
-  await cp.waitForFunction(() => typeof window._showCognitiveReport === "function", null, { timeout: 90000 });
+  // 等 cognitive-report.js 加载 (暴露 _showCognitiveReport); HTML 截断则自动重载
+  await gotoReady(cp, cogUrl, () => typeof window._showCognitiveReport === "function", "认知患者页");
   // share_token 应由 deep-link 解析写入 sessionStorage
   const cogTokenSaved = await cp.evaluate(() => sessionStorage.getItem("bm_cog_share_token") || "");
   assert("患者端 share_token 已存 sessionStorage", cogTokenSaved === cogToken);
@@ -247,12 +261,10 @@ try {
     const gaitCtx = await browser.newContext();
     const gp = await gaitCtx.newPage();
     gp.on("pageerror", (e) => pushErr("gait-patient", e.message));
-    await gp.goto(gaitUrl, { waitUntil: "commit", timeout: 60000 });
-    // 等 gait-analysis.js 加载 (暴露 __gaitAnalysis.saveAssessment)
-    await gp.waitForFunction(
+    // 等 gait-analysis.js 加载 (暴露 __gaitAnalysis.saveAssessment); HTML 截断则自动重载
+    await gotoReady(gp, gaitUrl,
       () => window.__gaitAnalysis && typeof window.__gaitAnalysis.saveAssessment === "function",
-      null, { timeout: 90000 }
-    );
+      "步态患者页");
     const gaitTokenSaved = await gp.evaluate(() => sessionStorage.getItem("bm_gait_share_token") || "");
     assert("患者端步态 share_token 已存 sessionStorage", gaitTokenSaved === gaitToken);
     // 最短路径: 直接调 saveAssessment 注入伪 results (含大 phaseSnapshots, 验证提交前剥离)

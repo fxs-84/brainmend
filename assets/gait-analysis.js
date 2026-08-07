@@ -1400,8 +1400,7 @@ if (frames.length < expectedFrames * 0.7) {
 
   function saveAssessment(r) {
     var info = _getGaitPatientInfo();
-    var hasToken = false;
-    try { hasToken = !!sessionStorage.getItem('bm_gait_share_token'); } catch (e) {}
+    var hasToken = !!_getGaitShareToken();
     if (hasToken && !info.name) {
       // 云端流程必须带患者姓名 — 先登记再保存 (本地流程不弹, 行为不变)
       _showGaitPatientForm(function(info2) { _doSaveAssessment(r, info2); });
@@ -1437,7 +1436,12 @@ if (frames.length < expectedFrames * 0.7) {
   // share_token 来源: 治疗师工作台生成的步态链接 (?mode=gait&share_token=...),
   // index.html deep-link 解析时写入 sessionStorage
   function _getGaitShareToken() {
-    try { return sessionStorage.getItem('bm_gait_share_token') || ''; } catch (e) { return ''; }
+    try {
+      var t = sessionStorage.getItem('bm_gait_share_token');
+      if (t) return t;
+    } catch (e) {}
+    // 兜底: 页面 HTML 被截断时 deep-link 脚本可能没跑到, 直接从 URL 解析
+    try { return new URLSearchParams(location.search).get('share_token') || ''; } catch (e) { return ''; }
   }
 
   // 状态写回 gait_assessment_log (按 _localId 匹配)
