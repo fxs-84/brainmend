@@ -32,7 +32,9 @@
 
 ---
 
-## 🔴 任务 1 (最高优先级): 删除公开仓库的历史患者数据
+## 🔴 任务 1 (最高优先级): 删除公开仓库的历史患者数据 — ✅ 已完成 (2026-08-07)
+
+> 已执行 `git rm -r data/` + force push 到 main (commit `310070b`), 两个历史报告 URL 已验证 404。
 
 **现状**: `data/reports/` 目录在公开仓库 (fxs-84/brainmend), 含**真实患者 PII**:
 - `data/reports/default/2026-06-22_cog_20260622_1256.json` (付先生/42岁)
@@ -64,7 +66,11 @@ curl -sI https://fxs-84.github.io/brainmend/data/reports/default/2026-08-05_qnr_
 # 应返回 404
 ```
 
-## 🔴 任务 2: 仓库改 Private
+## 🔴 任务 2: 仓库改 Private — ❌ 不执行 (2026-08-07 决定)
+
+> **决定**: 账号是免费计划, 改 Private 会关停 GitHub Pages (LIVE 站下线), 故**保持 Public**。
+> PII 风险靠任务 1 (删除 data/) 兜底; 但 **git 历史 commit 仍含 PII**, 公开仓库可挖到。
+> 后续可选: 升级 Pro 后改 Private, 或重写 git 历史 (filter-repo) 后 force push。
 
 **为什么**: 即使删了 data/, 仓库里所有历史 commit 仍含 PII (git 历史不可删除, 除非 force push 重写历史)
 
@@ -92,7 +98,7 @@ curl -sI https://fxs-84.github.io/brainmend/data/reports/default/2026-08-05_qnr_
 - `assets/cognitive/reports/qnr-therapist-ui.js` (治疗师 UI)
 - `assets/cognitive/reports/classify.js` (纯函数: 报告分类/搜索过滤, 本地列表仍在用)
 
-## 🟡 任务 4: 治疗师 UI 增强 (可选)
+## 🟡 任务 4: 治疗师 UI 增强 (可选) — ⏭️ 跳过 (2026-08-07 用户决定)
 
 当前治疗师工作台有: 登录/注册、创建 share_link、列表、QR 显示、撤销、报告列表
 
@@ -103,11 +109,14 @@ curl -sI https://fxs-84.github.io/brainmend/data/reports/default/2026-08-05_qnr_
 - [ ] 分享链接列表翻页
 - [ ] 报告搜索 (按患者名)
 
-## 🟡 任务 5: 部署收尾
+## 🟡 任务 5: 部署收尾 — ✅ 已完成 (2026-08-07)
 
 1. 部署分支: `deploy-qnr-cloudsync` (force push 到 main)
 2. Pages 源: main 分支
 3. 验证: `node js/questionnaire/e2e-supabase-integration.mjs https://fxs-84.github.io/brainmend` → 6/6 全过
+
+> 收尾时发现并修复: 集成测试原来用固定 `waitForTimeout(20000)` 等脚本, LIVE CDN 慢时不可靠
+> (表现为 `#bm-auth-modal` 超时)。已改为 `waitForFunction` 等 `BmTherapistUI + SupabaseClient.isConfigured()` (90s 上限)。
 
 ---
 

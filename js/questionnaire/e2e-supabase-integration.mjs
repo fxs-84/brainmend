@@ -67,7 +67,12 @@ try {
   const tp = await tCtx.newPage();
   tp.on("pageerror", (e) => pushErr("therapist", e.message));
   await tp.goto(base + "/index.html", { waitUntil: "commit", timeout: 30000 });
-  await tp.waitForTimeout(20000); // 等 cognitive-report.js 大 bundle
+  // 等关键脚本就绪 (LIVE CDN 慢, 固定等待不可靠)
+  await tp.waitForFunction(
+    () => window.BmTherapistUI && window.SupabaseClient && window.SupabaseClient.isConfigured(),
+    null,
+    { timeout: 90000 }
+  );
   // 打开登录 modal
   await tp.evaluate(() => window.BmTherapistUI && window.BmTherapistUI.openAuth());
   await tp.waitForSelector("#bm-auth-modal", { state: "visible", timeout: 5000 });
