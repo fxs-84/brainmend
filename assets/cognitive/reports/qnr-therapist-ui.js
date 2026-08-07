@@ -16,7 +16,13 @@
     var s = document.createElement('style');
     s.id = 'qnr-supabase-styles';
     s.textContent = [
-      '.bm-auth-bar { position:fixed; top:8px; right:8px; z-index:25000; display:flex; gap:8px; align-items:center; background:rgba(15,23,42,0.85); backdrop-filter:blur(8px); padding:8px 14px; border-radius:999px; box-shadow:0 4px 16px rgba(0,0,0,0.2); font-family:-apple-system,sans-serif; font-size:13px; color:#fff; }',
+      '.bm-auth-bar { position:fixed; bottom:16px; right:16px; z-index:25000; display:flex; gap:8px; align-items:center; background:rgba(15,23,42,0.85); backdrop-filter:blur(8px); padding:8px 14px; border-radius:999px; box-shadow:0 4px 16px rgba(0,0,0,0.2); font-family:-apple-system,sans-serif; font-size:13px; color:#fff; }',
+      // 收起态: 44px 圆形 FAB, 只显示图标, 不遮内容
+      '.bm-auth-bar:not(.expanded) { width:44px; height:44px; padding:0; justify-content:center; cursor:pointer; }',
+      '.bm-auth-bar:not(.expanded) .bm-bar-detail, .bm-auth-bar:not(.expanded) .bm-bar-collapse { display:none; }',
+      '.bm-auth-bar .bm-bar-detail { display:contents; }',
+      '.bm-auth-bar .bm-fab-icon { font-size:20px; line-height:1; }',
+      '.bm-auth-bar .bm-bar-collapse { background:none; border:none; color:#94a3b8; font-size:16px; cursor:pointer; padding:0 2px; line-height:1; }',
       '.bm-auth-bar button { padding:6px 14px; border-radius:999px; border:none; font-size:12px; font-weight:600; cursor:pointer; transition:all 0.15s; }',
       '.bm-auth-bar .bm-btn-primary { background:linear-gradient(135deg,#0d9488,#0284c7); color:#fff; }',
       '.bm-auth-bar .bm-btn-ghost { background:rgba(255,255,255,0.15); color:#fff; }',
@@ -46,39 +52,45 @@
     document.head.appendChild(s);
   }
 
-  // ============ 顶部状态栏 ============
+  // ============ 状态栏 (右下角 FAB, 默认收起不遮内容, 点击展开) ============
   function renderAuthBar() {
     _ensureStyles();
-    var bar = document.getElementById('bm-auth-bar');
-    if (bar) bar.remove();
+    var old = document.getElementById('bm-auth-bar');
+    var wasExpanded = old && old.classList.contains('expanded');
+    if (old) old.remove();
 
     var configured = global.SupabaseClient && global.SupabaseClient.isConfigured();
     var session = global.SupabaseClient ? global.SupabaseClient.getSession() : null;
 
-    bar = document.createElement('div');
+    var bar = document.createElement('div');
     bar.id = 'bm-auth-bar';
-    bar.className = 'bm-auth-bar';
+    bar.className = 'bm-auth-bar' + (wasExpanded ? ' expanded' : '');
+    bar.title = configured ? '治疗师入口 (点击展开)' : '云端未配置 (点击展开)';
 
+    var dot = configured ? '#16a34a' : '#f59e0b';
+    var detail;
     if (!configured) {
-      bar.innerHTML = '<span class="bm-status-dot" style="background:#f59e0b;"></span>' +
-        '<span>云端: <b>未配置 Supabase</b> · 见 supabase/SETUP.md</span>';
-      document.body.appendChild(bar);
-      return;
-    }
-
-    if (session && session.user) {
+      detail = '<span>云端: <b>未配置 Supabase</b> · 见 supabase/SETUP.md</span>';
+    } else if (session && session.user) {
       var email = session.user.email || '未知';
-      bar.innerHTML =
-        '<span class="bm-status-dot" style="background:#16a34a;"></span>' +
+      detail =
         '<span style="opacity:0.85;">' + email + '</span>' +
         '<button class="bm-btn-ghost" onclick="window.BmTherapistUI.openDashboard()">📋 我的报告</button>' +
         '<button class="bm-btn-ghost" onclick="window.BmTherapistUI.signOut()">退出</button>';
     } else {
-      bar.innerHTML =
-        '<span class="bm-status-dot" style="background:#16a34a;"></span>' +
+      detail =
         '<span style="opacity:0.85;">Supabase 已连接</span>' +
         '<button class="bm-btn-primary" onclick="window.BmTherapistUI.openAuth()">👤 治疗师登录</button>';
     }
+    bar.innerHTML =
+      '<span class="bm-status-dot" style="background:' + dot + ';"></span>' +
+      '<span class="bm-bar-detail">' + detail + '</span>' +
+      '<button class="bm-bar-collapse" title="收起" ' +
+        'onclick="event.stopPropagation();document.getElementById(\'bm-auth-bar\').classList.remove(\'expanded\')">×</button>';
+    // 收起态点击整条 = 展开
+    bar.addEventListener('click', function () {
+      if (!bar.classList.contains('expanded')) bar.classList.add('expanded');
+    });
     document.body.appendChild(bar);
   }
 
