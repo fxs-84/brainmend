@@ -218,6 +218,13 @@
           // 创建分享链接
           '<div style="background:linear-gradient(135deg,#f0fdfa,#e0f2fe);border-radius:12px;padding:16px;margin-bottom:18px;">' +
             '<div style="font-weight:600;color:#0f172a;margin-bottom:10px;">📱 创建 QR 分享链接</div>' +
+            '<div style="margin-bottom:8px;">' +
+              '<select id="bm-link-kind" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;background:#fff;">' +
+                '<option value="qnr">📋 神经系统自评 (100 题)</option>' +
+                '<option value="cognitive">🧠 认知评估 (12 项游戏)</option>' +
+                '<option value="gait">🚶 步态分析</option>' +
+              '</select>' +
+            '</div>' +
             '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">' +
               '<input id="bm-link-name" type="text" placeholder="预填姓名 (可选)" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" />' +
               '<input id="bm-link-age" type="number" placeholder="预填年龄 (可选)" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" />' +
@@ -231,8 +238,13 @@
           '<div id="bm-link-list" style="margin-bottom:18px;">' +
             '<div class="bm-empty">加载中...</div>' +
           '</div>' +
-          // 自评报告
-          '<div style="font-weight:600;color:#0f172a;margin-bottom:10px;">📊 自评报告</div>' +
+          // 患者报告 (自评 / 认知 / 步态)
+          '<div style="font-weight:600;color:#0f172a;margin-bottom:10px;">📊 患者报告</div>' +
+          '<div class="bm-modal-tabs" style="margin-bottom:12px;">' +
+            '<div class="bm-modal-tab active" data-rtab="qnr" onclick="window.BmTherapistUI.switchReportTab(\'qnr\')">自评</div>' +
+            '<div class="bm-modal-tab" data-rtab="cognitive" onclick="window.BmTherapistUI.switchReportTab(\'cognitive\')">认知</div>' +
+            '<div class="bm-modal-tab" data-rtab="gait" onclick="window.BmTherapistUI.switchReportTab(\'gait\')">步态</div>' +
+          '</div>' +
           '<div id="bm-report-list">' +
             '<div class="bm-empty">加载中...</div>' +
           '</div>' +
@@ -246,6 +258,22 @@
     _loadAssessments();
   }
 
+  // ============ 类型化链接 (qnr=自评 / cognitive=认知 / gait=步态) ============
+  var KIND_LABEL = { qnr: '自评', cognitive: '认知', gait: '步态' };
+
+  // 按类型生成患者扫码链接
+  function _buildLinkUrl(kind, link) {
+    var base = location.origin + location.pathname.replace(/[^/]*$/, '');
+    var suffix =
+      (link.prefilled_name ? '&name=' + encodeURIComponent(link.prefilled_name) : '') +
+      (link.prefilled_age ? '&age=' + link.prefilled_age : '') +
+      (link.prefilled_gender ? '&gender=' + encodeURIComponent(link.prefilled_gender) : '');
+    var token = encodeURIComponent(link.token);
+    if (kind === 'cognitive') return base + 'index.html?mode=cognitive&start=full&share_token=' + token + suffix;
+    if (kind === 'gait') return base + 'index.html?mode=gait&share_token=' + token + suffix;
+    return base + 'questionnaire.html?sandbox=1&share_token=' + token + suffix;
+  }
+
   // 加载 share_links
   function _loadShareLinks() {
     var list = document.getElementById('bm-link-list');
@@ -256,17 +284,14 @@
         return;
       }
       list.innerHTML = rows.map(function (r) {
-        var url = location.origin + location.pathname.replace(/[^/]*$/, '') +
-          'questionnaire.html?sandbox=1&share_token=' + encodeURIComponent(r.token) +
-          (r.prefilled_name ? '&name=' + encodeURIComponent(r.prefilled_name) : '') +
-          (r.prefilled_age ? '&age=' + r.prefilled_age : '') +
-          (r.prefilled_gender ? '&gender=' + encodeURIComponent(r.prefilled_gender) : '');
+        var kind = r.kind || 'qnr';
+        var url = _buildLinkUrl(kind, r);
         var expired = new Date(r.expires_at) < new Date();
         var status = r.revoked ? '已撤销' : (expired ? '已过期' : '有效');
         var statusColor = r.revoked ? '#dc2626' : (expired ? '#94a3b8' : '#16a34a');
         return '<div class="bm-list-item">' +
           '<div class="bm-list-item-head">' +
-            '<div><b>' + _esc(r.prefilled_name || '未指定患者') + '</b></div>' +
+            '<div><span style="font-size:11px;background:#e0f2fe;color:#0284c7;padding:2px 8px;border-radius:999px;margin-right:6px;">' + (KIND_LABEL[kind] || kind) + '</span><b>' + _esc(r.prefilled_name || '未指定患者') + '</b></div>' +
             '<div style="display:flex;gap:6px;align-items:center;">' +
               '<span style="font-size:11px;background:' + statusColor + ';color:#fff;padding:2px 8px;border-radius:999px;">' + status + '</span>' +
               '<span class="bm-list-item-meta">' + (r.scan_count || 0) + ' 次扫码</span>' +
@@ -274,7 +299,7 @@
           '</div>' +
           '<div class="bm-list-item-meta">token: ' + r.token.substring(0, 16) + '... · 过期: ' + new Date(r.expires_at).toLocaleString('zh-CN') + '</div>' +
           '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">' +
-            '<button onclick="window.BmTherapistUI.showQR(\'' + r.token + '\',\'' + _esc(r.prefilled_name || '未指定') + '\')" style="padding:5px 10px;background:#0d9488;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">📱 显示 QR</button>' +
+            '<button onclick="window.BmTherapistUI.showQR(\'' + r.token + '\',\'' + _esc(r.prefilled_name || '未指定') + '\',\'' + kind + '\')" style="padding:5px 10px;background:#0d9488;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">📱 显示 QR</button>' +
             '<button onclick="window.BmTherapistUI.copyLink(\'' + url + '\')" style="padding:5px 10px;background:#e0f2fe;color:#0284c7;border:none;border-radius:6px;font-size:12px;cursor:pointer;">🔗 复制链接</button>' +
             (!r.revoked ? '<button onclick="window.BmTherapistUI.revokeLink(\'' + r.token + '\')" style="padding:5px 10px;background:#fef2f2;color:#dc2626;border:none;border-radius:6px;font-size:12px;cursor:pointer;">🚫 撤销</button>' : '') +
           '</div>' +
@@ -311,28 +336,145 @@
     });
   }
 
+  // ============ 报告 tab (自评 / 认知 / 步态) ============
+  var _currentReportTab = 'qnr';
+  var _cogRows = [];
+  var _gaitRows = [];
+
+  function switchReportTab(tab) {
+    _currentReportTab = tab;
+    document.querySelectorAll('[data-rtab]').forEach(function (el) {
+      el.classList.toggle('active', el.getAttribute('data-rtab') === tab);
+    });
+    var list = document.getElementById('bm-report-list');
+    if (list) list.innerHTML = '<div class="bm-empty">加载中...</div>';
+    if (tab === 'cognitive') _loadCognitiveAssessments();
+    else if (tab === 'gait') _loadGaitAssessments();
+    else _loadAssessments();
+  }
+
+  // 加载认知报告
+  function _loadCognitiveAssessments() {
+    var list = document.getElementById('bm-report-list');
+    if (!list) return;
+    global.SupabaseClient.listMyCognitiveAssessments({ limit: 50 }).then(function (rows) {
+      _cogRows = rows || [];
+      if (!_cogRows.length) {
+        list.innerHTML = '<div class="bm-empty">还没有认知报告。等患者扫码提交...</div>';
+        return;
+      }
+      list.innerHTML = _cogRows.map(function (r) {
+        return '<div class="bm-list-item" style="cursor:pointer;" onclick="window.BmTherapistUI.openCognitiveReport(\'' + r.id + '\')">' +
+          '<div class="bm-list-item-head">' +
+            '<div><b>' + _esc(r.patient_name) + '</b> ' + (r.patient_age ? '· ' + r.patient_age + '岁' : '') + ' ' + (r.patient_gender || '') + '</div>' +
+            '<span style="background:#7c3aed;color:#fff;font-size:11px;padding:2px 10px;border-radius:999px;">' + (r.is_quick6 ? '⚡6项' : '📊12项') + (r.overall_score != null ? ' · ' + r.overall_score + '分' : '') + '</span>' +
+          '</div>' +
+          '<div class="bm-list-item-meta">' + new Date(r.submitted_at).toLocaleString('zh-CN') + ' · 点击查看报告</div>' +
+        '</div>';
+      }).join('');
+    }).catch(function (err) {
+      list.innerHTML = '<div class="bm-empty" style="color:#dc2626;">加载失败: ' + (err.message || err) + '</div>';
+    });
+  }
+
+  // 加载步态报告
+  function _loadGaitAssessments() {
+    var list = document.getElementById('bm-report-list');
+    if (!list) return;
+    global.SupabaseClient.listMyGaitAssessments({ limit: 50 }).then(function (rows) {
+      _gaitRows = rows || [];
+      if (!_gaitRows.length) {
+        list.innerHTML = '<div class="bm-empty">还没有步态报告。等患者扫码提交...</div>';
+        return;
+      }
+      list.innerHTML = _gaitRows.map(function (r) {
+        return '<div class="bm-list-item" style="cursor:pointer;" onclick="window.BmTherapistUI.openGaitReport(\'' + r.id + '\')">' +
+          '<div class="bm-list-item-head">' +
+            '<div><b>' + _esc(r.patient_name) + '</b> ' + (r.patient_age ? '· ' + r.patient_age + '岁' : '') + ' ' + (r.patient_gender || '') + '</div>' +
+            '<span style="background:#0f7b6c;color:#fff;font-size:11px;padding:2px 10px;border-radius:999px;">' + _esc(r.classification_primary || '—') + '</span>' +
+          '</div>' +
+          '<div class="bm-list-item-meta">' + new Date(r.submitted_at).toLocaleString('zh-CN') + ' · 点击查看报告</div>' +
+        '</div>';
+      }).join('');
+    }).catch(function (err) {
+      list.innerHTML = '<div class="bm-empty" style="color:#dc2626;">加载失败: ' + (err.message || err) + '</div>';
+    });
+  }
+
+  // 认知报告详情: payload 即完整认知记录, 注入 cog_records 后复用 _viewCogReport 渲染
+  function openCognitiveReport(id) {
+    var rec = null;
+    for (var i = 0; i < _cogRows.length; i++) { if (_cogRows[i].id === id) { rec = _cogRows[i]; break; } }
+    if (!rec || !rec.payload) return;
+    if (typeof global._viewCogReport !== 'function') {
+      alert('认知报告模块未加载, 请刷新页面重试');
+      return;
+    }
+    try {
+      var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
+      records.unshift(rec.payload);
+      if (records.length > 100) records = records.slice(0, 100);
+      localStorage.setItem('cog_records', JSON.stringify(records));
+    } catch (e) {}
+    var dash = document.getElementById('bm-dashboard-modal');
+    if (dash) dash.remove();
+    global._viewCogReport(0);
+  }
+
+  // 步态报告详情: 复用 __gaitReport.renderReport 渲染到弹层 (phaseSnapshots 提交时已剥离, 报告会自动降级)
+  function openGaitReport(id) {
+    var rec = null;
+    for (var i = 0; i < _gaitRows.length; i++) { if (_gaitRows[i].id === id) { rec = _gaitRows[i]; break; } }
+    if (!rec || !rec.payload) return;
+    var existing = document.getElementById('bm-gait-detail-modal');
+    if (existing) existing.remove();
+    var overlay = document.createElement('div');
+    overlay.id = 'bm-gait-detail-modal';
+    overlay.className = 'bm-modal-overlay';
+    overlay.innerHTML =
+      '<div class="bm-modal" style="max-width:720px;" onclick="event.stopPropagation()">' +
+        '<h3>🚶 ' + _esc(rec.patient_name || '步态报告') +
+          '<span style="cursor:pointer;font-size:24px;color:#94a3b8;line-height:1;" onclick="document.getElementById(\'bm-gait-detail-modal\').remove()">×</span>' +
+        '</h3>' +
+        '<div class="bm-modal-body" id="bm-gait-detail-body"></div>' +
+      '</div>';
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+    var body = document.getElementById('bm-gait-detail-body');
+    if (global.__gaitReport && typeof global.__gaitReport.renderReport === 'function') {
+      try {
+        global.__gaitReport.renderReport(rec.payload, body);
+        return;
+      } catch (e) {
+        console.error('[therapist-ui] gait renderReport 失败, 降级 JSON 视图', e);
+      }
+    }
+    // 降级: JSON 详情
+    body.innerHTML = '<pre style="font-size:11px;color:#334155;white-space:pre-wrap;word-break:break-all;background:#f8fafc;padding:12px;border-radius:8px;max-height:60vh;overflow:auto;">' +
+      _esc(JSON.stringify(rec.payload, null, 2)) + '</pre>';
+  }
+
   function createShareLink() {
     var name = document.getElementById('bm-link-name').value || '';
     var age = document.getElementById('bm-link-age').value || '';
     var gender = document.getElementById('bm-link-gender').value || '';
+    var kindEl = document.getElementById('bm-link-kind');
+    var kind = kindEl ? kindEl.value : 'qnr';
     var resultEl = document.getElementById('bm-link-result');
     resultEl.innerHTML = '<div style="color:#0284c7;font-size:13px;">创建中...</div>';
     global.SupabaseClient.createShareLink({
       name: name || null,
       age: age || null,
       gender: gender || null,
-      expiresDays: 30
+      expiresDays: 30,
+      kind: kind
     }).then(function (link) {
-      var url = location.origin + location.pathname.replace(/[^/]*$/, '') +
-        'questionnaire.html?sandbox=1&share_token=' + encodeURIComponent(link.token) +
-        (link.prefilled_name ? '&name=' + encodeURIComponent(link.prefilled_name) : '') +
-        (link.prefilled_age ? '&age=' + link.prefilled_age : '') +
-        (link.prefilled_gender ? '&gender=' + encodeURIComponent(link.prefilled_gender) : '');
+      var url = _buildLinkUrl(kind, link);
       resultEl.innerHTML =
         '<div style="background:#f0fdfa;border:1px solid #6ee7b7;border-radius:8px;padding:10px;margin-top:8px;">' +
-          '<div style="font-size:12px;color:#047857;margin-bottom:6px;">✅ 链接创建成功!</div>' +
+          '<div style="font-size:12px;color:#047857;margin-bottom:6px;">✅ ' + (KIND_LABEL[kind] || '') + '链接创建成功!</div>' +
           '<div style="font-size:11px;color:#475569;word-break:break-all;margin-bottom:6px;">' + url + '</div>' +
-          '<button onclick="window.BmTherapistUI.showQR(\'' + link.token + '\', \'' + _esc(link.prefilled_name || '未指定') + '\')" style="padding:6px 12px;background:#0d9488;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">📱 显示二维码</button>' +
+          '<button onclick="window.BmTherapistUI.showQR(\'' + link.token + '\', \'' + _esc(link.prefilled_name || '未指定') + '\', \'' + kind + '\')" style="padding:6px 12px;background:#0d9488;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">📱 显示二维码</button>' +
           '<button onclick="window.BmTherapistUI.copyLink(\'' + url + '\')" style="padding:6px 12px;background:#e0f2fe;color:#0284c7;border:none;border-radius:6px;font-size:12px;cursor:pointer;margin-left:6px;">🔗 复制</button>' +
         '</div>';
       _loadShareLinks();
@@ -341,9 +483,8 @@
     });
   }
 
-  function showQR(token, patientName) {
-    var url = location.origin + location.pathname.replace(/[^/]*$/, '') +
-      'questionnaire.html?sandbox=1&share_token=' + encodeURIComponent(token);
+  function showQR(token, patientName, kind) {
+    var url = _buildLinkUrl(kind || 'qnr', { token: token });
     var qrImgUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encodeURIComponent(url);
     var overlay = document.createElement('div');
     overlay.id = 'bm-qr-overlay';
@@ -410,10 +551,13 @@
     showQR: showQR,
     copyLink: copyLink,
     revokeLink: revokeLink,
-    // 刷新工作台数据 (share_links + 自评报告)
+    switchReportTab: switchReportTab,
+    openCognitiveReport: openCognitiveReport,
+    openGaitReport: openGaitReport,
+    // 刷新工作台数据 (share_links + 当前 tab 的报告)
     refreshDashboard: function () {
       _loadShareLinks();
-      _loadAssessments();
+      switchReportTab(_currentReportTab);
     }
   };
 })(window);

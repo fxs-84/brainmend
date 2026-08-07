@@ -7,7 +7,7 @@ import {
 
 (function(){
   // 版本标记 (用于诊断缓存问题, 浏览器控制台输入 window.__cogFlowVersion 验证)
-  window.__cogFlowVersion = 'v6-supabase-only-2026-08-07';
+  window.__cogFlowVersion = 'v7-supabase-cog-gait-2026-08-07';
   // ========== CONFIG ==========
   // 模块描述取自对应测试题文件的 fillText 真源 (非编造)
   // 来源: dist-stable/assets/cognitive/cognitive-*.js
@@ -2480,8 +2480,131 @@ import {
       if (records.length > 10) records = records.slice(0, 10);
       localStorage.setItem('cog_records', JSON.stringify(records));
     } catch(e) {}
+    // 云端上传 — 只走 Supabase (需 share_token); 无 token 时行为与纯本机完全一致
+    _submitCogCloud(record);
     return record;
   }
+
+  // ========== CLOUD (Supabase — 认知报告上云) ==========
+  // share_token 来源: 治疗师工作台生成的认知链接 (?mode=cognitive&share_token=...),
+  // index.html deep-link 解析时写入 sessionStorage
+  function _getCogShareToken() {
+    try { return sessionStorage.getItem('bm_cog_share_token') || ''; } catch(e) { return ''; }
+  }
+
+  // 状态写回 cog_records 并刷新报告页云端状态行
+  function _markCogCloud(recId, status, err, cloudId) {
+    try {
+      var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
+      for (var i = 0; i < records.length; i++) {
+        if (records[i].id === recId) {
+          records[i]._cloudStatus = status;
+          if (cloudId) { records[i]._cloudId = cloudId; records[i]._cloudSource = 'supabase'; }
+          if (err) records[i]._cloudErr = err; else delete records[i]._cloudErr;
+          break;
+        }
+      }
+      localStorage.setItem('cog_records', JSON.stringify(records));
+    } catch(e) {}
+    _renderCogCloudLine(recId);
+  }
+
+  // 提交到 Supabase (走 RPC, therapist_id 由 share_token 派生)
+  // RPC 未部署/失败时优雅降级: 只标记 _cloudErr, 不影响本地报告
+  function _submitCogCloud(record) {
+    var shareToken = _getCogShareToken();
+    if (!shareToken) return;
+    if (!(window.SupabaseClient && window.SupabaseClient.isConfigured())) {
+      _markCogCloud(record.id, 'failed', 'supabase_not_configured');
+      return;
+    }
+    _markCogCloud(record.id, 'syncing');
+    // payload: 完整报告 JSON (剔除本地云状态字段)
+    var payload = {};
+    try {
+      Object.keys(record).forEach(function(k) {
+        if (k.indexOf('_cloud') !== 0) payload[k] = record[k];
+      });
+    } catch(e) { payload = record; }
+    window.SupabaseClient.submitCognitiveAssessment({
+      shareToken: shareToken,
+      patientInfo: record.patientInfo || {},
+      payload: payload,
+      overallScore: record.overallScore,
+      isQuick6: !!record.isQuick6
+    }).then(function(assessmentId) {
+      _markCogCloud(record.id, 'synced', null, assessmentId);
+    }).catch(function(err) {
+      console.error('[cog-report] Supabase 提交失败:', err);
+      _markCogCloud(record.id, 'failed', String(err && err.message || err));
+    });
+  }
+
+  // 报告页云端状态行 (同步状态 / 内联重试; 未走云端时不渲染)
+  function _cogCloudLineHtml(rec) {
+    if (!rec || !rec.id) return '';
+    var status = rec._cloudStatus || (rec._cloudId ? 'synced' : (rec._cloudErr ? 'failed' : ''));
+    if (!status) return '';
+    if (status === 'synced' || rec._cloudId) {
+      return '<div style="font-size:12px;color:#4ade80;display:flex;align-items:center;gap:6px;justify-content:center;">' +
+        '<span style="display:inline-block;width:6px;height:6px;background:#16a34a;border-radius:50%;"></span>' +
+        '<span>☁️ 已同步到云端</span></div>';
+    }
+    if (status === 'syncing') {
+      return '<div style="font-size:12px;color:#7dd3fc;display:flex;align-items:center;gap:6px;justify-content:center;">' +
+        '<span style="display:inline-block;width:8px;height:8px;border:2px solid #7dd3fc;border-top-color:transparent;border-radius:50%;animation:qnr-spin 0.8s linear infinite;"></span>' +
+        '<span>☁️ 正在同步到云端…</span></div>';
+    }
+    // failed
+    var errHint = rec._cloudErr ? ' · ' + String(rec._cloudErr).replace(/[<>&"']/g, '') : '';
+    return '<div style="font-size:12px;color:#fca5a5;display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;">' +
+      '<span style="display:inline-flex;align-items:center;gap:4px;">' +
+        '<span style="display:inline-block;width:6px;height:6px;background:#dc2626;border-radius:50%;"></span>' +
+        '<span>☁️ 同步失败' + errHint + '</span>' +
+      '</span>' +
+      '<button onclick="window._cogRetryCloud(\'' + rec.id + '\')" style="background:rgba(220,38,38,0.15);border:1px solid #7f1d1d;color:#fca5a5;font-size:11px;padding:3px 10px;border-radius:999px;cursor:pointer;font-weight:600;">↻ 重试</button>' +
+      '<span style="color:#94a3b8;">（本机已保存）</span>' +
+    '</div>';
+  }
+
+  // 插入/刷新状态行 (报告 body 顶部; renderReport 每次重建 body, 需在渲染后调用)
+  function _renderCogCloudLine(recId) {
+    var body = document.getElementById('cog-report-body');
+    if (!body) return;
+    // 旋转动画 keyframes (questionnaire.html 已有同款; index.html 未定义, 这里补上)
+    if (!document.getElementById('cog-cloud-spin-css')) {
+      var st = document.createElement('style');
+      st.id = 'cog-cloud-spin-css';
+      st.textContent = '@keyframes qnr-spin{to{transform:rotate(360deg)}}';
+      document.head.appendChild(st);
+    }
+    var rec = null;
+    try {
+      var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
+      for (var i = 0; i < records.length; i++) { if (records[i].id === recId) { rec = records[i]; break; } }
+    } catch(e) {}
+    if (!rec) return;
+    var html = _cogCloudLineHtml(rec);
+    var line = document.getElementById('cog-cloud-status');
+    if (!line) {
+      if (!html) return;
+      line = document.createElement('div');
+      line.id = 'cog-cloud-status';
+      line.style.cssText = 'padding:8px 16px 0;';
+      body.insertBefore(line, body.firstChild);
+    }
+    line.innerHTML = html;
+  }
+
+  // 内联重试 (重新走 Supabase 提交)
+  window._cogRetryCloud = function(recId) {
+    try {
+      var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
+      for (var i = 0; i < records.length; i++) {
+        if (records[i].id === recId) { _submitCogCloud(records[i]); return; }
+      }
+    } catch(e) {}
+  };
 
   // HTML 转义, 防患者名等用户输入触发 XSS (报告数据从 localStorage / 云端加载, 患者可能输入恶意字符串)
   function _escHtml(s) {
@@ -2523,6 +2646,8 @@ import {
     history = loadHistory();
     var reportTime = record && record.date && record.time ? (record.date + ' ' + record.time) : null;
     renderReport(rawLog, history, isQuick6, reportTime);
+    // 云端状态行 (有 share_token 时 saveRecord 已触发 Supabase 提交)
+    if (record && record.id) _renderCogCloudLine(record.id);
     window._quick6Mode = false;
     window._lastCogRecord = record;
     setTimeout(function() {

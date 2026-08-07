@@ -986,7 +986,7 @@
 <script src="./assets/vendor/jspdf-2.5.1.umd.min.js" crossorigin="anonymous"></script>
 <!-- 步态分析模块 (基于 ANRM 步态分析手册) -->
 <script src="./assets/gait-params.js"></script>
-<script src="./assets/gait-analysis.js"></script>
+<script src="./assets/gait-analysis.js?v=20260807b"></script>
 <script src="./assets/gait-report.js"></script>
 <script>
     // 全局点击分发 (认知模块)
@@ -1268,6 +1268,10 @@
             var tid = '';
             try { tid = localStorage.getItem('cog_therapist_id') || 'default'; } catch(e) {}
             params.push('tid=' + encodeURIComponent(tid));
+            // Supabase share_token (治疗师工作台创建的认知链接; 透传到患者扫码 URL)
+            var cogShareToken = '';
+            try { cogShareToken = sessionStorage.getItem('bm_cog_share_token') || ''; } catch(e) {}
+            if (cogShareToken) params.push('share_token=' + encodeURIComponent(cogShareToken));
             // 加时间戳用于过期校验 (30分钟有效)
             params.push('t=' + Date.now());
             // 加 cache-bust 防止患者手机浏览器用缓存的旧 JS
@@ -1653,6 +1657,10 @@
                 if (params.get('tid')) {
                     try { localStorage.setItem('cog_therapist_id', params.get('tid')); } catch(e) {}
                 }
+                // Supabase share_token (认知报告上云凭证) — 存 sessionStorage, cognitive-report.js 保存报告时取用
+                if (params.get('share_token')) {
+                    try { sessionStorage.setItem('bm_cog_share_token', params.get('share_token')); } catch(e) {}
+                }
                 // QR 码过期校验 (30分钟有效)
                 var qrTime = params.get('t');
                 var QR_TTL = 24 * 60 * 60 * 1000; // 24 小时
@@ -1698,6 +1706,14 @@
                 if (params.get('mode') !== 'gait') return;
                 if (params.get('tid')) {
                     try { localStorage.setItem('gait_therapist_id', params.get('tid')); } catch(e) {}
+                }
+                // Supabase share_token (步态报告上云凭证) + 预填患者信息 — 存 sessionStorage, gait-analysis.js 保存报告时取用
+                if (params.get('share_token')) {
+                    try { sessionStorage.setItem('bm_gait_share_token', params.get('share_token')); } catch(e) {}
+                }
+                var gName = params.get('name'), gAge = params.get('age'), gGender = params.get('gender');
+                if (gName || gAge || gGender) {
+                    try { sessionStorage.setItem('bm_gait_patient_info', JSON.stringify({ name: gName || '', age: gAge || '', gender: gGender || '' })); } catch(e) {}
                 }
                 // QR 码过期校验 (24 小时)
                 var qrTime = params.get('t');
@@ -2366,12 +2382,12 @@
     })();
 
 </script>
-<script type="module" src="./assets/cognitive/cognitive-report.js?v=20260807a"></script>
+<script type="module" src="./assets/cognitive/cognitive-report.js?v=20260807b"></script>
 <!-- Supabase 配置 (真实值不入 git, 见 assets/config/supabase-config.example.js) -->
 <!-- ⚠️ 必须在 qnr-supabase.js 之前加载, 否则 URL/KEY 是 undefined -->
 <script src="./assets/config/supabase-config.js" onerror="console.warn('[brainmend] supabase-config.js 未配置')"></script>
-<script src="./assets/cognitive/reports/qnr-supabase.js?v=20260806a"></script>
-<script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260807b"></script>
+<script src="./assets/cognitive/reports/qnr-supabase.js?v=20260807a"></script>
+<script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260807c"></script>
 <script src="./assets/cognitive/reports/qnr-region-detail.js?v=20260807a"></script>
 <script>
   // ===== 神经系统自评 · 数据/评分模块预加载 =====

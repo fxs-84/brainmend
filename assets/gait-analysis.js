@@ -1328,7 +1328,89 @@ if (frames.length < expectedFrames * 0.7) {
   // ============================================================
   var STORAGE_KEY = 'gait_assessment_log';
 
+  // 患者信息来源 (优先级): URL/sessionStorage 预填 (治疗师建链接时带 name/age/gender)
+  //   → localStorage['cervical_current_client'] (与认知评估共享)
+  function _getGaitPatientInfo() {
+    try {
+      var raw = sessionStorage.getItem('bm_gait_patient_info');
+      if (raw) {
+        var p = JSON.parse(raw);
+        if (p && (p.name || p.age || p.gender)) return { name: p.name || '', age: p.age || '', gender: p.gender || '' };
+      }
+    } catch (e) {}
+    try {
+      var raw2 = localStorage.getItem('cervical_current_client');
+      if (raw2) {
+        var p2 = JSON.parse(raw2);
+        if (p2 && p2.name) return { name: p2.name || '', age: p2.age || '', gender: p2.gender || '' };
+      }
+    } catch (e) {}
+    return { name: '', age: '', gender: '' };
+  }
+
+  // 登记表单 (复用 cognitive-report.js _showPatientRegForm 的模式, 步态绿色主题)
+  // 仅在带 share_token 且缺少患者信息时弹出 — 无 token 的本地流程不打扰
+  function _showGaitPatientForm(onSubmit) {
+    var existing = document.getElementById('gait-reg-overlay');
+    if (existing) existing.remove();
+    var overlay = document.createElement('div');
+    overlay.id = 'gait-reg-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:40000;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML =
+      '<div style="background:#fff;border-radius:16px;padding:28px 26px;max-width:360px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.4);">' +
+        '<h3 style="color:#0f172a;text-align:center;margin:0 0 6px;font-size:19px;">📝 登记患者信息</h3>' +
+        '<p style="color:#64748b;text-align:center;font-size:12px;margin:0 0 20px;">步态分析已完成 · 填写信息后保存并上传云端</p>' +
+        '<div style="margin-bottom:12px;">' +
+          '<label style="display:block;color:#334155;font-size:12px;margin-bottom:5px;">姓名 *</label>' +
+          '<input id="gait-reg-name" type="text" placeholder="如：张三" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:15px;box-sizing:border-box;outline:none;">' +
+        '</div>' +
+        '<div style="margin-bottom:12px;">' +
+          '<label style="display:block;color:#334155;font-size:12px;margin-bottom:5px;">年龄</label>' +
+          '<input id="gait-reg-age" type="number" min="1" max="120" placeholder="如：65" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:15px;box-sizing:border-box;outline:none;">' +
+        '</div>' +
+        '<div style="margin-bottom:20px;">' +
+          '<label style="display:block;color:#334155;font-size:12px;margin-bottom:5px;">性别</label>' +
+          '<select id="gait-reg-gender" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:15px;box-sizing:border-box;outline:none;background:#fff;">' +
+            '<option value="">请选择</option><option>男</option><option>女</option><option>其他</option>' +
+          '</select>' +
+        '</div>' +
+        '<button id="gait-reg-submit" style="display:block;width:100%;padding:13px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:16px;font-weight:700;">保存报告</button>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    setTimeout(function(){ var n = document.getElementById('gait-reg-name'); if (n) n.focus(); }, 50);
+    document.getElementById('gait-reg-submit').addEventListener('click', function() {
+      var name = (document.getElementById('gait-reg-name').value || '').trim();
+      if (!name) {
+        var n2 = document.getElementById('gait-reg-name');
+        n2.style.borderColor = '#ef4444';
+        n2.focus();
+        return;
+      }
+      var info = {
+        name: name,
+        age: (document.getElementById('gait-reg-age').value || '').trim(),
+        gender: document.getElementById('gait-reg-gender').value
+      };
+      // 与认知评估共享患者信息
+      try { localStorage.setItem('cervical_current_client', JSON.stringify(info)); } catch(e) {}
+      overlay.remove();
+      onSubmit(info);
+    });
+  }
+
   function saveAssessment(r) {
+    var info = _getGaitPatientInfo();
+    var hasToken = false;
+    try { hasToken = !!sessionStorage.getItem('bm_gait_share_token'); } catch (e) {}
+    if (hasToken && !info.name) {
+      // 云端流程必须带患者姓名 — 先登记再保存 (本地流程不弹, 行为不变)
+      _showGaitPatientForm(function(info2) { _doSaveAssessment(r, info2); });
+      return;
+    }
+    _doSaveAssessment(r, info);
+  }
+
+  function _doSaveAssessment(r, patientInfo) {
     try {
       // debug 轨迹 (heelRel/toeRel 等, 帧数×6 数组) 只供本次会话的调试视图,
       // 体积随帧数线性增长 — 持久化前剥掉, 否则 50 条上限很快撑爆 localStorage
@@ -1337,14 +1419,73 @@ if (frames.length < expectedFrames * 0.7) {
         toSave = {};
         for (var k in r) { if (k !== 'debug') toSave[k] = r[k]; }
       }
+      toSave.patientInfo = patientInfo || { name: '', age: '', gender: '' };
+      toSave._localId = 'gait_' + Date.now();
       var log = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
       log.push(toSave);
       // 上限保留 50 条
       if (log.length > 50) log = log.slice(-50);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(log));
+      // 云端上传 — 只走 Supabase (需 share_token); 无 token 时行为与纯本机完全一致
+      _submitGaitCloud(toSave);
     } catch (e) {
       console.warn('[gait] saveAssessment error', e);
     }
+  }
+
+  // ========== CLOUD (Supabase — 步态报告上云) ==========
+  // share_token 来源: 治疗师工作台生成的步态链接 (?mode=gait&share_token=...),
+  // index.html deep-link 解析时写入 sessionStorage
+  function _getGaitShareToken() {
+    try { return sessionStorage.getItem('bm_gait_share_token') || ''; } catch (e) { return ''; }
+  }
+
+  // 状态写回 gait_assessment_log (按 _localId 匹配)
+  function _markGaitCloud(localId, status, err, cloudId) {
+    try {
+      var log = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      for (var i = 0; i < log.length; i++) {
+        if (log[i]._localId === localId) {
+          log[i]._cloudStatus = status;
+          if (cloudId) { log[i]._cloudId = cloudId; log[i]._cloudSource = 'supabase'; }
+          if (err) log[i]._cloudErr = err; else delete log[i]._cloudErr;
+          break;
+        }
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(log));
+    } catch (e) {}
+  }
+
+  // 提交到 Supabase (走 RPC, therapist_id 由 share_token 派生)
+  // RPC 未部署/失败时优雅降级: 只标记 _cloudErr, 不影响本地报告
+  function _submitGaitCloud(record) {
+    var shareToken = _getGaitShareToken();
+    if (!shareToken || !record || !record._localId) return;
+    if (!(window.SupabaseClient && window.SupabaseClient.isConfigured())) {
+      _markGaitCloud(record._localId, 'failed', 'supabase_not_configured');
+      return;
+    }
+    _markGaitCloud(record._localId, 'syncing');
+    // payload: 完整步态报告, 但剥离 phaseSnapshots (时相截图 dataURL 体积大, 本地保留)
+    // 和本地云状态字段
+    var payload = {};
+    try {
+      Object.keys(record).forEach(function(k) {
+        if (k === 'phaseSnapshots' || k.indexOf('_cloud') === 0 || k === '_localId') return;
+        payload[k] = record[k];
+      });
+    } catch (e) { payload = { classification: record.classification || null }; }
+    window.SupabaseClient.submitGaitAssessment({
+      shareToken: shareToken,
+      patientInfo: record.patientInfo || {},
+      payload: payload,
+      classificationPrimary: (record.classification && record.classification.primary) || null
+    }).then(function(assessmentId) {
+      _markGaitCloud(record._localId, 'synced', null, assessmentId);
+    }).catch(function(err) {
+      console.error('[gait] Supabase 提交失败:', err);
+      _markGaitCloud(record._localId, 'failed', String(err && err.message || err));
+    });
   }
 
   function loadHistory() {
@@ -2419,7 +2560,12 @@ if (frames.length < expectedFrames * 0.7) {
     var base = window.location.origin + window.location.pathname;
     var tid = '';
     try { tid = localStorage.getItem('therapist_id') || ''; } catch (e) {}
-    return base + '?mode=gait&t=' + Date.now() + (tid ? '&tid=' + encodeURIComponent(tid) : '');
+    var url = base + '?mode=gait&t=' + Date.now() + (tid ? '&tid=' + encodeURIComponent(tid) : '');
+    // Supabase share_token (治疗师工作台创建的步态链接; 透传到患者扫码 URL)
+    var shareToken = '';
+    try { shareToken = sessionStorage.getItem('bm_gait_share_token') || ''; } catch (e) {}
+    if (shareToken) url += '&share_token=' + encodeURIComponent(shareToken);
+    return url;
   }
 
   function showQR() {
@@ -2732,6 +2878,8 @@ if (frames.length < expectedFrames * 0.7) {
     renderResults: renderResults,
     showQR: showQR,
     addSegmentUpload: addSegmentUpload,
+    // 保存入口 (供集成测试/调试直接注入 results 触发 本地保存+云端提交)
+    saveAssessment: saveAssessment,
     getState: function () { return state; },
     PHASE: PHASE
   };

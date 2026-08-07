@@ -9,9 +9,12 @@
 //
 // API:
 //   supabase.submitQnrAssessment({ token, name, age, gender, ...payload })
+//   supabase.submitCognitiveAssessment({ shareToken, patientInfo, payload, overallScore, isQuick6 })
+//   supabase.submitGaitAssessment({ shareToken, patientInfo, payload, classificationPrimary })
 //   supabase.listMyAssessments() (auth)
+//   supabase.listMyCognitiveAssessments() / listMyGaitAssessments() (auth)
 //   supabase.listShareLinks() (auth)
-//   supabase.createShareLink({ name, age, gender, expiresDays }) (auth)
+//   supabase.createShareLink({ name, age, gender, expiresDays, kind }) (auth)
 //   supabase.revokeShareLink(token) (auth)
 //   supabase.signIn(email, password)
 //   supabase.signUp(email, password, fullName)
@@ -142,6 +145,63 @@
     return _rest('GET', '/rest/v1/qnr_self_assessments' + q, undefined, true);
   }
 
+  // 患者 anon-key 提交认知报告 (走 SECURITY DEFINER RPC)
+  // payload: 完整认知报告 JSON (normalizedScores/rawScores/brainRegions/riskIndex 等)
+  function submitCognitiveAssessment(input) {
+    var info = input.patientInfo || {};
+    var body = {
+      p_share_token: input.shareToken,
+      p_patient_name: info.name || '',
+      p_patient_age: info.age ? parseInt(info.age, 10) : null,
+      p_patient_gender: info.gender || null,
+      p_payload: input.payload || {},
+      p_overall_score: input.overallScore != null ? input.overallScore : null,
+      p_is_quick6: !!input.isQuick6
+    };
+    return _rest('POST', '/rest/v1/rpc/submit_cognitive_assessment', body, false)
+      .then(function (id) {
+        _log('submit cognitive ok, assessment_id:', id);
+        return id;
+      });
+  }
+
+  // 患者 anon-key 提交步态报告 (走 SECURITY DEFINER RPC)
+  // payload: 完整步态报告 JSON (phaseSnapshots 截图由调用方剥离)
+  function submitGaitAssessment(input) {
+    var info = input.patientInfo || {};
+    var body = {
+      p_share_token: input.shareToken,
+      p_patient_name: info.name || '',
+      p_patient_age: info.age ? parseInt(info.age, 10) : null,
+      p_patient_gender: info.gender || null,
+      p_payload: input.payload || {},
+      p_classification_primary: input.classificationPrimary || null
+    };
+    return _rest('POST', '/rest/v1/rpc/submit_gait_assessment', body, false)
+      .then(function (id) {
+        _log('submit gait ok, assessment_id:', id);
+        return id;
+      });
+  }
+
+  // 治疗师查询自己的认知报告 (auth)
+  function listMyCognitiveAssessments(opts) {
+    opts = opts || {};
+    var q = '?select=*&order=submitted_at.desc&deleted_at=is.null';
+    if (opts.limit) q += '&limit=' + opts.limit;
+    if (opts.offset) q += '&offset=' + opts.offset;
+    return _rest('GET', '/rest/v1/cognitive_assessments' + q, undefined, true);
+  }
+
+  // 治疗师查询自己的步态报告 (auth)
+  function listMyGaitAssessments(opts) {
+    opts = opts || {};
+    var q = '?select=*&order=submitted_at.desc&deleted_at=is.null';
+    if (opts.limit) q += '&limit=' + opts.limit;
+    if (opts.offset) q += '&offset=' + opts.offset;
+    return _rest('GET', '/rest/v1/gait_assessments' + q, undefined, true);
+  }
+
   // 治疗师查询自己的 share_links (auth)
   function listShareLinks(opts) {
     opts = opts || {};
@@ -151,14 +211,18 @@
   }
 
   // 治疗师创建 share_link (auth, 走 RPC)
+  // kind: 'qnr' (自评, 默认) | 'cognitive' (认知) | 'gait' (步态)
+  // 注: p_kind 是 0004 迁移新增参数; kind='qnr' 时省略以保持迁移前旧 RPC 兼容
   function createShareLink(input) {
     input = input || {};
-    return _rest('POST', '/rest/v1/rpc/create_qnr_share_link', {
+    var body = {
       p_prefilled_name: input.name || null,
       p_prefilled_age: input.age ? parseInt(input.age, 10) : null,
       p_prefilled_gender: input.gender || null,
       p_expires_days: input.expiresDays || 30
-    }, true);
+    };
+    if (input.kind && input.kind !== 'qnr') body.p_kind = input.kind;
+    return _rest('POST', '/rest/v1/rpc/create_qnr_share_link', body, true);
   }
 
   // 治疗师撤销 share_link (auth, 走 RPC)
@@ -222,7 +286,11 @@
   global.SupabaseClient = {
     isConfigured: isConfigured,
     submitQnrAssessment: submitQnrAssessment,
+    submitCognitiveAssessment: submitCognitiveAssessment,
+    submitGaitAssessment: submitGaitAssessment,
     listMyAssessments: listMyAssessments,
+    listMyCognitiveAssessments: listMyCognitiveAssessments,
+    listMyGaitAssessments: listMyGaitAssessments,
     listShareLinks: listShareLinks,
     createShareLink: createShareLink,
     revokeShareLink: revokeShareLink,
