@@ -13,6 +13,12 @@
 3. 选最近的 Region,设一个数据库密码(妥善保存)
 4. 等项目创建完成 (1-2 分钟)
 
+### Step 1.5: 关闭邮箱确认 (1 分钟) ⚠️ 重要
+1. 进入项目 → **Authentication** → **Providers** → **Email**
+2. 关闭 **"Confirm email"** 开关
+3. 这样注册后会自动登录,不用点邮件里的链接
+4. 治疗师 demo 阶段推荐,生产环境再考虑开启
+
 ### Step 2: 跑 Schema SQL (3 分钟)
 1. 进入新项目的 SQL Editor
 2. 复制整个文件 `supabase/migrations/0001_brainmend_baseline.sql` 的内容

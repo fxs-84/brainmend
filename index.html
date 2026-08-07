@@ -2448,6 +2448,7 @@
 <script type="module" src="./assets/cognitive/cognitive-report.js?v=20260805b"></script>
 <script src="./assets/cognitive/reports/cloud-sync.js?v=20260806a"></script>
 <script src="./assets/cognitive/reports/qnr-supabase.js?v=20260806a"></script>
+<script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260807b"></script>
 <script src="./assets/cognitive/reports/qnr-region-detail.js?v=20260807a"></script>
 <!-- Supabase 配置 (真实值不入 git, 见 assets/config/supabase-config.example.js) -->
 <script src="./assets/config/supabase-config.js" onerror="console.warn('[brainmend] supabase-config.js 未配置')"></script>
@@ -2519,6 +2520,18 @@
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', _wire);
     } else { _wire(); }
+  })();
+
+  // ===== 治疗师工作台 (Supabase 登录 + share_link 管理 + 报告列表) =====
+  (function _initTherapistUI(){
+    function _boot() {
+      if (window.BmTherapistUI && typeof window.BmTherapistUI.renderAuthBar === 'function') {
+        window.BmTherapistUI.renderAuthBar();
+      }
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', _boot);
+    } else { _boot(); }
   })();
 </script>
 </body>

@@ -645,8 +645,9 @@
       var _doCloud = function() {
         // 路径 A: Supabase (推荐, PII 安全)
         if (window.SupabaseClient && window.SupabaseClient.isConfigured()) {
-          // 检查 share_token (QR 链接携带)
-          var shareToken = params.get('token') || '';
+          // 检查 share_token (QR 链接携带, 新 Supabase 流程)
+          // 兼容旧 GitHub 流程的 ?token=PAT (留作兜底, 后续 Sprint 清理)
+          var shareToken = params.get('share_token') || params.get('token') || '';
           if (!shareToken) {
             console.warn('[qnr inline] Supabase 模式但缺少 share_token, 跳过云端上传');
             // 标记 failed 让用户知道
