@@ -1,0 +1,137 @@
+# Sprint 2 交接文档 — Supabase 迁移收尾
+
+> 创建时间: 2026-08-07
+> 目的: 让下一个 agent 无缝接手, 不需要重新调研
+
+## 🎯 Sprint 2 目标
+
+**清理历史 PII + 删除 GitHub 旧路径 + 部署收尾。**
+
+## ✅ Sprint 0/1 已完成 (别重复做)
+
+| 里程碑 | 状态 | 验证 |
+|---|---|---|
+| Supabase 项目创建 + Schema (0001-0003 SQL) | ✅ | `qnr_self_assessments` 表有数据 |
+| 治疗师登录/注册 (Supabase Auth) | ✅ | 集成测试通过 |
+| 创建 share_link → token | ✅ | 集成测试通过 |
+| 患者扫码 → 100 题 → RPC 提交 | ✅ | Supabase 落库 |
+| 治疗师列表查看报告 | ✅ | 集成测试 6/6 全过 |
+| LIVE 部署 (fxs-84.github.io/brainmend) | ✅ | 集成测试 6/6 全过 |
+
+**关键文件**:
+- `supabase/migrations/0001_brainmend_baseline.sql` (schema)
+- `supabase/migrations/0002_fix_admin_recursion.sql` (RLS 递归修复)
+- `supabase/migrations/0003_fix_pgcrypto_rls.sql` (pgcrypto + RLS INSERT)
+- `assets/cognitive/reports/qnr-supabase.js` (REST 客户端)
+- `assets/cognitive/reports/qnr-therapist-ui.js` (治疗师 UI)
+- `assets/config/supabase-config.js` (真实配置, 已提交仓库)
+- `js/questionnaire/e2e-supabase-integration.mjs` (集成测试)
+
+**Supabase 项目**: `bydijxssezoetquounqo.supabase.co`
+**anon key**: `sb_publishable_4o9PiVAVZ8SQDw1HP7A0QA_fAVXFsFW`
+
+---
+
+## 🔴 任务 1 (最高优先级): 删除公开仓库的历史患者数据
+
+**现状**: `data/reports/` 目录在公开仓库 (fxs-84/brainmend), 含**真实患者 PII**:
+- `data/reports/default/2026-06-22_cog_20260622_1256.json` (付先生/42岁)
+- `data/reports/default/2026-06-23_cog_20260623_1201.json`
+- `data/reports/default/2026-08-05_qnr_*.json` (多份, 患者姓名/年龄/100题答案)
+- `data/reports/default/2026/8/5_qnr_*.json` (斜杠日期目录)
+
+**这些数据任何人现在都能通过 GitHub Pages 下载**:
+```
+https://fxs-84.github.io/brainmend/data/reports/default/2026-08-05_qnr_*.json
+```
+
+**操作**:
+1. 从 git 仓库删除 `data/` 目录:
+```bash
+git rm -r data/
+```
+2. 提交 + 推送:
+```bash
+git add -A
+git commit -m "chore(security): 删除公开仓库的历史患者数据 (迁移到 Supabase)"
+git push origin deploy-qnr-cloudsync:main --force
+```
+3. **注意**: Pages 缓存可能有延迟, 删除后需等几分钟再验证 404
+
+**验证**:
+```bash
+curl -sI https://fxs-84.github.io/brainmend/data/reports/default/2026-08-05_qnr_1785922934536.json | head -1
+# 应返回 404
+```
+
+## 🔴 任务 2: 仓库改 Private
+
+**为什么**: 即使删了 data/, 仓库里所有历史 commit 仍含 PII (git 历史不可删除, 除非 force push 重写历史)
+
+**操作**: GitHub → Settings → Danger Zone → Change repository visibility → **Private**
+
+**影响**:
+- ✅ github.com 浏览/API 枚举 → 封死
+- ⚠️ GitHub Pages 静态文件仍公开 (Pages 有独立可见性)
+- ⚠️ 患者仍能扫码做题 (不影响)
+- ⚠️ 前端代码含 anon key (公开安全, RLS 保护)
+
+## 🟡 任务 3: 删除 GitHub Contents API 上传路径
+
+**现状**: 前端仍保留 GitHub 兜底上传 (兼容旧流程), 但已无必要
+
+**要删的**:
+1. `assets/cognitive/cognitive-report.js` 里的 `uploadToCloud` GitHub 实现 (约 2518-2599 行)
+2. `questionnaire.html` 里的 GitHub 兜底路径 (搜 `GH_API`)
+3. `index.html` 里 CloudSync 的 GitHub 相关
+4. `data/reports/` 相关引用
+
+**保留的**:
+- `assets/cognitive/reports/qnr-supabase.js` (Supabase 客户端)
+- `assets/cognitive/reports/qnr-therapist-ui.js` (治疗师 UI)
+- `assets/cognitive/reports/cloud-sync.js` (可保留, 只走 Supabase 或删)
+
+**注意**: 删除时检查有没有其他依赖 `_uploadToCloud` 的地方, 需要同步改
+
+## 🟡 任务 4: 治疗师 UI 增强 (可选)
+
+当前治疗师工作台有: 登录/注册、创建 share_link、列表、QR 显示、撤销、报告列表
+
+**可增强**:
+- [ ] 点击报告 → 查看 16 分区详情 (复用 qnr-region-detail.js 的弹层)
+- [ ] 报告页导出 PDF (复用 html2canvas + jsPDF)
+- [ ] 删除报告 (软删)
+- [ ] 分享链接列表翻页
+- [ ] 报告搜索 (按患者名)
+
+## 🟡 任务 5: 部署收尾
+
+1. 部署分支: `deploy-qnr-cloudsync` (force push 到 main)
+2. Pages 源: main 分支
+3. 验证: `node js/questionnaire/e2e-supabase-integration.mjs https://fxs-84.github.io/brainmend` → 6/6 全过
+
+---
+
+## ⚠️ 关键教训 (别踩坑)
+
+1. **supabase-config.js 必须提交进仓库** (anon key 公开安全, RLS 保护数据; 不提交则 LIVE 站 404)
+2. **脚本加载顺序**: supabase-config.js 必须在 qnr-supabase.js 之前
+3. **SQL 必须幂等**: drop policy if exists + create or replace (可反复跑)
+4. **RPC 里 INSERT 必须显式写 therapist_id = auth.uid()** (否则 RLS with check 失败)
+5. **不要用 gen_random_bytes** (pgcrypto 可能没启用), 用 gen_random_uuid()
+6. **集成测试答题等待 >= 400ms** (auto-advance 280ms)
+7. **部署用 SSH** (HTTPS 到 github.com 经常 Connection reset)
+   ```bash
+   git remote set-url origin git@github.com:fxs-84/brainmend.git
+   git push origin deploy-qnr-cloudsync:main --force
+   git remote set-url origin https://fxs-84@github.com/fxs-84/brainmend.git
+   ```
+
+---
+
+## 📞 交接给下个 agent
+
+1. 先读 `docs/SPRINT2_HANDOFF.md` (本文件)
+2. 按优先级做: 任务 1 → 2 → 3 → 4 → 5
+3. 每步都验证 (curl / 集成测试)
+4. 完成后更新本文件状态
