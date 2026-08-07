@@ -396,7 +396,10 @@
 
 <script type="module" src="./js/questionnaire/main.js"></script>
 <script src="./assets/cognitive/reports/cloud-sync.js"></script>
+<script src="./assets/cognitive/reports/qnr-supabase.js"></script>
 <script src="./assets/cognitive/reports/qnr-region-detail.js"></script>
+<!-- Supabase 配置 (从独立文件加载, 真实值不入 git) -->
+<script src="./assets/config/supabase-config.js" onerror="console.warn('[qnr] supabase-config.js 未配置, 将使用 GitHub 兜底路径')"></script>
 <script src="./assets/vendor/html2canvas-1.4.1.min.js" crossorigin="anonymous"></script>
 <script src="./assets/vendor/jspdf-2.5.1.umd.min.js" crossorigin="anonymous"></script>
 <script>
@@ -638,8 +641,86 @@
         if (arr.length > 100) arr.splice(0, arr.length - 100);
         localStorage.setItem('cog_records', JSON.stringify(arr));
       } catch(e) { console.error('[qnr inline] localStorage 写入失败', e); }
-      // 4. 云端上传 (CloudSync, 含重试 + 后台队列 + online/visibility 钩子)
+      // 4. 云端上传 — 优先 Supabase (新), 否则 GitHub Contents API (旧, 保留兼容)
       var _doCloud = function() {
+        // 路径 A: Supabase (推荐, PII 安全)
+        if (window.SupabaseClient && window.SupabaseClient.isConfigured()) {
+          // 检查 share_token (QR 链接携带)
+          var shareToken = params.get('token') || '';
+          if (!shareToken) {
+            console.warn('[qnr inline] Supabase 模式但缺少 share_token, 跳过云端上传');
+            // 标记 failed 让用户知道
+            try {
+              var arr0 = JSON.parse(localStorage.getItem('cog_records') || '[]');
+              for (var i0 = 0; i0 < arr0.length; i0++) {
+                if (arr0[i0].id === rec.id) {
+                  arr0[i0]._cloudErr = 'no_share_token';
+                  arr0[i0]._cloudStatus = 'failed';
+                  break;
+                }
+              }
+              localStorage.setItem('cog_records', JSON.stringify(arr0));
+              _renderCloudLine(rec.id);
+            } catch(e) {}
+            return;
+          }
+          // 标记 syncing
+          try {
+            var arrS = JSON.parse(localStorage.getItem('cog_records') || '[]');
+            for (var iS = 0; iS < arrS.length; iS++) {
+              if (arrS[iS].id === rec.id) { arrS[iS]._cloudStatus = 'syncing'; break; }
+            }
+            localStorage.setItem('cog_records', JSON.stringify(arrS));
+          } catch(e) {}
+          // 提交到 Supabase (走 RPC, therapist_id 由 token 派生)
+          window.SupabaseClient.submitQnrAssessment({
+            token: shareToken,
+            name: data.name,
+            age: data.age,
+            gender: data.gender,
+            responses: data.items || {},
+            byRegion: payload.byRegion,
+            severityByRegion: payload.severityByRegion,
+            affectedRegions: payload.affectedRegions,
+            totalScore: payload.total,
+            percent: payload.percent,
+            worstSeverity: payload.worstSeverity,
+            burdenGroups: payload.burdenGroups,
+            phoneEar: data.phoneEar
+          }).then(function(assessmentId) {
+            // 标记 synced + 写回 supabase record id
+            try {
+              var arr2 = JSON.parse(localStorage.getItem('cog_records') || '[]');
+              for (var i2 = 0; i2 < arr2.length; i2++) {
+                if (arr2[i2].id === rec.id) {
+                  arr2[i2]._cloudStatus = 'synced';
+                  arr2[i2]._cloudId = assessmentId;
+                  arr2[i2]._cloudSource = 'supabase';
+                  delete arr2[i2]._cloudErr;
+                  break;
+                }
+              }
+              localStorage.setItem('cog_records', JSON.stringify(arr2));
+              _renderCloudLine(rec.id);
+            } catch(e) {}
+          }).catch(function(err) {
+            console.error('[qnr inline] Supabase 提交失败:', err);
+            try {
+              var arr3 = JSON.parse(localStorage.getItem('cog_records') || '[]');
+              for (var i3 = 0; i3 < arr3.length; i3++) {
+                if (arr3[i3].id === rec.id) {
+                  arr3[i3]._cloudErr = String(err && err.message || err);
+                  arr3[i3]._cloudStatus = 'failed';
+                  break;
+                }
+              }
+              localStorage.setItem('cog_records', JSON.stringify(arr3));
+              _renderCloudLine(rec.id);
+            } catch(e) {}
+          });
+          return;
+        }
+        // 路径 B: GitHub Contents API (旧, 保留兼容, 后续可弃)
         // CloudSync 是 IIFE, 已自动挂 window.CloudSync
         // 但它依赖 window._uploadToCloud (cognitive-report.js 暴露), 这里没有
         // 所以 questionnaire.html 需要自己实现一个轻量级上传器 (单 PUT, 无重试)

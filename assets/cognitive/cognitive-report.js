@@ -2391,6 +2391,9 @@ import {
     });
     html += '</div>';
 
+    // 免责声明 (结果区域末尾小字)
+    html += '<div style="font-size:12px;color:#94a3b8;line-height:1.7;text-align:center;margin-top:16px;">本评估用于一般健康教育，结果属于评估提示/倾向，不构成医疗建议。如有不适请到正规医疗机构就诊。</div>';
+
     body.innerHTML = html;
 
     // Draw radar chart

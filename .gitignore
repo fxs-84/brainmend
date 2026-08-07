@@ -1,3 +1,4 @@
 node_modules/
 tests/e2e/screenshots/
 screenshots/
+assets/config/supabase-config.js

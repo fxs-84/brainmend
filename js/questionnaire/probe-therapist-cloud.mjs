@@ -18,8 +18,8 @@ const errors = [];
 page.on("pageerror", (e) => errors.push("[PE] " + e.message));
 page.on("console", (m) => { if (m.type() === "error") errors.push("[CONSOLE.ERR] " + m.text()); });
 
-await page.goto(base + "/index.html", { waitUntil: "networkidle", timeout: 60000 });
-await page.waitForTimeout(8000); // 等大 bundle + 预加载
+await page.goto(base + "/index.html", { waitUntil: "commit", timeout: 60000 });
+await page.waitForTimeout(15000); // 等大 bundle + 预加载 (CloudSync 后台 setInterval 让 networkidle 永不达成)
 
 // 等数据模块加载 (这是关键!)
 console.log("=== 等待 __qnrData + __qnrScoring 加载 ===");

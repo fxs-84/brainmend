@@ -185,7 +185,7 @@
             <button id="page2-tracking" style="flex:1;min-width:0;padding:28px 16px;background:linear-gradient(135deg,#FF6B6B,#FF8E53);color:#fff;border:none;border-radius:16px;cursor:pointer;font-size:16px;font-weight:600;box-shadow:0 8px 24px rgba(255,107,107,0.25);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
                 <div style="font-size:40px;margin-bottom:8px;">🎯</div>
                 头动追踪
-                <div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:4px;">颈椎康复训练</div>
+                <div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:4px;">颈椎训练</div>
             </button>
             <button id="page2-gait" style="flex:1;min-width:0;padding:28px 16px;background:linear-gradient(135deg,#43E97B,#38F9D7);color:#fff;border:none;border-radius:16px;cursor:pointer;font-size:16px;font-weight:600;box-shadow:0 8px 24px rgba(67,233,123,0.25);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
                 <div style="font-size:40px;margin-bottom:8px;">🚶</div>
@@ -205,8 +205,8 @@
     <div id="cog-modal-overlay" class="cog-modal-overlay">
         <div class="cog-modal" style="position:relative;">
             <button class="cog-modal-close" id="cog-modal-close">&times;</button>
-            <h3>🧠 认知评估系统</h3>
-            <div class="subtitle">选择单项测试或进行完整评估</div>
+            <h3>🧠 认知小测试 · 教育版</h3>
+            <div class="subtitle">选择单项测试或进行完整测试 · 仅供健康教育参考</div>
             <button class="cog-modal-full" id="cog-modal-full-test">📋 完整测试 (12项)</button>
             <button class="cog-modal-full" id="cog-modal-quick6" style="background:linear-gradient(135deg,#FF9800,#F44336);margin-top:6px;">⚡ 快速测试 (6项)</button>
             <button id="cog-qr-btn" style="display:block;width:100%;margin-top:10px;padding:14px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:16px;font-weight:700;box-shadow:0 4px 16px rgba(102,126,234,0.4);transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform='scale(1.02)';this.style.boxShadow='0 6px 20px rgba(102,126,234,0.6)';" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 4px 16px rgba(102,126,234,0.4)';">📱 生成二维码 (患者扫码做题)</button>
@@ -411,7 +411,7 @@
                         <button class="mode-btn" data-mode="visualVestibular"><span class="icon">▦</span>视动训练</button>
                         <button class="mode-btn" data-mode="visualChecker"><span class="icon">▣</span>大脑垂直感知运动</button>
                         <button class="mode-btn" data-mode="coordChecker"><span class="icon">▦∞</span>棋盘协调</button>
-                        <button class="mode-btn" data-mode="game"><span class="icon">🎮</span>康复游戏</button>
+                        <button class="mode-btn" data-mode="game"><span class="icon">🎮</span>健脑小游戏</button>
                         <button class="mode-btn" id="back-to-page2-btn" style="background:rgba(0,0,0,0.06);color:var(--text);border:1px dashed rgba(0,0,0,0.2);"><span class="icon">←</span>返回首页</button>
                     </div>
                 </div>
@@ -756,7 +756,7 @@
 
             <!-- 康复建议 -->
             <div id="rehab-suggestions" style="display: none; margin-bottom: 15px; padding: 12px; background: rgba(34, 197, 94, 0.1); border-radius: 8px; border: 1px solid rgba(34, 197, 94, 0.3);">
-                <div style="font-size: 11px; color: var(--success); margin-bottom: 8px;">康复建议</div>
+                <div style="font-size: 11px; color: var(--success); margin-bottom: 8px;">训练建议</div>
                 <div id="rehab-suggestions-content" style="font-size: 11px; line-height: 1.6; color: var(--text);"></div>
             </div>
 
@@ -2447,7 +2447,10 @@
 </script>
 <script type="module" src="./assets/cognitive/cognitive-report.js?v=20260805b"></script>
 <script src="./assets/cognitive/reports/cloud-sync.js?v=20260806a"></script>
+<script src="./assets/cognitive/reports/qnr-supabase.js?v=20260806a"></script>
 <script src="./assets/cognitive/reports/qnr-region-detail.js?v=20260807a"></script>
+<!-- Supabase 配置 (真实值不入 git, 见 assets/config/supabase-config.example.js) -->
+<script src="./assets/config/supabase-config.js" onerror="console.warn('[brainmend] supabase-config.js 未配置')"></script>
 <script>
   // ===== 神经系统自评 · 数据/评分模块预加载 =====
   // 顶层设计: 治疗师在云端记录列表打开自评报告时, 点击分区行需要 __qnrData + __qnrScoring
