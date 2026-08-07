@@ -369,8 +369,8 @@ declare
   v_token text;
   v_link public.qnr_share_links;
 begin
-  -- 生成 22 字符 URL-safe token (与 kfblxt generateToken 兼容: nanoid 风格)
-  v_token := encode(gen_random_bytes(16), 'hex');
+  -- 生成 32 字符 URL-safe token (UUID 去横线)
+  v_token := replace(gen_random_uuid()::text, '-', '');
 
   insert into public.qnr_share_links (
     therapist_id, token, prefilled_name, prefilled_age, prefilled_gender, expires_at

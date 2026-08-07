@@ -409,6 +409,11 @@
     createShareLink: createShareLink,
     showQR: showQR,
     copyLink: copyLink,
-    revokeLink: revokeLink
+    revokeLink: revokeLink,
+    // 刷新工作台数据 (share_links + 自评报告)
+    refreshDashboard: function () {
+      _loadShareLinks();
+      _loadAssessments();
+    }
   };
 })(window);

@@ -44,8 +44,8 @@ console.log("✅ Supabase 配置已读取");
 console.log("   URL:", SUPABASE_URL);
 console.log("   KEY:", SUPABASE_KEY.substring(0, 20) + "...");
 
-// 测试用邮箱 (用时间戳避免重复)
-const TEST_EMAIL = "test_" + Date.now() + "@brainmend-test.local";
+// 测试用邮箱 (用时间戳避免重复, 必须用真实 TLD 否则 Supabase 拒绝)
+const TEST_EMAIL = "test_" + Date.now() + "@example.com";
 const TEST_PASSWORD = "Test1234!";
 const TEST_NAME = "测试治疗师";
 const PATIENT_NAME = "测试患者张三";
@@ -80,25 +80,30 @@ try {
   await tp.fill("#bm-signup-password", TEST_PASSWORD);
   await tp.click("text=注 册");
   await tp.waitForTimeout(5000);
-  const signUpResult = await tp.evaluate(() => {
-    var msg = document.getElementById("bm-auth-msg");
-    return msg ? msg.textContent : "";
+  // 检查 session 是否已建立 (Confirm email 关闭时 signup 直接返回 access_token)
+  const hasSession = await tp.evaluate(() => {
+    var s = window.SupabaseClient && window.SupabaseClient.getSession();
+    return !!(s && s.access_token);
   });
-  console.log("  注册结果:", signUpResult);
-  // 检查 Supabase 中是否已创建 therapist (访问 /rest/v1/therapists 验证)
-  const therapistCheck = await fetch(SUPABASE_URL + "/rest/v1/therapists?email=eq." + encodeURIComponent(TEST_EMAIL), {
-    headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
-  }).then(r => r.json());
-  if (!therapistCheck || !therapistCheck.length) {
-    console.log("  ⚠️ 注册成功但未自动登录 (Supabase 默认需要邮箱验证)");
-    console.log("  💡 提示: 在 Supabase Dashboard → Authentication → Providers → Email 关闭 'Confirm email'");
+  if (!hasSession) {
+    console.log("  ⚠️ 注册成功但未自动登录 (可能 Supabase 还要求邮箱验证)");
+    console.log("  💡 提示: Authentication → Providers → Email 关闭 'Confirm email'");
     // 改为登录
-    await tp.evaluate(() => window.BmTherapistUI.switchAuthTab("signin"));
+    try {
+      await tp.evaluate(() => window.BmTherapistUI.switchAuthTab("signin"));
+    } catch (e) {
+      // modal 可能已关, 重新打开
+      await tp.evaluate(() => window.BmTherapistUI.openAuth());
+      await tp.waitForTimeout(300);
+      await tp.evaluate(() => window.BmTherapistUI.switchAuthTab("signin"));
+    }
     await tp.waitForTimeout(200);
     await tp.fill("#bm-auth-email", TEST_EMAIL);
     await tp.fill("#bm-auth-password", TEST_PASSWORD);
     await tp.click("text=登 录");
     await tp.waitForTimeout(5000);
+  } else {
+    console.log("  ✅ 注册成功, 已自动登录 (Confirm email 已关)");
   }
   const sessionAfter = await tp.evaluate(() => window.SupabaseClient && window.SupabaseClient.getSession());
   assert("治疗师登录成功 (session 有 access_token)", sessionAfter && sessionAfter.access_token, sessionAfter ? "" : "no session");
@@ -139,7 +144,7 @@ try {
     for (let q = 1; q <= 100; q++) {
       const optIndex = q === 46 ? 2 : q <= 45 ? 2 : 1;
       await pp.click(`.q-option >> nth=${optIndex}`);
-      if (q < 100) await pp.waitForTimeout(60);
+      if (q < 100) await pp.waitForTimeout(400);  // >= 280ms auto-advance
     }
     await pp.click("#quiz-next");
     await pp.waitForSelector("#screen-result:not([style*='none']) .result-group", { timeout: 30000 });
@@ -172,14 +177,10 @@ try {
         await tp.evaluate(() => window.BmTherapistUI.openDashboard());
         await tp.waitForTimeout(2000);
       } else {
-        // 已打开, 触发列表刷新
+        // 已打开, 用公共 API 刷新列表
         await tp.evaluate(() => {
-          // 找到列表容器, 重新加载
-          var ev = new Event("click");
-          var btn = document.querySelector("#bm-report-list");
-          // 直接调内部函数
-          if (window.BmTherapistUI && window.BmTherapistUI._loadAssessments) {
-            window.BmTherapistUI._loadAssessments();
+          if (window.BmTherapistUI && typeof window.BmTherapistUI.refreshDashboard === 'function') {
+            window.BmTherapistUI.refreshDashboard();
           }
         });
         await tp.waitForTimeout(2000);

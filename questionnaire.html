@@ -395,11 +395,12 @@
 </div>
 
 <script type="module" src="./js/questionnaire/main.js"></script>
+<!-- Supabase 配置 (从独立文件加载, 真实值不入 git) -->
+<!-- ⚠️ 必须在 qnr-supabase.js 之前加载, 否则 URL/KEY 是 undefined -->
+<script src="./assets/config/supabase-config.js" onerror="console.warn('[qnr] supabase-config.js 未配置, 将使用 GitHub 兜底路径')"></script>
 <script src="./assets/cognitive/reports/cloud-sync.js"></script>
 <script src="./assets/cognitive/reports/qnr-supabase.js"></script>
 <script src="./assets/cognitive/reports/qnr-region-detail.js"></script>
-<!-- Supabase 配置 (从独立文件加载, 真实值不入 git) -->
-<script src="./assets/config/supabase-config.js" onerror="console.warn('[qnr] supabase-config.js 未配置, 将使用 GitHub 兜底路径')"></script>
 <script src="./assets/vendor/html2canvas-1.4.1.min.js" crossorigin="anonymous"></script>
 <script src="./assets/vendor/jspdf-2.5.1.umd.min.js" crossorigin="anonymous"></script>
 <script>
