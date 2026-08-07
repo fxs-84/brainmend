@@ -50,6 +50,8 @@
 
 **Supabase 项目**: `bydijxssezoetquounqo.supabase.co`
 **anon key**: `sb_publishable_4o9PiVAVZ8SQDw1HP7A0QA_fAVXFsFW`
+**公开注册**: ❌ 已关闭 (2026-08-07, Dashboard → Authentication → Sign In / Up → "Allow new users to sign up"; 新治疗师需 admin 在 Dashboard 手动建号)
+**固定测试账号**: `bm-e2e-test@example.com` / `Test1234!` (两个集成测试共用, 登录优先注册兜底)
 
 ---
 

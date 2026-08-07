@@ -46,8 +46,8 @@ console.log("✅ Supabase 配置已读取");
 console.log("   URL:", SUPABASE_URL);
 console.log("   KEY:", SUPABASE_KEY.substring(0, 20) + "...");
 
-// 测试用邮箱 (独立前缀, 与 qnr 集成测试区分)
-const TEST_EMAIL = "bm-cogtest-" + Date.now() + "@example.com";
+// 固定测试账号 (与 qnr 集成测试共用; 公开注册已关闭, 首次运行若不存在会自动注册建号)
+const TEST_EMAIL = "bm-e2e-test@example.com";
 const TEST_PASSWORD = "Test1234!";
 const TEST_NAME = "测试治疗师";
 const COG_PATIENT = { name: "认知患者李四", age: "40", gender: "女" };
@@ -120,33 +120,31 @@ try {
   );
   await tp.evaluate(() => window.BmTherapistUI.openAuth());
   await tp.waitForSelector("#bm-auth-modal", { state: "visible", timeout: 5000 });
-  await tp.evaluate(() => window.BmTherapistUI.switchAuthTab("signup"));
-  await tp.waitForTimeout(200);
-  await tp.fill("#bm-signup-name", TEST_NAME);
-  await tp.fill("#bm-signup-email", TEST_EMAIL);
-  await tp.fill("#bm-signup-password", TEST_PASSWORD);
-  await tp.click("text=注 册");
+  // 固定账号: 先登录 (默认 signin tab), 不存在再注册兜底
+  await tp.fill("#bm-auth-email", TEST_EMAIL);
+  await tp.fill("#bm-auth-password", TEST_PASSWORD);
+  await tp.click("text=登 录");
   await tp.waitForTimeout(5000);
-  const hasSession = await tp.evaluate(() => {
+  let hasSession = await tp.evaluate(() => {
     var s = window.SupabaseClient && window.SupabaseClient.getSession();
     return !!(s && s.access_token);
   });
   if (!hasSession) {
-    console.log("  ⚠️ 注册成功但未自动登录, 改为登录");
-    try {
-      await tp.evaluate(() => window.BmTherapistUI.switchAuthTab("signin"));
-    } catch (e) {
-      await tp.evaluate(() => window.BmTherapistUI.openAuth());
-      await tp.waitForTimeout(300);
-      await tp.evaluate(() => window.BmTherapistUI.switchAuthTab("signin"));
-    }
+    console.log("  ⚠️ 登录失败 (固定账号可能不存在), 尝试注册建号");
+    await tp.evaluate(() => window.BmTherapistUI.switchAuthTab("signup"));
     await tp.waitForTimeout(200);
-    await tp.fill("#bm-auth-email", TEST_EMAIL);
-    await tp.fill("#bm-auth-password", TEST_PASSWORD);
-    await tp.click("text=登 录");
+    await tp.fill("#bm-signup-name", TEST_NAME);
+    await tp.fill("#bm-signup-email", TEST_EMAIL);
+    await tp.fill("#bm-signup-password", TEST_PASSWORD);
+    await tp.click("text=注 册");
     await tp.waitForTimeout(5000);
+    hasSession = await tp.evaluate(() => {
+      var s = window.SupabaseClient && window.SupabaseClient.getSession();
+      return !!(s && s.access_token);
+    });
+    if (hasSession) console.log("  ✅ 注册成功, 已自动登录");
   } else {
-    console.log("  ✅ 注册成功, 已自动登录");
+    console.log("  ✅ 固定测试账号登录成功");
   }
   const session = await tp.evaluate(() => window.SupabaseClient && window.SupabaseClient.getSession());
   assert("治疗师登录成功 (session 有 access_token)", session && session.access_token);
