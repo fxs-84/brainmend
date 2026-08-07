@@ -7,10 +7,10 @@
   ✅ 治疗师登录成功 (session 有 access_token) 
 
 === 2. 创建认知 share_link ===
-  认知链接: https://fxs-84.github.io/brainmend/index.html?mode=cognitive&start=full&share_token=c4d5bc3cc9c04319b7242532f76a036c
+  认知链接: https://fxs-84.github.io/brainmend/index.html?mode=cognitive&start=full&share_token=08ff0f722fed4667b3be1c1ab1d21dc1
   ✅ 认知链接已生成 
   ✅ 认知链接含 mode=cognitive + start=full + share_token 
-  ✅ 认知 share_token 已生成 (32 位) c4d5bc3cc9c04319b7242532f76a036c
+  ✅ 认知 share_token 已生成 (32 位) 08ff0f722fed4667b3be1c1ab1d21dc1
 
 === 3. 患者端认知报告提交 ===
   ✅ 患者端 share_token 已存 sessionStorage 
@@ -26,21 +26,26 @@
   ✅ payload 无 phaseSnapshots 类大字段 
 
 === 5. 步态报告链路 ===
-  步态链接: https://fxs-84.github.io/brainmend/index.html?mode=gait&share_token=f416435b718e4dfba5f66326cc68f93c
+  步态链接: https://fxs-84.github.io/brainmend/index.html?mode=gait&share_token=dcbf7c5304784826abf326be95ac10c3
   ✅ 步态链接含 mode=gait + share_token (无 start 参数) 
-  ✅ 步态 share_token 已生成 (32 位) f416435b718e4dfba5f66326cc68f93c
-  ❌ 患者端步态 share_token 已存 sessionStorage 
+  ✅ 步态 share_token 已生成 (32 位) dcbf7c5304784826abf326be95ac10c3
+  ✅ 患者端步态 share_token 已存 sessionStorage 
   步态登记表单已提交, 等待云端同步...
   ✅ 步态记录本地已保存 
-  ❌ 步态记录云端状态 = synced status=failed
-  ⏭️ 跳过步态落库验证 (云端未同步, 可能是 0004 迁移未执行)
+  ✅ 步态记录云端状态 = synced status=synced
+  ✅ Supabase 中找到本 share_token 的步态记录 
+  ✅ patient_name 正确 步态患者王五
+  ✅ classification_primary 正确 e2e_test_gait
+  ✅ payload 非空且含 parameters 
+  ✅ payload 已剥离 phaseSnapshots 
+  ✅ payload 无截图 marker 泄漏 
 
 === 6. 治疗师列表查看 (认知 / 步态 tab) ===
-  ✅ 认知 tab 显示新报告 认知患者李四 · 40岁 女📊12项 · 29分2026/8/7 15:59:21 · 点击查看报告
+  ✅ 认知 tab 显示新报告 认知患者李四 · 40岁 女📊12项 · 29分2026/8/7 16:26:40 · 点击查看报告
   ✅ 认知 tab 显示总分徽标 
-  ❌ 步态 tab 显示新报告 还没有步态报告。等患者扫码提交...
-  ❌ 步态 tab 显示分类徽标 
+  ✅ 步态 tab 显示新报告 步态患者王五 · 66岁 男e2e_test_gait2026/8/7 16:27:38 · 点击查看报告
+  ✅ 步态 tab 显示分类徽标 
   ✅ 自评 tab 正常加载 (无报错) 还没有自评报告。等患者扫码提交...
 
 ══════════════════════════════════════════════════
-  通过 18 / 失败 5
+  通过 28 / 失败 0

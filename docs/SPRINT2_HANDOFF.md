@@ -18,6 +18,27 @@
 | 治疗师列表查看报告 | ✅ | 集成测试 6/6 全过 |
 | LIVE 部署 (fxs-84.github.io/brainmend) | ✅ | 集成测试 6/6 全过 |
 
+## ✅ Sprint 3 已完成 (2026-08-07): 所有报告进 Supabase
+
+| 里程碑 | 状态 | 验证 |
+|---|---|---|
+| 0004 迁移: cognitive_assessments + gait_assessments 表, share_links 加 kind 列, 2 个提交 RPC | ✅ | 用户已在 Supabase SQL Editor 执行 |
+| 认知报告上云 (share_token 链路 + 本地兜底) | ✅ | e2e-cog-gait 28/28 (本地 + LIVE) |
+| 步态报告上云 (+ 患者登记表单, phaseSnapshots 提交前剥离) | ✅ | 同上 |
+| 治疗师工作台: 链接类型选择 (自评/认知/步态) + 三 tab 报告列表 + 详情复用渲染 | ✅ | 同上 |
+| qnr 回归 | ✅ | e2e-supabase 6/6 (本地 + LIVE) |
+
+**Sprint 3 关键文件**:
+- `supabase/migrations/0004_cognitive_gait_reports.sql` (两表 + kind 列 + RPC)
+- `js/questionnaire/e2e-cog-gait-integration.mjs` (认知/步态集成测试, 28 断言)
+- 改动: `qnr-supabase.js` (新 submit/list 函数), `cognitive-report.js`, `gait-analysis.js`, `qnr-therapist-ui.js`, `index.html`
+
+**Sprint 3 新教训**:
+8. **GitHub Pages 到本机网络会截断 HTML** (157KB 的 index.html 尾部内联脚本丢失, 表现为全局函数时有时无)。对策: share_token 在保存时从 URL 直接解析兜底 (cognitive-report.js `_getCogShareToken` / gait-analysis.js `_getGaitShareToken`); 集成测试就绪条件必须包含**页面尾部**的脚本 (SupabaseClient), 超时自动重载
+9. **git config 有 url.insteadOf 重写** (`git@github.com:` → `https://github.com/`), 交接文档里的"部署用 SSH"实际一直走的 HTTPS; github.com:443 会间歇性完全不通, push 失败就等几分钟重试
+10. **创建认知链接带 start=full** 直达做题; 步态链接不带 start (步态只有一个入口)
+11. **步态 phaseSnapshots (时相截图 dataURL) 上云前必须剥离**, 本地保留
+
 **关键文件**:
 - `supabase/migrations/0001_brainmend_baseline.sql` (schema)
 - `supabase/migrations/0002_fix_admin_recursion.sql` (RLS 递归修复)
