@@ -176,6 +176,20 @@ as $$
   select id from public.therapists where id = auth.uid();
 $$;
 
+-- 判断当前用户是否是 admin (SECURITY DEFINER 避免 RLS 递归)
+create or replace function public.brainmend_is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.therapists
+    where id = auth.uid() and role = 'admin'
+  );
+$$;
+
 -- ============================================================
 -- 7. therapists: 治疗师只能读自己的账号, admin 可读全部
 -- ============================================================
@@ -183,7 +197,7 @@ drop policy if exists therapists_select_own on public.therapists;
 create policy therapists_select_own on public.therapists
   for select using (
     id = auth.uid()
-    or exists (select 1 from public.therapists where id = auth.uid() and role = 'admin')
+    or public.brainmend_is_admin()  -- 用 SECURITY DEFINER 函数, 避免 RLS 递归
   );
 
 drop policy if exists therapists_update_own on public.therapists;
