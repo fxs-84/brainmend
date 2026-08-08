@@ -967,7 +967,7 @@
 <script src="./assets/vendor/jspdf-2.5.1.umd.min.js" crossorigin="anonymous"></script>
 <!-- 步态分析模块 (基于 ANRM 步态分析手册) -->
 <script src="./assets/gait-params.js"></script>
-<script src="./assets/gait-analysis.js?v=20260807c"></script>
+<script src="./assets/gait-analysis.js?v=20260808a"></script>
 <script src="./assets/gait-report.js"></script>
 <script>
     // 全局点击分发 (认知模块)
@@ -2271,13 +2271,13 @@
     })();
 
 </script>
-<script type="module" src="./assets/cognitive/cognitive-report.js?v=20260807c"></script>
+<script type="module" src="./assets/cognitive/cognitive-report.js?v=20260808a"></script>
 <!-- Supabase 配置 (真实值不入 git, 见 assets/config/supabase-config.example.js) -->
 <!-- ⚠️ 必须在 qnr-supabase.js 之前加载, 否则 URL/KEY 是 undefined -->
 <script src="./assets/config/supabase-config.js" onerror="console.warn('[brainmend] supabase-config.js 未配置')"></script>
-<script src="./assets/cognitive/reports/qnr-supabase.js?v=20260807a"></script>
-<script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260807d"></script>
-<script src="./assets/cognitive/reports/qnr-region-detail.js?v=20260807a"></script>
+<script src="./assets/cognitive/reports/qnr-supabase.js?v=20260808a"></script>
+<script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260808a"></script>
+<script src="./assets/cognitive/reports/qnr-region-detail.js?v=20260808a"></script>
 <script>
   // ===== 头动追踪 (cervical_tracking_records) · 报告入库 hook =====
   // 第一性原理: 治疗师已登录 → 自动上云端 (therapist_id = auth.uid())
