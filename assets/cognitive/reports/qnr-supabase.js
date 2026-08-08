@@ -91,7 +91,9 @@
     return typeof txt === 'string' &&
       (txt.indexOf('JWT expired') >= 0 ||
        txt.indexOf('JWT issued at future') >= 0 ||
-       txt.indexOf('PGRST303') >= 0);
+       txt.indexOf('PGRST303') >= 0 ||
+       // PGRST301 (No suitable key) 也可能是 key 轮换, 刷新后重试一次无害
+       txt.indexOf('PGRST301') >= 0);
   }
 
   // 用 refresh_token 换新 token (GoTrue /auth/v1/token?grant_type=refresh_token)
