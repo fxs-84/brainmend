@@ -34,6 +34,7 @@
 - 改动: `qnr-supabase.js` (新 submit/list 函数), `cognitive-report.js`, `gait-analysis.js`, `qnr-therapist-ui.js`, `index.html`
 
 **Sprint 3 新教训**:
+12. **头动追踪报告 (0005 cervical_tracking_records)**: 工作台详情复用 bundle 原版渲染 `window.renderFullReport(window.state)` (字段装配照抄 bundle `_viewRecord`; 患者卡读 `window.state.clientInfo` 所以必须写 tracker 实例不能替换 window.state); 上传 hook 把完整 `assessment + coordTrails/coordFullScores/testDuration` 塞进 `details` jsonb (RPC 原样透传, 不用改 SQL); 旧记录无 assessment 时前端降级重建 (复刻 bundle `Gt`); 无 coordTrails 要显式传空数组防 `Nf` 回退读 localStorage 本地轨迹; `#page2` z-index 会盖住 `#view-report`, 渲染前隐藏; 验证脚本 `js/questionnaire/probe-tracking-cloud-render.mjs` (20 断言, 含新旧两格式)
 8. **GitHub Pages 到本机网络会截断 HTML** (157KB 的 index.html 尾部内联脚本丢失, 表现为全局函数时有时无)。对策: share_token 在保存时从 URL 直接解析兜底 (cognitive-report.js `_getCogShareToken` / gait-analysis.js `_getGaitShareToken`); 集成测试就绪条件必须包含**页面尾部**的脚本 (SupabaseClient), 超时自动重载
 9. **git config 有 url.insteadOf 重写** (`git@github.com:` → `https://github.com/`), 交接文档里的"部署用 SSH"实际一直走的 HTTPS; github.com:443 会间歇性完全不通, push 失败就等几分钟重试
 10. **创建认知链接带 start=full** 直达做题; 步态链接不带 start (步态只有一个入口)
