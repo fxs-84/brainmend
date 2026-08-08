@@ -3195,6 +3195,11 @@ import {
     }
   };
 
+  // 暴露 renderReport 给治疗师工作台调用 (云端报告详情用)
+  // 顶层设计: 治疗师工作台拿到云端 payload 里有完整 rawScores, 直接调原版渲染
+  // 这样 patient 真实答题的记录, 查看时样式 100% 一致 (12 模块 + 雷达 + 脑区图)
+  window.renderReport = renderReport;
+
   window._viewCogReport = function(recordIndex) {
     // 🔒 查看历史报告: 视为已确认患者信息, 跳过登记表单
     window._cogPatientConfirmed = true;
