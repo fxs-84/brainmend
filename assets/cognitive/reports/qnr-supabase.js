@@ -10,6 +10,7 @@
 // API:
 //   supabase.submitQnrAssessment({ token, name, age, gender, ...payload })
 //   supabase.submitCognitiveAssessment({ shareToken, patientInfo, payload, overallScore, isQuick6 })
+//   supabase.submitCognitiveAssessmentDirect({ patientInfo, payload, overallScore, isQuick6 }) (auth, 治疗师直传)
 //   supabase.submitGaitAssessment({ shareToken, patientInfo, payload, classificationPrimary })
 //   supabase.listMyAssessments() (auth)
 //   supabase.listMyCognitiveAssessments() / listMyGaitAssessments() (auth)
@@ -260,6 +261,26 @@
       });
   }
 
+  // 治疗师登录后直传认知报告 (本机做题, 不走 share_link; therapist_id = auth.uid())
+  // RPC 由 0006 迁移提供; 未执行时调用会失败, 调用方需优雅降级
+  function submitCognitiveAssessmentDirect(input) {
+    var info = input.patientInfo || {};
+    return _rest('POST', '/rest/v1/rpc/submit_cognitive_assessment_direct', {
+      p_payload: {
+        patient_name: info.name || '',
+        patient_age: info.age ? parseInt(info.age, 10) : null,
+        patient_gender: info.gender || null,
+        payload: input.payload || {},
+        overall_score: input.overallScore != null ? input.overallScore : null,
+        is_quick6: !!input.isQuick6
+      }
+    }, true)
+      .then(function (id) {
+        _log('submit cognitive direct ok, assessment_id:', id);
+        return id;
+      });
+  }
+
   // 治疗师查询自己的认知报告 (auth)
   function listMyCognitiveAssessments(opts) {
     opts = opts || {};
@@ -492,6 +513,7 @@
     isConfigured: isConfigured,
     submitQnrAssessment: submitQnrAssessment,
     submitCognitiveAssessment: submitCognitiveAssessment,
+    submitCognitiveAssessmentDirect: submitCognitiveAssessmentDirect,
     submitGaitAssessment: submitGaitAssessment,
     submitTrackingRecord: submitTrackingRecord,
     listMyAssessments: listMyAssessments,

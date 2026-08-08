@@ -1,18 +1,18 @@
 // js/questionnaire/e2e-cog-gait-integration.mjs
-// Supabase 端到端集成测试 (Sprint 2: 认知报告 + 步态报告上云)
+// Supabase 端到端集成测试 (认知直传 + 步态报告上云)
 //
 // 流程:
-//  1. 治疗师: 注册 + 登录 Supabase (独立测试邮箱)
-//  2. 治疗师: 创建 kind='cognitive' share_link → 校验患者 URL 格式
-//  3. 患者 (新 context): 打开认知链接 → 注入最小 _cogScoreLog → window._showCognitiveReport()
-//     → 登记表单填姓名/年龄/性别 → saveRecord 本地保存 + Supabase 提交
-//  4. 验证: Supabase cognitive_assessments 落库 (patient_name / overall_score / payload 非空 / 无大字段)
+//  1. 治疗师: 登录 Supabase (固定测试账号)
+//  2. 认知直测入口: 点 #cog-modal-full-test → 直接进做题 (无二维码、无患者沙箱)
+//  3. 认知直传: 注入最小 _cogScoreLog → window._showCognitiveReport() → 登记表单
+//     → saveRecord 本地保存 + submit_cognitive_assessment_direct 直传 (source='therapist')
+//  4. 验证: Supabase cognitive_assessments 落库 (patient_name / overall_score / source='therapist')
 //  5. 步态同理: kind='gait' 链接 → 患者 context 直接调 window.__gaitAnalysis.saveAssessment(伪 results)
 //     → 登记表单 → 验证 gait_assessments 落库且 payload 不含 phaseSnapshots
 //  6. 治疗师工作台: 认知 tab / 步态 tab 各显示新记录
 //
 // ⚠️ 前置条件:
-//   1. 已跑 supabase/migrations/0004_cognitive_gait_reports.sql (新表 + RPC + kind 列)
+//   1. 已跑 supabase/migrations/0004 (表+kind) 和 0006_cognitive_direct_submit.sql (direct RPC)
 //   2. assets/config/supabase-config.js 已填入真实 URL + anon key
 //
 // 用法: node js/questionnaire/e2e-cog-gait-integration.mjs [baseURL]
@@ -150,45 +150,43 @@ try {
   assert("治疗师登录成功 (session 有 access_token)", session && session.access_token);
   if (!session || !session.access_token) { await browser.close(); process.exit(1); }
 
-  // ============ 2. 创建认知 share_link (kind=cognitive) ============
-  console.log("\n=== 2. 创建认知 share_link ===");
+  // ============ 2. 认知直测入口 (取消二维码分发, 不登录直接测) ============
+  console.log("\n=== 2. 认知直测入口 ===");
   await tp.evaluate(() => window.BmTherapistUI.openDashboard());
   await tp.waitForSelector("#bm-dashboard-modal", { state: "visible", timeout: 5000 });
-  await tp.selectOption("#bm-link-kind", "cognitive");
-  // 不预填患者信息 → 患者端走登记表单路径
-  await tp.click("text=+ 创建链接");
-  await tp.waitForTimeout(3000);
-  // 从「复制」按钮的 onclick 属性提取完整链接 (textContent 会拼接按钮文字, 不可靠)
-  const cogUrl = await tp.evaluate(() => {
-    var btn = document.querySelector('#bm-link-result button[onclick*="copyLink"]');
-    if (!btn) return "";
-    var m = btn.getAttribute("onclick").match(/copyLink\('([^']+)'\)/);
-    return m ? m[1] : "";
+  // 工作台建链接类型里应已无 cognitive (认知改为本机直测直传)
+  const hasCogKindOption = await tp.evaluate(() =>
+    !!document.querySelector('#bm-link-kind option[value="cognitive"]'));
+  assert("创建链接类型已无「认知评估」选项", !hasCogKindOption);
+  // 关掉工作台, 打开认知模块选择弹窗
+  await tp.evaluate(() => {
+    var m = document.getElementById("bm-dashboard-modal");
+    if (m) m.remove();
+    document.getElementById("cog-modal-overlay").classList.add("show");
   });
-  console.log("  认知链接:", cogUrl.substring(0, 120));
-  assert("认知链接已生成", !!cogUrl);
-  assert("认知链接含 mode=cognitive + start=full + share_token",
-    cogUrl.includes("mode=cognitive") && cogUrl.includes("start=full") && cogUrl.includes("share_token="));
-  const cogToken = (cogUrl.match(/share_token=([a-f0-9]{32})/) || [])[1] || "";
-  assert("认知 share_token 已生成 (32 位)", cogToken.length === 32, cogToken || "无");
-  if (!cogUrl) { await browser.close(); process.exit(1); }
+  await tp.waitForTimeout(300);
+  // 二维码入口已移除
+  const qrBtnGone = await tp.evaluate(() => !document.getElementById("cog-qr-btn"));
+  assert("认知弹窗已无「生成二维码」按钮", qrBtnGone);
+  // 点完整测试 → 直测 (不弹二维码, 不进患者沙箱)
+  await tp.click("#cog-modal-full-test");
+  await tp.waitForTimeout(1500);
+  const directState = await tp.evaluate(() => ({
+    module: window.__cogModule || "",
+    sandbox: !!window._patientSandbox,
+    qrShown: (() => { var e = document.getElementById("cog-qr-overlay"); return e ? getComputedStyle(e).display !== "none" : false; })(),
+    modalClosed: !document.getElementById("cog-modal-overlay").classList.contains("show")
+  }));
+  assert("直测进入第一个模块 (attention)", directState.module === "attention", "module=" + directState.module);
+  assert("未弹二维码 (#cog-qr-overlay 隐藏)", !directState.qrShown);
+  assert("未激活患者沙箱", !directState.sandbox);
+  assert("模块选择弹窗已关闭", directState.modalClosed);
 
-  // ============ 3. 患者端: 认知报告提交 ============
-  console.log("\n=== 3. 患者端认知报告提交 ===");
-  const cogCtx = await browser.newContext();
-  const cp = await cogCtx.newPage();
-  cp.on("pageerror", (e) => pushErr("cog-patient", e.message));
-  // 等 cognitive-report.js + Supabase 客户端加载; HTML 截断则自动重载
-  // (SupabaseClient 在页面尾部, 能加载说明 HTML 完整)
-  await gotoReady(cp, cogUrl,
-    () => typeof window._showCognitiveReport === "function" && window.SupabaseClient && window.SupabaseClient.isConfigured(),
-    "认知患者页");
-  // share_token 应由 deep-link 解析写入 sessionStorage
-  const cogTokenSaved = await cp.evaluate(() => sessionStorage.getItem("bm_cog_share_token") || "");
-  assert("患者端 share_token 已存 sessionStorage", cogTokenSaved === cogToken);
+  // ============ 3. 认知报告直传 (治疗师已登录 → direct RPC) ============
+  console.log("\n=== 3. 认知报告直传 (source='therapist') ===");
   // 最短路径: 注入最小分数日志 → _showCognitiveReport 触发 保存+上云
   // (normalizeAllScores 对缺失模块有 || {} 兜底, 2 个模块即可出报告)
-  await cp.evaluate(() => {
+  await tp.evaluate(() => {
     window._quick6Mode = false;
     window._cogScoreLog = {
       attention: { score: 80, correct: 8, trials: 10, completionRate: 1, rtAvg: 800 },
@@ -196,34 +194,34 @@ try {
     };
     window._showCognitiveReport();
   });
-  // 登记表单 (患者沙箱流程, 报告生成前弹)
-  await cp.waitForSelector("#cog-reg-overlay", { state: "visible", timeout: 10000 });
-  await cp.fill("#cog-reg-name", COG_PATIENT.name);
-  await cp.fill("#cog-reg-age", COG_PATIENT.age);
-  await cp.selectOption("#cog-reg-gender", COG_PATIENT.gender);
-  await cp.click("#cog-reg-submit");
-  console.log("  登记表单已提交, 等待云端同步...");
+  // 登记表单 (直测流程, 报告生成前弹)
+  await tp.waitForSelector("#cog-reg-overlay", { state: "visible", timeout: 10000 });
+  await tp.fill("#cog-reg-name", COG_PATIENT.name);
+  await tp.fill("#cog-reg-age", COG_PATIENT.age);
+  await tp.selectOption("#cog-reg-gender", COG_PATIENT.gender);
+  await tp.click("#cog-reg-submit");
+  console.log("  登记表单已提交, 等待云端直传...");
   // 等 saveRecord 写本地 + _submitCogCloud 落定
-  await cp.waitForFunction(() => {
+  await tp.waitForFunction(() => {
     try {
       var arr = JSON.parse(localStorage.getItem("cog_records") || "[]");
       return arr.length > 0 && arr[0].id;
     } catch (e) { return false; }
   }, null, { timeout: 10000 });
-  const cogLocalId = await cp.evaluate(() => {
+  const cogLocalId = await tp.evaluate(() => {
     var arr = JSON.parse(localStorage.getItem("cog_records") || "[]");
     return arr[0] ? arr[0].id : "";
   });
-  const cogCloudStatus = await waitCloudStatus(cp, "cog_records", "id", cogLocalId, 20000);
+  const cogCloudStatus = await waitCloudStatus(tp, "cog_records", "id", cogLocalId, 20000);
   assert("认知记录云端状态 = synced", cogCloudStatus === "synced", "status=" + cogCloudStatus);
 
-  // ============ 4. 验证 cognitive_assessments 落库 ============
+  // ============ 4. 验证 cognitive_assessments 落库 (direct, source='therapist') ============
   console.log("\n=== 4. 验证 cognitive_assessments ===");
   if (cogCloudStatus === "synced") {
     const cogRows = await restSelect(session, "cognitive_assessments",
-      "select=id,patient_name,patient_age,overall_score,is_quick6,payload,share_token&order=submitted_at.desc&limit=5");
-    const cogMatch = cogRows.find(r => r.share_token === cogToken);
-    assert("Supabase 中找到本 share_token 的认知记录", !!cogMatch);
+      "select=id,patient_name,patient_age,overall_score,is_quick6,source,payload&order=submitted_at.desc&limit=5");
+    const cogMatch = cogRows.find(r => r.patient_name === COG_PATIENT.name && r.source === "therapist");
+    assert("Supabase 中找到直传的认知记录 (source='therapist')", !!cogMatch);
     if (cogMatch) {
       assert("patient_name 正确", cogMatch.patient_name === COG_PATIENT.name, cogMatch.patient_name);
       assert("overall_score 非空", cogMatch.overall_score != null, "score=" + cogMatch.overall_score);
@@ -232,13 +230,18 @@ try {
       assert("payload 无 phaseSnapshots 类大字段", !(cogMatch.payload && cogMatch.payload.phaseSnapshots));
     }
   } else {
-    console.log("  ⏭️ 跳过落库验证 (云端未同步, 可能是 0004 迁移未执行)");
+    console.log("  ⏭️ 跳过落库验证 (云端未同步, 可能是 0006 迁移未执行)");
     fail++;
   }
 
   // ============ 5. 步态: 建链接 + 患者提交 + 落库验证 ============
   console.log("\n=== 5. 步态报告链路 ===");
-  // 治疗师 dashboard 可能已被认知流程关掉, 确保打开
+  // 关掉认知报告 overlay, 避免遮挡工作台
+  await tp.evaluate(() => {
+    var r = document.getElementById("cog-report-overlay");
+    if (r) r.style.display = "none";
+  });
+  // 治疗师 dashboard 已被关掉 (直测入口验证时), 重新打开
   if (!(await tp.locator("#bm-dashboard-modal").count())) {
     await tp.evaluate(() => window.BmTherapistUI.openDashboard());
     await tp.waitForSelector("#bm-dashboard-modal", { state: "visible", timeout: 5000 });
@@ -348,8 +351,6 @@ try {
   await tp.waitForTimeout(2000);
   const qnrTabText = await tp.locator("#bm-report-list").textContent();
   assert("自评 tab 正常加载 (无报错)", !qnrTabText.includes("加载失败"), qnrTabText.substring(0, 60));
-
-  await cogCtx.close();
 } catch (e) {
   console.error("❌ 测试异常:", e.message);
   fail++;

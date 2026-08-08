@@ -7,7 +7,7 @@ import {
 
 (function(){
   // 版本标记 (用于诊断缓存问题, 浏览器控制台输入 window.__cogFlowVersion 验证)
-  window.__cogFlowVersion = 'v7-supabase-cog-gait-2026-08-07';
+  window.__cogFlowVersion = 'v8-cog-direct-2026-08-08';
   // ========== CONFIG ==========
   // 模块描述取自对应测试题文件的 fillText 真源 (非编造)
   // 来源: dist-stable/assets/cognitive/cognitive-*.js
@@ -2514,12 +2514,25 @@ import {
     _renderCogCloudLine(recId);
   }
 
-  // 提交到 Supabase (走 RPC, therapist_id 由 share_token 派生)
+  // 提交到 Supabase, 三级路径:
+  //   1. 有 share_token (旧分享链接) → submit_cognitive_assessment (token 派生 therapist_id)
+  //   2. 无 token 但治疗师已登录 → submit_cognitive_assessment_direct (auth.uid(), source='therapist')
+  //   3. 都没有 → 仅本机保存
   // RPC 未部署/失败时优雅降级: 只标记 _cloudErr, 不影响本地报告
   function _submitCogCloud(record) {
     var shareToken = _getCogShareToken();
-    if (!shareToken) return;
-    if (!(window.SupabaseClient && window.SupabaseClient.isConfigured())) {
+    var client = window.SupabaseClient;
+    var useDirect = false;
+    if (!shareToken) {
+      // 直传路径: 需要已登录 + direct RPC (0006) 可用
+      var sess = client && client.getSession && client.getSession();
+      if (sess && sess.access_token && typeof client.submitCognitiveAssessmentDirect === 'function') {
+        useDirect = true;
+      } else {
+        return; // 仅本机
+      }
+    }
+    if (!(client && client.isConfigured())) {
       _markCogCloud(record.id, 'failed', 'supabase_not_configured');
       return;
     }
@@ -2531,13 +2544,21 @@ import {
         if (k.indexOf('_cloud') !== 0) payload[k] = record[k];
       });
     } catch(e) { payload = record; }
-    window.SupabaseClient.submitCognitiveAssessment({
-      shareToken: shareToken,
-      patientInfo: record.patientInfo || {},
-      payload: payload,
-      overallScore: record.overallScore,
-      isQuick6: !!record.isQuick6
-    }).then(function(assessmentId) {
+    var req = useDirect
+      ? client.submitCognitiveAssessmentDirect({
+          patientInfo: record.patientInfo || {},
+          payload: payload,
+          overallScore: record.overallScore,
+          isQuick6: !!record.isQuick6
+        })
+      : client.submitCognitiveAssessment({
+          shareToken: shareToken,
+          patientInfo: record.patientInfo || {},
+          payload: payload,
+          overallScore: record.overallScore,
+          isQuick6: !!record.isQuick6
+        });
+    req.then(function(assessmentId) {
       _markCogCloud(record.id, 'synced', null, assessmentId);
     }).catch(function(err) {
       console.error('[cog-report] Supabase 提交失败:', err);

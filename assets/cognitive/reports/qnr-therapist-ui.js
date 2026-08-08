@@ -236,7 +236,6 @@
             '<div style="margin-bottom:8px;">' +
               '<select id="bm-link-kind" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;background:#fff;">' +
                 '<option value="qnr"' + (initialKind === 'qnr' ? ' selected' : '') + '>📋 神经系统自评 (100 题)</option>' +
-                '<option value="cognitive"' + (initialKind === 'cognitive' ? ' selected' : '') + '>🧠 认知评估 (12 项游戏)</option>' +
                 '<option value="gait"' + (initialKind === 'gait' ? ' selected' : '') + '>🚶 步态分析</option>' +
               '</select>' +
             '</div>' +
