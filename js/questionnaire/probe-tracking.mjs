@@ -31,7 +31,7 @@ page.on("console", (m) => logs.push(`[${m.type()}] ${m.text()}`));
 page.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}`));
 
 try {
-  await page.goto(base + "/index.html", { waitUntil: "domcontentloaded" });
+  await page.goto(base + "/index.html", { waitUntil: "domcontentloaded", timeout: 90000 });
   await page.waitForFunction(() => window.SupabaseClient && window.SupabaseClient.isConfigured(), null, { timeout: 60000 });
 
   // ============ A. 治疗师登录 ============
@@ -122,7 +122,7 @@ try {
     assert("列表里有 Hook测试-孙先生", trackingItems.some(t => t.includes("Hook测试-孙先生")), trackingItems.join(" | "));
   }
 
-  // 点击看详情
+  // 点击看详情 (复用 #result-modal 原版样式)
   if (trackingItems.length > 0) {
     await page.evaluate(() => {
       const first = document.querySelector("#bm-report-list .bm-list-item");
@@ -130,11 +130,22 @@ try {
     });
     await page.waitForTimeout(1500);
     const detailModal = await page.evaluate(() => {
-      const ov = document.getElementById("bm-tracking-detail-modal");
-      return { exists: !!ov, textLen: (ov?.innerText || "").length, hasScores: (ov?.innerText || "").includes("位置觉") };
+      const m = document.getElementById("result-modal");
+      return {
+        exists: !!m,
+        hasShow: m ? m.classList.contains("show") : false,
+        zIndex: m ? m.style.zIndex : '',
+        titleText: m?.querySelector(".modal-title")?.textContent || '',
+        hasScores: (m?.innerText || "").includes("位置觉"),
+        hasVestibular: (m?.innerText || "").includes("前庭")
+      };
     });
-    console.log("  详情 modal:", JSON.stringify(detailModal));
-    assert("详情 modal 显示 (含 位置觉/稳定性 等评分)", detailModal.hasScores, "len=" + detailModal.textLen);
+    console.log("  详情 modal:", JSON.stringify(detailModal, null, 2));
+    assert("详情 modal = #result-modal 且显示 (show class)", detailModal.exists && detailModal.hasShow, "");
+    assert("详情 modal z-index 已提升", detailModal.zIndex === "50000", detailModal.zIndex);
+    assert("标题是患者姓名", detailModal.titleText.includes("孙先生"), detailModal.titleText);
+    assert("含 位置觉/稳定性 评分", detailModal.hasScores, "");
+    assert("含 前庭功能 区块", detailModal.hasVestibular, "");
     await page.screenshot({ path: "js/questionnaire/screenshot-tracking-detail.png", fullPage: true });
   }
 } catch (e) {

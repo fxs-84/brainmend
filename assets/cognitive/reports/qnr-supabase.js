@@ -82,6 +82,51 @@
     return h;
   }
 
+  // ===== JWT 自动刷新 =====
+  // Supabase access_token 默认 3600s (1小时) 过期; 过期后所有带 auth 请求返回 401 PGRST303
+  // 方案: 401 时用 refresh_token 换新 token, 更新 localStorage, 重试原请求 (最多 1 次)
+  var _refreshing = null; // 防止并发刷新
+
+  function _isExpiredError(txt) {
+    return typeof txt === 'string' &&
+      (txt.indexOf('JWT expired') >= 0 ||
+       txt.indexOf('JWT issued at future') >= 0 ||
+       txt.indexOf('PGRST303') >= 0);
+  }
+
+  // 用 refresh_token 换新 token (GoTrue /auth/v1/token?grant_type=refresh_token)
+  function _refreshSession() {
+    var sess = _session();
+    if (!sess || !sess.refresh_token) return Promise.reject(new Error('无 refresh_token, 请重新登录'));
+    var url = URL.replace(/\/$/, '') + '/auth/v1/token?grant_type=refresh_token';
+    var opts = {
+      method: 'POST',
+      headers: {
+        'apikey': KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ refresh_token: sess.refresh_token })
+    };
+    return fetch(url, opts).then(function (res) {
+      if (!res.ok) {
+        return res.text().then(function (txt) {
+          // 刷新失败 (refresh_token 也过期) → 清 session, 让用户重新登录
+          _setSession(null);
+          throw new Error('刷新会话失败, 请重新登录: ' + txt.substring(0, 120));
+        });
+      }
+      return res.json();
+    }).then(function (data) {
+      _setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token || sess.refresh_token,
+        user: data.user || sess.user
+      });
+      _log('session refreshed (JWT 过期自动刷新)');
+      return data;
+    });
+  }
+
   function _rest(method, path, body, useAuth) {
     if (! _configured()) {
       return Promise.reject(new Error('Supabase 未配置'));
@@ -96,6 +141,35 @@
     return fetch(url, opts).then(function (res) {
       if (!res.ok) {
         return res.text().then(function (txt) {
+          // JWT 过期 → 自动刷新 → 重试一次
+          if (useAuth && res.status === 401 && _isExpiredError(txt)) {
+            if (!_refreshing) {
+              _refreshing = _refreshSession().catch(function (e) {
+                _refreshing = null;
+                throw e;
+              });
+            }
+            return _refreshing.then(function () {
+              _refreshing = null;
+              var opts2 = {
+                method: method,
+                headers: _headers(useAuth)
+              };
+              if (body !== undefined) opts2.body = JSON.stringify(body);
+              _log('retry after refresh:', method, path);
+              return fetch(url, opts2).then(function (res2) {
+                if (!res2.ok) {
+                  return res2.text().then(function (txt2) {
+                    var msg2 = 'HTTP ' + res2.status + ': ' + (txt2 || res2.statusText);
+                    _err(msg2);
+                    throw new Error(msg2);
+                  });
+                }
+                if (res2.status === 204) return null;
+                return res2.json();
+              });
+            });
+          }
           var msg = 'HTTP ' + res.status + ': ' + (txt || res.statusText);
           _err(msg);
           throw new Error(msg);
