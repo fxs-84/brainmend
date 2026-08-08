@@ -106,10 +106,16 @@ try {
 
   // 切到头动追踪 tab
   await page.evaluate(() => window.BmTherapistUI.switchReportTab('tracking'));
-  await page.waitForTimeout(3000);
+  // 等列表刷新 (加 active tab + 等 _loadTrackingRecords 完成)
+  await page.waitForFunction(() => {
+    const list = document.getElementById("bm-report-list");
+    const activeTab = document.querySelector("[data-rtab='tracking'].active");
+    return list && activeTab && !list.textContent.includes('加载中');
+  }, null, { timeout: 10000 });
+  await page.waitForTimeout(2000);
   const trackingItems = await page.evaluate(() => {
     const list = document.getElementById("bm-report-list");
-    return list ? Array.from(list.querySelectorAll(".bm-list-item")).map(el => el.textContent.trim().substring(0, 60)) : [];
+    return list ? Array.from(list.querySelectorAll(".bm-list-item")).map(el => el.textContent.trim().substring(0, 80)) : [];
   });
   console.log("  头动追踪报告列表:", trackingItems);
   if (submitRes.ok) {

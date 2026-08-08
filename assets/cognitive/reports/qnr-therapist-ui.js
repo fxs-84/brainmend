@@ -464,6 +464,8 @@
     if (subEl) subEl.textContent = new Date(rec.date).toLocaleString('zh-CN') + ' · 云端存档';
 
     modal.classList.add('show');
+    // 原版 .modal z-index=1000 太低, 被其他 overlay 遮住; 提高到 50000
+    modal.style.zIndex = '50000';
   }
 
   // 加载认知报告
