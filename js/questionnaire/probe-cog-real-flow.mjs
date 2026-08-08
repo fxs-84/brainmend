@@ -30,7 +30,7 @@ try {
   const tCtx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   const tp = await tCtx.newPage();
   tp.on("console", (m) => logs.push(`[T-${m.type()}] ${m.text()}`));
-  await tp.goto(base + "/index.html?v=" + Date.now(), { waitUntil: "domcontentloaded", timeout: 90000 });
+  await tp.goto(base + "/index.html?v=" + Date.now() + "&t=" + Math.random(), { waitUntil: "domcontentloaded", timeout: 90000 });
   await tp.waitForFunction(() => window.SupabaseClient && window.SupabaseClient.isConfigured(), null, { timeout: 30000 });
   await tp.evaluate(async ({ email, pw }) => await window.SupabaseClient.signIn(email, pw), { email: TEST_EMAIL, pw: TEST_PASSWORD });
 
@@ -66,7 +66,7 @@ try {
   const scanUrl = base + "/index.html?mode=cognitive&start=quick6&share_token=" + shareToken +
     "&name=" + encodeURIComponent(tag) + "&age=55&gender=" + encodeURIComponent("男");
   console.log("  扫码 URL:", scanUrl);
-  await pp.goto(scanUrl, { waitUntil: "domcontentloaded", timeout: 90000 });
+  await pp.goto(scanUrl + "&t=" + Math.random(), { waitUntil: "domcontentloaded", timeout: 90000 });
   await pp.waitForTimeout(3000);
 
   // 验证沙箱激活
@@ -128,7 +128,7 @@ try {
   // 重新打开登录页拿新 session
   const tCtx2 = await browser.newContext();
   const tp2 = await tCtx2.newPage();
-  await tp2.goto(base + "/index.html", { waitUntil: "domcontentloaded", timeout: 90000 });
+  await tp2.goto(base + "/index.html?v=" + Math.random(), { waitUntil: "domcontentloaded", timeout: 90000 });
   await tp2.waitForFunction(() => window.SupabaseClient && window.SupabaseClient.isConfigured(), null, { timeout: 30000 });
   const sess2 = await tp2.evaluate(async ({ email, pw }) => {
     return await window.SupabaseClient.signIn(email, pw);
