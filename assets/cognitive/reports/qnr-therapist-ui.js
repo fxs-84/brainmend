@@ -327,6 +327,7 @@
     var list = document.getElementById('bm-report-list');
     if (!list) return;
     global.SupabaseClient.listMyAssessments({ limit: 50 }).then(function (rows) {
+      _qnrRows = rows || [];
       if (!rows || !rows.length) {
         list.innerHTML = '<div class="bm-empty">还没有自评报告。等患者扫码提交...</div>';
         return;
@@ -334,12 +335,12 @@
       list.innerHTML = rows.map(function (r) {
         var sevColor = { normal:'#16a34a', mild:'#ca8a04', moderate:'#ea580c', severe:'#dc2626' };
         var sevLabel = { normal:'正常', mild:'轻度', moderate:'中度', severe:'重度' };
-        return '<div class="bm-list-item">' +
+        return '<div class="bm-list-item" style="cursor:pointer;" onclick="window.BmTherapistUI.openQnrReport(\'' + r.id + '\')" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'transparent\'">' +
           '<div class="bm-list-item-head">' +
             '<div><b>' + _esc(r.patient_name) + '</b> ' + (r.patient_age ? '· ' + r.patient_age + '岁' : '') + ' ' + (r.patient_gender || '') + '</div>' +
             '<span style="background:' + (sevColor[r.worst_severity] || '#94a3b8') + ';color:#fff;font-size:11px;padding:2px 10px;border-radius:999px;">' + (sevLabel[r.worst_severity] || '—') + ' · ' + r.percent + '%</span>' +
           '</div>' +
-          '<div class="bm-list-item-meta">' + new Date(r.submitted_at).toLocaleString('zh-CN') + ' · ' + (r.source || 'qr') + '</div>' +
+          '<div class="bm-list-item-meta">' + new Date(r.submitted_at).toLocaleString('zh-CN') + ' · ' + (r.source || 'qr') + ' · 点击查看报告</div>' +
           '<div style="margin-top:6px;font-size:12px;color:#475569;">' + (r.burden_groups && r.burden_groups.length ? '高负担: ' + _esc(r.burden_groups.join('、')) : '无明显负担') + '</div>' +
         '</div>';
       }).join('');
@@ -350,6 +351,7 @@
 
   // ============ 报告 tab (自评 / 认知 / 步态) ============
   var _currentReportTab = 'qnr';
+  var _qnrRows = [];
   var _cogRows = [];
   var _gaitRows = [];
 
@@ -495,6 +497,90 @@
     });
   }
 
+  // 自评报告详情: 从已缓存的 _qnrRows 取 (listMyAssessments select=* 已含 by_region 等 JSON 字段),
+// 转 rec 格式, 复用 index.html 上的 _qnrRenderCloud
+  function openQnrReport(id) {
+    var rec = null;
+    for (var i = 0; i < _qnrRows.length; i++) {
+      if (_qnrRows[i].id === id) { rec = _qnrRows[i]; break; }
+    }
+    if (!rec) { alert('记录未找到,请刷新列表'); return; }
+    // 关掉工作台 modal (报告以 cog-report-overlay 全屏显示)
+    var dash = document.getElementById('bm-dashboard-modal');
+    if (dash) dash.remove();
+    // groupDefs/regionDefs 从预加载的 __qnrData 取
+    var dataMod = window.__qnrData || {};
+    var groupDefs = dataMod.REGION_GROUPS || [];
+    var regionDefs = dataMod.BRAIN_REGION_DEFS || [];
+    var items = rec.responses || {};
+    var formatted = {
+      patientInfo: { name: rec.patient_name, age: rec.patient_age, gender: rec.patient_gender, id: '' },
+      date: rec.submitted_at ? rec.submitted_at.substring(0, 10) : '',
+      time: rec.submitted_at ? rec.submitted_at.substring(11, 16) : '',
+      type: 'questionnaire',
+      overallScore: rec.percent,
+      qnr: {
+        byRegion: rec.by_region || {},
+        severityByRegion: rec.severity_by_region || {},
+        affectedRegions: rec.affected_regions || [],
+        total: rec.total_score,
+        percent: rec.percent,
+        worstSeverity: rec.worst_severity,
+        burdenGroups: rec.burden_groups || [],
+        phoneEar: rec.phone_ear,
+        groupDefs: groupDefs,
+        regionDefs: regionDefs,
+        items: items
+      }
+    };
+    // 优先调 index.html 的 _qnrRenderCloud (已暴露, 等价于 _qnrRenderReport)
+    if (typeof window._qnrRenderCloud === 'function') {
+      window._qnrRenderCloud(formatted);
+      return;
+    }
+    // 降级: 自渲染
+    _renderQnrReportFallback(formatted);
+  }
+
+  // 自评报告渲染降级 (BmTherapistUI 模式下, 没有 index.html 的 _qnrRenderCloud)
+  function _renderQnrReportFallback(rec) {
+    var d = rec.qnr || {};
+    var p = rec.patientInfo || {};
+    var overlay = document.createElement('div');
+    overlay.id = 'bm-qnr-detail-modal';
+    overlay.className = 'bm-modal-overlay';
+    overlay.style.cssText = 'z-index:35000;align-items:flex-start;padding:20px;overflow:auto;';
+    overlay.innerHTML =
+      '<div class="bm-modal" style="max-width:720px;text-align:left;" onclick="event.stopPropagation()">' +
+        '<h3>📋 ' + _esc(p.name || '患者') + ' · 神经系统自评报告 ' +
+          '<span style="cursor:pointer;font-size:24px;color:#94a3b8;float:right;line-height:1;" onclick="document.getElementById(\'bm-qnr-detail-modal\').remove()">×</span>' +
+        '</h3>' +
+        '<div class="bm-modal-body" id="bm-qnr-detail-body"></div>' +
+      '</div>';
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+    var body = document.getElementById('bm-qnr-detail-body');
+    // 简洁列表视图
+    var html = '<div style="font-size:12px;color:#64748b;margin-bottom:12px;">' + (rec.date || '') + ' ' + (rec.time || '') + ' · 100题 · 严重度: ' + _esc(d.worstSeverity || 'normal') + ' · 得分: ' + (d.percent != null ? d.percent : 0) + '%</div>';
+    if (d.burdenGroups && d.burdenGroups.length) {
+      html += '<div style="background:#fff7ed;padding:8px 12px;border-radius:8px;margin-bottom:12px;color:#9a3412;">高负担区: ' + _esc(d.burdenGroups.join('、')) + '</div>';
+    }
+    (d.groupDefs || []).forEach(function(g){
+      html += '<div style="background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:8px;"><b>' + _esc(g.label) + '</b><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:8px;">';
+      g.regionIds.forEach(function(rid){
+        var def = (d.regionDefs || []).find(function(x){ return x.id === rid; });
+        if (!def) return;
+        var score = d.byRegion[rid] || 0;
+        var max = Math.ceil((d.items ? Object.keys(d.items).filter(function(k){ return parseInt(k) >= def.range[0] && parseInt(k) <= def.range[1] && parseInt(k) !== 46; }).length : 0) * 4);
+        var sev = d.severityByRegion[rid] || 'normal';
+        var sevColor = { normal:'#16a34a', mild:'#ca8a04', moderate:'#ea580c', severe:'#dc2626' };
+        html += '<div style="background:#fff;padding:6px;border-radius:6px;font-size:12px;"><div>' + _esc(def.label) + '</div><div style="color:#64748b;">' + score + ' / ' + max + ' 分</div><div style="display:inline-block;background:' + sevColor[sev] + ';color:#fff;padding:1px 8px;border-radius:8px;font-size:10px;">' + _esc(sev) + '</div></div>';
+      });
+      html += '</div></div>';
+    });
+    body.innerHTML = html + '<div style="margin-top:14px;font-size:11px;color:#94a3b8;">提示: 从 index.html 进入可看完整 PDF 导出</div>';
+  }
+
   function showQR(token, patientName, kind) {
     var url = _buildLinkUrl(kind || 'qnr', { token: token });
     var qrImgUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encodeURIComponent(url);
@@ -566,6 +652,7 @@
     switchReportTab: switchReportTab,
     openCognitiveReport: openCognitiveReport,
     openGaitReport: openGaitReport,
+    openQnrReport: openQnrReport,
     // 刷新工作台数据 (share_links + 当前 tab 的报告)
     refreshDashboard: function () {
       _loadShareLinks();

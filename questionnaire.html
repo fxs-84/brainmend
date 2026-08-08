@@ -563,31 +563,48 @@
 
     // 完成后: 弹登记表单 → 填完 → 在本页面内联渲染报告 (不再跳回 index.html)
     // 顶层设计: 客户做完问卷应留在问卷页看报告, 首页是治疗师后台, 客户不能进入
+    //   · 治疗师工作台已预填姓名/年龄/性别 → 患者无需再填, 跳过弹窗
+    //   · 患者自访问 (URL 无预填) → 弹表单, 一次填好
     window.addEventListener('qnr:finished', function(e){
       var payload = e.detail || {};
+      // 顶层设计: 治疗师预填即定向, 患者无需再填
+      if (patient.name) {
+        _renderAfterQnr(payload, {
+          name: patient.name,
+          age: patient.age || '',
+          gender: patient.gender || '',
+          id: patient.id || ''
+        });
+        return;
+      }
       _showQnrRegForm(function(info){
-        var data = {
-          items: payload.items || {},
-          phoneEar: payload.phoneEar || null,
-          name: info.name,
-          age: info.age,
-          gender: info.gender,
-          id: info.id
-        };
-        try { sessionStorage.setItem('qnr_completed', '1'); } catch(_){}
-        // 等评分/数据模块就绪 (timeout 5s) 再渲染
-        var startTs = Date.now();
-        var waitDeps = function() {
-          if (window.__qnrInlineReportReady) { _saveAndRenderReport(data); return; }
-          if (Date.now() - startTs > 5000) {
-            alert('报告模块加载失败,请刷新页面重试。');
-            return;
-          }
-          setTimeout(waitDeps, 50);
-        };
-        waitDeps();
+        _renderAfterQnr(payload, info);
       });
     });
+
+    // 抽取完成后的渲染流程, 预填和手动提交共用
+    function _renderAfterQnr(payload, info) {
+      var data = {
+        items: payload.items || {},
+        phoneEar: payload.phoneEar || null,
+        name: info.name,
+        age: info.age,
+        gender: info.gender,
+        id: info.id
+      };
+      try { sessionStorage.setItem('qnr_completed', '1'); } catch(_){}
+      // 等评分/数据模块就绪 (timeout 5s) 再渲染
+      var startTs = Date.now();
+      var waitDeps = function() {
+        if (window.__qnrInlineReportReady) { _saveAndRenderReport(data); return; }
+        if (Date.now() - startTs > 5000) {
+          alert('报告模块加载失败,请刷新页面重试。');
+          return;
+        }
+        setTimeout(waitDeps, 50);
+      };
+      waitDeps();
+    }
 
     // ===== 云端上传: 只走 Supabase (无 GitHub 兜底) =====
     // 状态写回 cog_records 并刷新报告页云端状态行

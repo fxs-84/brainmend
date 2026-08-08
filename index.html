@@ -219,6 +219,7 @@
     <div id="qnr-qr-overlay" style="display:none;position:fixed;inset:0;z-index:25500;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
         <div style="background:#fff;border-radius:16px;padding:30px;text-align:center;max-width:360px;width:90%;">
             <h3 style="color:#1a1a2e;margin:0 0 6px;">📱 扫码开始神经系统自评</h3>
+            <p id="qnr-qr-patient-name" style="color:#0d9488;font-size:13px;font-weight:600;margin:0 0 12px;display:none;"></p>
             <p style="color:#666;font-size:12px;margin:0 0 16px;">请患者使用手机扫描二维码，24 小时内有效</p>
             <div id="qnr-qr-canvas" style="display:inline-block;"></div>
             <p id="qnr-qr-url" style="color:#999;font-size:11px;margin:12px 0 0;word-break:break-all;"></p>
@@ -231,12 +232,31 @@
 
     <!-- 神经系统自评入口弹窗 (与认知 modal 同型) -->
     <div id="qnr-modal-overlay" class="cog-modal-overlay">
-        <div class="cog-modal" style="position:relative;max-width:420px;">
+        <div class="cog-modal" style="position:relative;max-width:440px;">
             <button class="cog-modal-close" id="qnr-modal-close">&times;</button>
             <h3>📋 神经系统状态自评</h3>
             <div class="subtitle">100 题 · 16 分区脑功能地图 · 教育版</div>
-            <button class="cog-modal-full" id="qnr-modal-start" style="background:linear-gradient(135deg,#f093fb,#f5576c);">🚀 开始测评</button>
+            <!-- 顶层设计: 走 Supabase share_link 统一路径, 与工作台一致 -->
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:12px;text-align:left;">
+                <div style="font-size:12px;color:#64748b;margin-bottom:8px;">📝 定向发放(可选填, 填了患者就不用再填)</div>
+                <div style="display:flex;gap:6px;margin-bottom:6px;">
+                    <input id="qnr-modal-name" type="text" placeholder="患者姓名 (留空=匿名)" style="flex:1;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;">
+                </div>
+                <div style="display:flex;gap:6px;">
+                    <input id="qnr-modal-age" type="number" placeholder="年龄" min="3" max="120" style="flex:1;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;">
+                    <select id="qnr-modal-gender" style="flex:1;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;">
+                        <option value="">性别 (可选)</option>
+                        <option>男</option>
+                        <option>女</option>
+                        <option>其他</option>
+                    </select>
+                </div>
+            </div>
+            <button class="cog-modal-full" id="qnr-modal-start" style="background:linear-gradient(135deg,#f093fb,#f5576c);">🚀 开始测评 (自己/即时测试)</button>
             <button id="qnr-modal-share" style="display:block;width:100%;margin-top:10px;padding:14px;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:16px;font-weight:700;box-shadow:0 4px 16px rgba(0,217,165,0.4);transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform='scale(1.02)';this.style.boxShadow='0 6px 20px rgba(0,217,165,0.6)';" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 4px 16px rgba(0,217,165,0.4)';">📱 生成二维码 (患者扫码做题)</button>
+            <div style="margin-top:12px;font-size:11px;color:#64748b;text-align:center;">
+                报告统一保存到治疗师工作台云端 · <a href="#" id="qnr-modal-open-dashboard" style="color:#0284c7;text-decoration:underline;">打开工作台</a>
+            </div>
         </div>
     </div>
 
@@ -1803,15 +1823,80 @@
         var qnrModalClose = document.getElementById('qnr-modal-close');
         if (qnrModalClose) qnrModalClose.addEventListener('click', function() { qnrModal.classList.remove('show'); });
         if (qnrModal) qnrModal.addEventListener('click', function(e) { if (e.target === qnrModal) qnrModal.classList.remove('show'); });
+        // 读 modal 上的预填表单 (姓名/年龄/性别)
+        function _readQnrModalPrefill() {
+          return {
+            name: (document.getElementById('qnr-modal-name')?.value || '').trim(),
+            age: (document.getElementById('qnr-modal-age')?.value || '').trim(),
+            gender: (document.getElementById('qnr-modal-gender')?.value || '').trim()
+          };
+        }
+        // 走 Supabase 创建 share_link (统一路径, 与工作台一致), 返回 Promise<link>
+        function _qnrCreateLink(kind) {
+          var pf = _readQnrModalPrefill();
+          if (!window.SupabaseClient || !window.SupabaseClient.isConfigured()) {
+            return Promise.reject(new Error('Supabase 未配置'));
+          }
+          if (!window.SupabaseClient.getSession() || !window.SupabaseClient.getSession().access_token) {
+            return Promise.reject(new Error('请先在顶部「治疗师登录」登录, 才能生成云端链接'));
+          }
+          return window.SupabaseClient.createShareLink({
+            name: pf.name || null,
+            age: pf.age || null,
+            gender: pf.gender || null,
+            expiresDays: 7,
+            kind: kind || 'qnr'
+          });
+        }
+        // 构建 questionnaire.html URL (含 share_token + 可选预填, 走 Supabase 路径)
+        function _buildQnrUrl(link) {
+          var baseUrl = window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'questionnaire.html';
+          var params = ['sandbox=1', 'share_token=' + encodeURIComponent(link.token)];
+          if (link.prefilled_name) params.push('name=' + encodeURIComponent(link.prefilled_name));
+          if (link.prefilled_age) params.push('age=' + encodeURIComponent(link.prefilled_age));
+          if (link.prefilled_gender) params.push('gender=' + encodeURIComponent(link.prefilled_gender));
+          return baseUrl + '?' + params.join('&');
+        }
         var qnrModalStart = document.getElementById('qnr-modal-start');
         if (qnrModalStart) qnrModalStart.addEventListener('click', function() {
-            qnrModal.classList.remove('show');
-            window.location.href = './questionnaire.html';
+            // 顶层设计: 走 Supabase share_link 统一路径
+            var btn = qnrModalStart;
+            var origText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '⏳ 创建链接…';
+            _qnrCreateLink('qnr').then(function(link){
+              qnrModal.classList.remove('show');
+              window.location.href = _buildQnrUrl(link);
+            }).catch(function(err){
+              btn.disabled = false;
+              btn.textContent = origText;
+              alert('创建测评链接失败: ' + (err.message || err) + '\n\n请先在顶部点「治疗师登录」登录账号');
+            });
         });
         var qnrModalShare = document.getElementById('qnr-modal-share');
         if (qnrModalShare) qnrModalShare.addEventListener('click', function() {
-            qnrModal.classList.remove('show');
-            _showQnrQR();
+            // 顶层设计: 走 Supabase share_link 统一路径, 让治疗师分享给患者
+            var btn = qnrModalShare;
+            var origText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '⏳ 创建链接…';
+            _qnrCreateLink('qnr').then(function(link){
+              qnrModal.classList.remove('show');
+              btn.disabled = false;
+              btn.textContent = origText;
+              _showQnrQRFromLink(link);
+            }).catch(function(err){
+              btn.disabled = false;
+              btn.textContent = origText;
+              alert('创建二维码失败: ' + (err.message || err) + '\n\n请先在顶部点「治疗师登录」登录账号');
+            });
+        });
+        // 打开工作台 (入口快捷链接)
+        var qnrModalDashboard = document.getElementById('qnr-modal-open-dashboard');
+        if (qnrModalDashboard) qnrModalDashboard.addEventListener('click', function(e){
+          e.preventDefault();
+          qnrModal.classList.remove('show');
+          if (window.BmTherapistUI) window.BmTherapistUI.openDashboard();
         });
 
         // 2) QR 码 URL 构建 (与 _buildQRUrl 同结构)
@@ -1841,13 +1926,24 @@
             return baseUrl + '?' + params.join('&');
         }
 
-        // 3) QR 码显示 (镜像 _showQRForTest)
-        function _showQnrQR() {
-            var url = _buildQnrQRUrl();
+        // 3) QR 码显示 (镜像 _showQRForTest) — 接受 Supabase share_link, 走统一路径
+        function _showQnrQRFromLink(link) {
+            var url = _buildQnrUrl(link);
             var overlay = document.getElementById('qnr-qr-overlay');
             if (!overlay) return;
             _qnrCleanupOverlays(); // 打开前清理其它残留覆盖层
             overlay.style.display = 'flex';
+            // 显示患者姓名 (如有预填)
+            var nameEl = document.getElementById('qnr-qr-patient-name');
+            if (nameEl) {
+              if (link.prefilled_name) {
+                nameEl.textContent = '👤 患者: ' + link.prefilled_name;
+                nameEl.style.display = '';
+              } else {
+                nameEl.textContent = '👤 匿名 (患者扫码后填写)';
+                nameEl.style.display = '';
+              }
+            }
             document.getElementById('qnr-qr-url').textContent = url;
             var canvasDiv = document.getElementById('qnr-qr-canvas');
             function renderSvg() {
@@ -1872,6 +1968,16 @@
                 canvasDiv.innerHTML = '<div style="padding:20px;color:#999;font-size:12px;">QR库加载失败<br><a href="' + url + '" style="color:#0086FF;">' + url + '</a></div>';
             };
             document.head.appendChild(s);
+        }
+        // 向后兼容 (保留旧入口, 但内部走 _buildQnrQRUrl 本地 URL, 已废弃, 仅兜底)
+        function _showQnrQR() {
+            console.warn('[brainmend] _showQnrQR 已废弃, 请用 _showQnrQRFromLink(Supabase link)');
+            _qnrCreateLink('qnr').then(_showQnrQRFromLink).catch(function(e){ alert(e.message); });
+        }
+        // 旧的本地 URL 构建 (已废弃, 仅在 _showQnrQR 兜底路径不再使用时保留)
+        function _buildQnrQRUrl() {
+            console.warn('[brainmend] _buildQnrQRUrl 已废弃, 请走 Supabase share_link');
+            return window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'questionnaire.html?sandbox=1';
         }
 
         // 4) 分享 + 关闭 (与 cog-qr-share 同)
