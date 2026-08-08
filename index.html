@@ -1313,8 +1313,16 @@
             try { console.log('[cog-flow v5] _startPatientTest, sandbox=ON, type=' + testType); } catch(e){}
             window.D = window.D || {};
             window.D.clientInfo = {};
-            window._cogPatientInfo = null;
-            try { localStorage.removeItem('cervical_current_client'); } catch(e) {}
+            // 预填患者信息 (来自 share_link URL: name/age/gender)
+            // 后续登记表单 _showPatientRegForm 会用它预填 input, 患者只需确认
+            if (patientInfo && patientInfo.name) {
+              window._cogPatientInfo = patientInfo;
+              window.D.clientInfo = patientInfo;
+              try { localStorage.setItem('cervical_current_client', JSON.stringify(patientInfo)); } catch(e) {}
+            } else {
+              window._cogPatientInfo = null;
+            }
+            try { if (!window._cogPatientInfo) localStorage.removeItem('cervical_current_client'); } catch(e) {}
             // 清空 header
             var lbl = document.getElementById('current-patient');
             if (lbl) lbl.textContent = '';
@@ -2190,7 +2198,7 @@
 <!-- ⚠️ 必须在 qnr-supabase.js 之前加载, 否则 URL/KEY 是 undefined -->
 <script src="./assets/config/supabase-config.js" onerror="console.warn('[brainmend] supabase-config.js 未配置')"></script>
 <script src="./assets/cognitive/reports/qnr-supabase.js?v=20260808f"></script>
-<script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260808e"></script>
+<script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260808f"></script>
 <script src="./assets/cognitive/reports/qnr-region-detail.js?v=20260808a"></script>
 <script>
   // ===== 头动追踪 (cervical_tracking_records) · 报告入库 hook =====

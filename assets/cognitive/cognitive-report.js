@@ -2714,6 +2714,15 @@ import {
     overlay.id = 'cog-reg-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:30000;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;';
     overlay.setAttribute('data-cog-reg', 'v4');
+    // 预填患者信息 (来自 share_link URL 或治疗师登记)
+    var pre = null;
+    try {
+      if (window._cogPatientInfo && window._cogPatientInfo.name) pre = window._cogPatientInfo;
+      else if (window.D && window.D.clientInfo && window.D.clientInfo.name) pre = window.D.clientInfo;
+    } catch(e) {}
+    var preName = pre ? String(pre.name).replace(/"/g, '&quot;') : '';
+    var preAge = pre && pre.age ? String(pre.age).replace(/"/g, '&quot;') : '';
+    var preGender = pre && pre.gender ? String(pre.gender).replace(/"/g, '&quot;') : '';
     var card = document.createElement('div');
     card.style.cssText = 'background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:16px;padding:30px 28px;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5);';
     card.innerHTML =
@@ -2721,19 +2730,19 @@ import {
       '<p style="color:#bdc3c7;text-align:center;font-size:12px;margin:0 0 22px;">测试已完成 · 填写信息后生成报告</p>' +
       '<div style="margin-bottom:14px;">' +
         '<label style="display:block;color:#bdc3c7;font-size:12px;margin-bottom:6px;">姓名 *</label>' +
-        '<input id="cog-reg-name" type="text" placeholder="如：张三" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:8px;font-size:15px;box-sizing:border-box;outline:none;">' +
+        '<input id="cog-reg-name" type="text" placeholder="如：张三" value="' + preName + '" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:8px;font-size:15px;box-sizing:border-box;outline:none;">' +
       '</div>' +
       '<div style="margin-bottom:14px;">' +
         '<label style="display:block;color:#bdc3c7;font-size:12px;margin-bottom:6px;">年龄</label>' +
-        '<input id="cog-reg-age" type="number" min="3" max="120" placeholder="如：35" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:8px;font-size:15px;box-sizing:border-box;outline:none;">' +
+        '<input id="cog-reg-age" type="number" min="3" max="120" placeholder="如：35" value="' + preAge + '" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:8px;font-size:15px;box-sizing:border-box;outline:none;">' +
       '</div>' +
       '<div style="margin-bottom:22px;">' +
         '<label style="display:block;color:#bdc3c7;font-size:12px;margin-bottom:6px;">性别</label>' +
         '<select id="cog-reg-gender" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:8px;font-size:15px;box-sizing:border-box;outline:none;">' +
           '<option value="" style="background:#1a1a2e;">请选择</option>' +
-          '<option value="男" style="background:#1a1a2e;">男</option>' +
-          '<option value="女" style="background:#1a1a2e;">女</option>' +
-          '<option value="其他" style="background:#1a1a2e;">其他</option>' +
+          '<option value="男"' + (preGender === '男' ? ' selected' : '') + ' style="background:#1a1a2e;">男</option>' +
+          '<option value="女"' + (preGender === '女' ? ' selected' : '') + ' style="background:#1a1a2e;">女</option>' +
+          '<option value="其他"' + (preGender === '其他' ? ' selected' : '') + ' style="background:#1a1a2e;">其他</option>' +
         '</select>' +
       '</div>' +
       '<button id="cog-reg-submit" style="display:block;width:100%;padding:14px;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:16px;font-weight:700;">生成报告</button>';
