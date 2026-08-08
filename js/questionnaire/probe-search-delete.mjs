@@ -26,7 +26,7 @@ page.on("console", (m) => logs.push(`[${m.type()}] ${m.text()}`));
 page.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}`));
 
 try {
-  await page.goto(base + "/index.html", { waitUntil: "domcontentloaded", timeout: 90000 });
+  await page.goto(base + "/index.html?v=" + Date.now(), { waitUntil: "domcontentloaded", timeout: 90000 });
   await page.waitForFunction(() => window.SupabaseClient && window.SupabaseClient.isConfigured(), null, { timeout: 60000 });
   await page.evaluate(async ({ email, pw }) => await window.SupabaseClient.signIn(email, pw), { email: TEST_EMAIL, pw: TEST_PASSWORD });
 

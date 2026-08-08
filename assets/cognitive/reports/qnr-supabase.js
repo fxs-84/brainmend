@@ -395,7 +395,7 @@
       var esc = query.replace(/[%_]/g, '\\$&');
       q += '&or=(patient_name.ilike.*' + encodeURIComponent(esc) + '*,'
         + 'patient_gender.ilike.*' + encodeURIComponent(esc) + '*,'
-        + 'is_quick6::text.ilike.*' + encodeURIComponent(esc) + '*)';
+        + 'source.ilike.*' + encodeURIComponent(esc) + '*)';
     }
     return _rest('GET', '/rest/v1/cognitive_assessments' + q, undefined, true);
   }
