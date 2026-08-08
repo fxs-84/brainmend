@@ -193,6 +193,40 @@
     return _rest('GET', '/rest/v1/cognitive_assessments' + q, undefined, true);
   }
 
+  // 患者 anon-key 提交头动追踪报告 (走 SECURITY DEFINER RPC, therapist_id = auth.uid())
+  // 场景: 治疗师诊室里当面做, 不走 share_link
+  // payload: { patient_name, patient_age, patient_gender, patient_id, date, overall, scores, details, vestibular, recommendations }
+  function submitTrackingRecord(input) {
+    var payload = input || {};
+    return _rest('POST', '/rest/v1/rpc/submit_tracking_record', {
+      p_payload: {
+        patient_name: payload.patient_name || '',
+        patient_age: payload.patient_age || null,
+        patient_gender: payload.patient_gender || null,
+        patient_id: payload.patient_id || null,
+        date: payload.date || new Date().toISOString(),
+        overall: payload.overall != null ? payload.overall : null,
+        scores: payload.scores || {},
+        details: payload.details || {},
+        vestibular: payload.vestibular || {},
+        recommendations: payload.recommendations || []
+      }
+    }, true)
+      .then(function (id) {
+        _log('submit tracking ok, assessment_id:', id);
+        return id;
+      });
+  }
+
+  // 治疗师查询自己的头动追踪报告 (auth)
+  function listMyTrackingRecords(opts) {
+    opts = opts || {};
+    var q = '?select=*&order=date.desc';
+    if (opts.limit) q += '&limit=' + opts.limit;
+    if (opts.offset) q += '&offset=' + opts.offset;
+    return _rest('GET', '/rest/v1/cervical_tracking_records' + q, undefined, true);
+  }
+
   // 治疗师查询自己的步态报告 (auth)
   function listMyGaitAssessments(opts) {
     opts = opts || {};
@@ -288,9 +322,11 @@
     submitQnrAssessment: submitQnrAssessment,
     submitCognitiveAssessment: submitCognitiveAssessment,
     submitGaitAssessment: submitGaitAssessment,
+    submitTrackingRecord: submitTrackingRecord,
     listMyAssessments: listMyAssessments,
     listMyCognitiveAssessments: listMyCognitiveAssessments,
     listMyGaitAssessments: listMyGaitAssessments,
+    listMyTrackingRecords: listMyTrackingRecords,
     listShareLinks: listShareLinks,
     createShareLink: createShareLink,
     revokeShareLink: revokeShareLink,

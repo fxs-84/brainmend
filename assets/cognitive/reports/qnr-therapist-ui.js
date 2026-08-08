@@ -253,12 +253,13 @@
           '<div id="bm-link-list" style="margin-bottom:18px;">' +
             '<div class="bm-empty">加载中...</div>' +
           '</div>' +
-          // 患者报告 (自评 / 认知 / 步态)
+          // 患者报告 (自评 / 认知 / 步态 / 头动追踪)
           '<div style="font-weight:600;color:#0f172a;margin-bottom:10px;">📊 患者报告</div>' +
           '<div class="bm-modal-tabs" style="margin-bottom:12px;">' +
             '<div class="bm-modal-tab active" data-rtab="qnr" onclick="window.BmTherapistUI.switchReportTab(\'qnr\')">自评</div>' +
             '<div class="bm-modal-tab" data-rtab="cognitive" onclick="window.BmTherapistUI.switchReportTab(\'cognitive\')">认知</div>' +
             '<div class="bm-modal-tab" data-rtab="gait" onclick="window.BmTherapistUI.switchReportTab(\'gait\')">步态</div>' +
+            '<div class="bm-modal-tab" data-rtab="tracking" onclick="window.BmTherapistUI.switchReportTab(\'tracking\')">头动追踪</div>' +
           '</div>' +
           '<div id="bm-report-list">' +
             '<div class="bm-empty">加载中...</div>' +
@@ -367,7 +368,95 @@
     if (list) list.innerHTML = '<div class="bm-empty">加载中...</div>';
     if (tab === 'cognitive') _loadCognitiveAssessments();
     else if (tab === 'gait') _loadGaitAssessments();
+    else if (tab === 'tracking') _loadTrackingRecords();
     else _loadAssessments();
+  }
+
+  // 加载头动追踪报告 (云端 cervical_tracking_records)
+  var _trackingRows = [];
+  function _loadTrackingRecords() {
+    var list = document.getElementById('bm-report-list');
+    if (!list) return;
+    global.SupabaseClient.listMyTrackingRecords({ limit: 50 }).then(function (rows) {
+      _trackingRows = rows || [];
+      if (!_trackingRows.length) {
+        list.innerHTML = '<div class="bm-empty">还没有头动追踪报告。等治疗师做完保存...</div>';
+        return;
+      }
+      list.innerHTML = _trackingRows.map(function (r) {
+        var overall = r.overall != null ? r.overall : 0;
+        var overallColor = overall >= 80 ? '#16a34a' : (overall >= 60 ? '#ca8a04' : (overall >= 40 ? '#ea580c' : '#dc2626'));
+        return '<div class="bm-list-item" style="cursor:pointer;" onclick="window.BmTherapistUI.openTrackingReport(\'' + r.id + '\')" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'transparent\'">' +
+          '<div class="bm-list-item-head">' +
+            '<div><b>' + _esc(r.patient_name || '匿名') + '</b> ' + (r.patient_age ? '· ' + r.patient_age + '岁' : '') + ' ' + (r.patient_gender || '') + '</div>' +
+            '<span style="background:' + overallColor + ';color:#fff;font-size:11px;padding:2px 10px;border-radius:999px;">综合 ' + overall + ' 分</span>' +
+          '</div>' +
+          '<div class="bm-list-item-meta">' + new Date(r.date).toLocaleString('zh-CN') + ' · 头动追踪 · 点击查看报告</div>' +
+        '</div>';
+      }).join('');
+    }).catch(function (err) {
+      list.innerHTML = '<div class="bm-empty" style="color:#dc2626;">加载失败: ' + (err.message || err) + '</div>';
+    });
+  }
+
+  // 头动追踪报告详情 (modal, 不嵌入 cog-report-overlay 因为 UI 位置独立)
+  function openTrackingReport(id) {
+    var rec = null;
+    for (var i = 0; i < _trackingRows.length; i++) {
+      if (_trackingRows[i].id === id) { rec = _trackingRows[i]; break; }
+    }
+    if (!rec) { alert('记录未找到,请刷新列表'); return; }
+    // 关掉工作台 modal
+    var dash = document.getElementById('bm-dashboard-modal');
+    if (dash) dash.remove();
+    // 渲染详情 modal (复用头动追踪报告的视觉风格)
+    var existing = document.getElementById('bm-tracking-detail-modal');
+    if (existing) existing.remove();
+    var overlay = document.createElement('div');
+    overlay.id = 'bm-tracking-detail-modal';
+    overlay.className = 'bm-modal-overlay';
+    overlay.style.cssText = 'z-index:35000;align-items:flex-start;padding:20px;overflow:auto;';
+    var scores = rec.scores || {};
+    var scoreLabels = {
+      position: '位置觉', stability: '稳定性', rom: '活动范围', coordination: '协调性', reaction: '反应时'
+    };
+    var scoreRows = Object.keys(scoreLabels).map(function (k) {
+      var v = scores[k];
+      if (v == null) return '';
+      var color = v >= 80 ? '#16a34a' : (v >= 60 ? '#ca8a04' : (v >= 40 ? '#ea580c' : '#dc2626'));
+      var pct = Math.max(0, Math.min(100, v));
+      return '<div style="margin-bottom:10px;">' +
+        '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">' +
+          '<span>' + scoreLabels[k] + '</span>' +
+          '<span style="font-weight:700;color:' + color + ';">' + v + ' 分</span>' +
+        '</div>' +
+        '<div style="height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + color + ';border-radius:4px;transition:width 0.4s;"></div></div>' +
+      '</div>';
+    }).join('');
+    var recs = (rec.recommendations || []).map(function (r) {
+      return '<li style="margin-bottom:4px;">' + _esc(typeof r === 'string' ? r : (r.text || JSON.stringify(r))) + '</li>';
+    }).join('');
+    overlay.innerHTML =
+      '<div class="bm-modal" style="max-width:640px;text-align:left;" onclick="event.stopPropagation()">' +
+        '<h3>🎯 ' + _esc(rec.patient_name || '匿名') + ' · 头动追踪报告 ' +
+          '<span style="cursor:pointer;font-size:24px;color:#94a3b8;float:right;line-height:1;" onclick="document.getElementById(\'bm-tracking-detail-modal\').remove()">×</span>' +
+        '</h3>' +
+        '<div class="bm-modal-body">' +
+          '<div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:10px;padding:14px;margin-bottom:14px;text-align:center;">' +
+            '<div style="font-size:11px;color:#475569;">综合评分</div>' +
+            '<div style="font-size:42px;font-weight:800;color:' + (rec.overall >= 80 ? '#16a34a' : (rec.overall >= 60 ? '#ca8a04' : '#dc2626')) + ';line-height:1;">' + (rec.overall != null ? rec.overall : '-') + '</div>' +
+            '<div style="font-size:12px;color:#64748b;margin-top:4px;">' + new Date(rec.date).toLocaleString('zh-CN') + '</div>' +
+          '</div>' +
+          (scoreRows ? '<div style="background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:14px;">' + scoreRows + '</div>' : '') +
+          (recs ? '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:14px;">' +
+            '<div style="font-size:12px;color:#16a34a;font-weight:600;margin-bottom:6px;">💡 训练建议</div>' +
+            '<ul style="margin:0;padding-left:18px;font-size:13px;color:#334155;line-height:1.7;">' + recs + '</ul>' +
+          '</div>' : '') +
+          '<div style="margin-top:12px;font-size:11px;color:#94a3b8;text-align:center;">☁️ 数据来自云端 (治疗师工作台)</div>' +
+        '</div>' +
+      '</div>';
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
   }
 
   // 加载认知报告
@@ -656,6 +745,7 @@
     openCognitiveReport: openCognitiveReport,
     openGaitReport: openGaitReport,
     openQnrReport: openQnrReport,
+    openTrackingReport: openTrackingReport,
     // 刷新工作台数据 (share_links + 当前 tab 的报告)
     refreshDashboard: function () {
       _loadShareLinks();

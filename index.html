@@ -2279,6 +2279,53 @@
 <script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260807d"></script>
 <script src="./assets/cognitive/reports/qnr-region-detail.js?v=20260807a"></script>
 <script>
+  // ===== 头动追踪 (cervical_tracking_records) · 报告入库 hook =====
+  // 第一性原理: 治疗师已登录 → 自动上云端 (therapist_id = auth.uid())
+  //           治疗师未登录 → 仅本机 cervical_client_records, 不阻塞
+  // 顶栏的"分享"按钮 (#trk-qr-btn) 不动 — 那是给患者扫码的路径
+  // 报告 modal (#result-modal) 也不动 — UI 位置保持不变
+  (function _hookTrackingSubmitCloud() {
+    var attempts = 0;
+    var timer = setInterval(function() {
+      attempts++;
+      if (typeof window.savePatientData === 'function') {
+        clearInterval(timer);
+        var origSavePatientData = window.savePatientData;
+        window.savePatientData = function(clientInfo, scores) {
+          // 1. 调原函数: 本机保存 (不变)
+          var result = origSavePatientData.apply(this, arguments);
+          // 2. 如果治疗师已登录, 上云端 (静默, 不阻塞报告 modal)
+          try {
+            var sess = window.SupabaseClient && window.SupabaseClient.getSession && window.SupabaseClient.getSession();
+            if (sess && sess.access_token && window.SupabaseClient.isConfigured()) {
+              window.SupabaseClient.submitTrackingRecord({
+                patient_name: clientInfo.name || '匿名',
+                patient_age: clientInfo.age || null,
+                patient_gender: clientInfo.gender || null,
+                patient_id: clientInfo.id || null,
+                date: new Date().toISOString(),
+                overall: scores.overall,
+                scores: scores.scores || {},
+                details: scores.details || {},
+                vestibular: scores.vestibular || {},
+                recommendations: scores.recommendations || []
+              }).then(function(id) {
+                console.log('[tracking cloud] 入库成功, id:', id);
+              }).catch(function(err) {
+                console.warn('[tracking cloud] 入库失败 (本机已保存):', err && err.message);
+              });
+            }
+          } catch(e) { console.warn('[tracking cloud] hook 异常:', e); }
+          return result;
+        };
+        console.log('[tracking cloud] hook 已挂载, 治疗师登录时自动入库');
+      } else if (attempts > 60) {
+        clearInterval(timer);
+      }
+    }, 200);
+  })();
+</script>
+<script>
   // ===== 神经系统自评 · 数据/评分模块预加载 =====
   // 查看自评报告时点分区行需要 __qnrData + __qnrScoring
   // 旧实现只在 URL 带 ?return=questionnaire 时才加载 → 直接打开记录时点不开
