@@ -201,13 +201,24 @@
     </div>
 
 
-    <!-- 认知模块选择弹窗 (已废弃, 改走治疗师工作台) -->
-<div id="cog-modal-overlay" class="cog-modal-overlay" style="display:none!important;"></div>
+    <!-- 认知模块选择弹窗 -->
+    <div id="cog-modal-overlay" class="cog-modal-overlay">
+        <div class="cog-modal" style="position:relative;">
+            <button class="cog-modal-close" id="cog-modal-close">&times;</button>
+            <h3>🧠 认知小测试 · 教育版</h3>
+            <div class="subtitle">选择单项测试或进行完整测试 · 仅供健康教育参考</div>
+            <button class="cog-modal-full" id="cog-modal-full-test">📋 完整测试 (12项)</button>
+            <button class="cog-modal-full" id="cog-modal-quick6" style="background:linear-gradient(135deg,#FF9800,#F44336);margin-top:6px;">⚡ 快速测试 (6项)</button>
+            <button id="cog-qr-btn" style="display:block;width:100%;margin-top:10px;padding:14px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:16px;font-weight:700;box-shadow:0 4px 16px rgba(102,126,234,0.4);transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform='scale(1.02)';this.style.boxShadow='0 6px 20px rgba(102,126,234,0.6)';" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 4px 16px rgba(102,126,234,0.4)';">📱 生成二维码 (患者扫码做题)</button>
+            <div class="cog-modal-grid" style="margin-top:12px;" id="cog-modal-grid">
+            </div>
+        </div>
+    </div>
 
-    <!-- 神经系统自评 QR 码弹窗 (已废弃 — 工作台自渲染 bm-qr-overlay, 这里仅留空 div 防止遗留 JS 报错) -->
+    <!-- 神经系统自评 QR 码弹窗 (治疗师工作台自渲染 bm-qr-overlay, 这里仅留空 div 防止遗留 JS 报错) -->
     <div id="qnr-qr-overlay" style="display:none!important;"></div>
 
-    <!-- 神经系统自评入口弹窗 (已废弃, 改走治疗师工作台) -->
+    <!-- 神经系统自评入口弹窗 (已废弃, 主页直接跳 questionnaire.html) -->
 <div id="qnr-modal-overlay" class="cog-modal-overlay" style="display:none!important;"></div>
 
     <!-- QR 码弹窗 -->
@@ -1007,22 +1018,18 @@
             overrideHomeBtn();
         }
 
-        // 2. 认知评估系统 → 治疗师工作台 (kind=cognitive)
+        // 2. 认知评估系统 → 本机直接做题 (modal 选择完整测试/快速测试/单项)
         var cogBtn = document.getElementById('page2-cognitive');
         if (cogBtn) cogBtn.addEventListener("click", function() {
-          if (window.BmTherapistUI && typeof window.BmTherapistUI.openDashboard === 'function') {
-            window.BmTherapistUI.openDashboard({ kind: 'cognitive' });
-          } else {
-            alert('治疗师工作台模块未加载, 请刷新页面重试');
-          }
+            document.getElementById("cog-modal-overlay").classList.add("show");
         });
-        // 0. 评估报告入口 → 治疗师工作台 (云端统一, 不再读本地 cog_records)
+        // 0. 评估报告入口 → 本机报告列表 (匿名/自访问的记录)
         var cogReportBtn = document.getElementById('page2-cog-report');
         if (cogReportBtn) cogReportBtn.addEventListener("click", function() {
-            if (window.BmTherapistUI && typeof window.BmTherapistUI.openDashboard === 'function') {
-                window.BmTherapistUI.openDashboard();
+            if (typeof window._showCogRecordList === 'function') {
+                window._showCogRecordList();
             } else {
-                alert('治疗师工作台模块未加载, 请刷新页面重试');
+                alert('本机报告模块未加载');
             }
         });
 
@@ -1051,14 +1058,17 @@
             });
         })();
 
-        // 2.5 步态分析系统 → 治疗师工作台 (kind=gait)
+        // 2.5 步态分析系统 → 本机直接做题
         var gaitBtn = document.getElementById('page2-gait');
         if (gaitBtn) gaitBtn.addEventListener('click', function() {
-          if (window.BmTherapistUI && typeof window.BmTherapistUI.openDashboard === 'function') {
-            window.BmTherapistUI.openDashboard({ kind: 'gait' });
-          } else {
-            alert('治疗师工作台模块未加载, 请刷新页面重试');
-          }
+            page2.style.display = 'none';
+            if (window._hideCognitive) window._hideCognitive();
+            if (typeof window.__gaitAnalysis === 'object' && window.__gaitAnalysis.open) {
+                window.__gaitAnalysis.open();
+            } else {
+                console.error('[gait] __gaitAnalysis not ready');
+                page2.style.display = 'flex';
+            }
         });
 
         // 3. 头动追踪系统
@@ -1400,9 +1410,7 @@
         (function(){
             var overlay = document.getElementById("cog-modal-overlay");
             var grid = document.getElementById("cog-modal-grid");
-            // cog-modal-overlay 已被废弃, 主页点认知评估统一走 BmTherapistUI.openDashboard({kind:'cognitive'})
-            // 这里跳过所有事件绑定, 避免给不存在的按钮 addEventListener 报错
-            if (!overlay || !grid || overlay.style.display === 'none') return;
+            if (!overlay || !grid) return;
             var modules = [
                 {id:"attention",name:"注意力测试"},
                 {id:"shortmem",name:"短暂视觉记忆"},
@@ -1678,10 +1686,8 @@
                     }, 100);
                     return;
                 }
-                // 治疗师进入 (无 start= 参数): 统一走治疗师工作台 (与主页 page2-cognitive 一致)
-                if (window.BmTherapistUI && typeof window.BmTherapistUI.openDashboard === 'function') {
-                    window.BmTherapistUI.openDashboard({ kind: 'cognitive' });
-                }
+                // 治疗师进入 (无 start= 参数): 显示模块选择弹窗 (与主页 page2-cognitive 一致)
+                document.getElementById('cog-modal-overlay').classList.add('show');
             })();
 
             // Deep-link: ?mode=gait 自动进入步态分析
@@ -1778,19 +1784,13 @@
             }
         })();
 
-        // 1) 首页入口 → 治疗师工作台 (统一路径, 不再有独立 modal)
-        // 第一性原理: 任何评估创建链接/分享/看报告, 都走 BmTherapistUI.openDashboard({ kind })
+        // 1) 首页入口 → 神经系统自评 (本机直接做题, 不入库)
         var qnrBtn = document.getElementById('page2-questionnaire');
         if (qnrBtn) qnrBtn.addEventListener('click', function() {
-          if (window.BmTherapistUI && typeof window.BmTherapistUI.openDashboard === 'function') {
-            window.BmTherapistUI.openDashboard({ kind: 'qnr' });
-          } else {
-            alert('治疗师工作台模块未加载, 请刷新页面重试');
-          }
+            window.location.href = './questionnaire.html?sandbox=1';
         });
 
-        // 神经系统自评 QR 码弹窗 (已废弃 — 工作台使用 bm-qr-overlay 自渲染)
-        // 保留元素仅作 fallback, 默认隐藏
+        // 神经系统自评 QR 码弹窗 (已废弃 — 工作台自渲染 bm-qr-overlay, 这里仅留空 div 防止遗留 JS 报错)
 
         // 5) 记录存储: 与认知评估同库 cog_records (cognitive-report.js 读取), 加 type=questionnaire 区分
         function _readRecords() {
