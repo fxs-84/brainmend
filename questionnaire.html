@@ -624,18 +624,22 @@
       _renderCloudLine(recId);
     }
     // 提交到 Supabase (走 RPC, therapist_id 由 share_token 派生)
-    // 失败时给明确错误标记 (supabase_not_configured / no_share_token / 服务端 message)
+    // 两种场景:
+    //   · 有 share_token (治疗师定向发放) → 上云端
+    //   · 无 share_token (匿名/自填/立即测评) → 本机保存 (合法场景, 不算失败)
+    // 失败时给明确错误标记 (supabase_not_configured / 服务端 message)
     function _qnrSubmitCloud(rec) {
       if (!(window.SupabaseClient && window.SupabaseClient.isConfigured())) {
         console.error('[qnr inline] Supabase 未配置, 无法上传云端');
         _markCloudStatus(rec.id, 'failed', 'supabase_not_configured');
         return;
       }
-      // share_token 由治疗师工作台生成的 QR 链接携带 (新 Supabase 流程)
+      // share_token 由治疗师工作台生成的 QR 链接携带
       var shareToken = params.get('share_token') || '';
       if (!shareToken) {
-        console.warn('[qnr inline] 缺少 share_token, 无法上传云端');
-        _markCloudStatus(rec.id, 'failed', 'no_share_token');
+        // 合法场景: 匿名/自填/立即测评, 仅本机保存 (不入库)
+        console.log('[qnr inline] 匿名场景, 本机保存 (未配 share_token)');
+        _markCloudStatus(rec.id, 'local');
         return;
       }
       _markCloudStatus(rec.id, 'syncing');
@@ -845,6 +849,13 @@
         html = '<div style="font-size:13px;color:#047857;font-weight:600;display:flex;align-items:center;gap:6px;">' +
           '<span style="display:inline-block;width:8px;height:8px;background:#16a34a;border-radius:50%;"></span>' +
           '<span>☁️ 已同步到云端</span>' +
+        '</div>';
+      } else if (status === 'local') {
+        // 匿名/自填/立即测评场景, 仅本机保存 (合法, 不算失败, 不阻塞用户)
+        html = '<div style="font-size:13px;color:#64748b;font-weight:600;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+          '<span style="display:inline-block;width:8px;height:8px;background:#94a3b8;border-radius:50%;"></span>' +
+          '<span>💾 本机保存 (匿名测评)</span>' +
+          '<span style="color:#94a3b8;font-weight:400;">如需同步到治疗师工作台, 请联系治疗师扫码测评</span>' +
         '</div>';
       } else if (status === 'syncing') {
         html = '<div style="font-size:13px;color:#0284c7;font-weight:600;display:flex;align-items:center;gap:6px;">' +

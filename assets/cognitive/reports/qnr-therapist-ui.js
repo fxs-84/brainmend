@@ -248,6 +248,12 @@
             '<button class="bm-btn-block" onclick="window.BmTherapistUI.createShareLink()" style="margin-bottom:6px;">+ 创建链接 (30 天有效)</button>' +
             '<div id="bm-link-result"></div>' +
           '</div>' +
+          // 立即测评 (匿名路径, 本机作答不上云端, 适合治疗师自己测/推广体验)
+          '<div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:12px;padding:16px;margin-bottom:18px;">' +
+            '<div style="font-weight:600;color:#0f172a;margin-bottom:6px;">🚀 立即测评 (匿名 · 本机作答)</div>' +
+            '<div style="font-size:12px;color:#475569;margin-bottom:10px;">适合自己测/推广体验, 不入库, 不消耗分享链接额度。完成后弹窗填姓名保存到本机。</div>' +
+            '<button class="bm-btn-block" onclick="window.BmTherapistUI.startImmediate(\'' + initialKind + '\')" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;">▶ 立即开始' + (KIND_LABEL[initialKind] ? ' (' + KIND_LABEL[initialKind] + ')' : '') + '</button>' +
+          '</div>' +
           // 已有的分享链接
           '<div style="font-weight:600;color:#0f172a;margin-bottom:10px;">🔗 我的分享链接</div>' +
           '<div id="bm-link-list" style="margin-bottom:18px;">' +
@@ -275,6 +281,25 @@
 
   // ============ 类型化链接 (qnr=自评 / cognitive=认知 / gait=步态) ============
   var KIND_LABEL = { qnr: '自评', cognitive: '认知', gait: '步态' };
+
+  // 立即测评 (匿名路径): 不创建 share_link, 直接进答题页, 报告仅本机保存
+  // 场景: 治疗师自己体验/推广演示/无患者信息时
+  function startImmediate(kind) {
+    kind = kind || 'qnr';
+    var base = location.origin + location.pathname.replace(/[^/]*$/, '');
+    var url;
+    if (kind === 'cognitive') {
+      url = base + 'index.html?mode=cognitive&start=full';
+    } else if (kind === 'gait') {
+      url = base + 'index.html?mode=gait';
+    } else {
+      url = base + 'questionnaire.html?sandbox=1';
+    }
+    // 关闭工作台 modal
+    var dash = document.getElementById('bm-dashboard-modal');
+    if (dash) dash.remove();
+    window.location.href = url;
+  }
 
   // 按类型生成患者扫码链接
   function _buildLinkUrl(kind, link) {
@@ -652,6 +677,7 @@
     showQR: showQR,
     copyLink: copyLink,
     revokeLink: revokeLink,
+    startImmediate: startImmediate,
     switchReportTab: switchReportTab,
     openCognitiveReport: openCognitiveReport,
     openGaitReport: openGaitReport,
