@@ -399,64 +399,71 @@
     });
   }
 
-  // 头动追踪报告详情 (modal, 不嵌入 cog-report-overlay 因为 UI 位置独立)
+  // 头动追踪报告详情 — 直接复用 #result-modal 原版样式, 把云端数据塞进去
   function openTrackingReport(id) {
     var rec = null;
     for (var i = 0; i < _trackingRows.length; i++) {
       if (_trackingRows[i].id === id) { rec = _trackingRows[i]; break; }
     }
     if (!rec) { alert('记录未找到,请刷新列表'); return; }
-    // 关掉工作台 modal
+    // 关掉工作台 modal (避免遮挡)
     var dash = document.getElementById('bm-dashboard-modal');
     if (dash) dash.remove();
-    // 渲染详情 modal (复用头动追踪报告的视觉风格)
-    var existing = document.getElementById('bm-tracking-detail-modal');
-    if (existing) existing.remove();
-    var overlay = document.createElement('div');
-    overlay.id = 'bm-tracking-detail-modal';
-    overlay.className = 'bm-modal-overlay';
-    overlay.style.cssText = 'z-index:35000;align-items:flex-start;padding:20px;overflow:auto;';
+
+    var modal = document.getElementById('result-modal');
+    if (!modal) { alert('报告 modal 未加载,请刷新页面'); return; }
+
+    // 把云端数据塞进 #result-modal 的对应字段 (完全复用原版样式)
     var scores = rec.scores || {};
-    var scoreLabels = {
-      position: '位置觉', stability: '稳定性', rom: '活动范围', coordination: '协调性', reaction: '反应时'
-    };
-    var scoreRows = Object.keys(scoreLabels).map(function (k) {
-      var v = scores[k];
-      if (v == null) return '';
-      var color = v >= 80 ? '#16a34a' : (v >= 60 ? '#ca8a04' : (v >= 40 ? '#ea580c' : '#dc2626'));
-      var pct = Math.max(0, Math.min(100, v));
-      return '<div style="margin-bottom:10px;">' +
-        '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">' +
-          '<span>' + scoreLabels[k] + '</span>' +
-          '<span style="font-weight:700;color:' + color + ';">' + v + ' 分</span>' +
-        '</div>' +
-        '<div style="height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + color + ';border-radius:4px;transition:width 0.4s;"></div></div>' +
-      '</div>';
-    }).join('');
-    var recs = (rec.recommendations || []).map(function (r) {
-      return '<li style="margin-bottom:4px;">' + _esc(typeof r === 'string' ? r : (r.text || JSON.stringify(r))) + '</li>';
-    }).join('');
-    overlay.innerHTML =
-      '<div class="bm-modal" style="max-width:640px;text-align:left;" onclick="event.stopPropagation()">' +
-        '<h3>🎯 ' + _esc(rec.patient_name || '匿名') + ' · 头动追踪报告 ' +
-          '<span style="cursor:pointer;font-size:24px;color:#94a3b8;float:right;line-height:1;" onclick="document.getElementById(\'bm-tracking-detail-modal\').remove()">×</span>' +
-        '</h3>' +
-        '<div class="bm-modal-body">' +
-          '<div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:10px;padding:14px;margin-bottom:14px;text-align:center;">' +
-            '<div style="font-size:11px;color:#475569;">综合评分</div>' +
-            '<div style="font-size:42px;font-weight:800;color:' + (rec.overall >= 80 ? '#16a34a' : (rec.overall >= 60 ? '#ca8a04' : '#dc2626')) + ';line-height:1;">' + (rec.overall != null ? rec.overall : '-') + '</div>' +
-            '<div style="font-size:12px;color:#64748b;margin-top:4px;">' + new Date(rec.date).toLocaleString('zh-CN') + '</div>' +
-          '</div>' +
-          (scoreRows ? '<div style="background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:14px;">' + scoreRows + '</div>' : '') +
-          (recs ? '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:14px;">' +
-            '<div style="font-size:12px;color:#16a34a;font-weight:600;margin-bottom:6px;">💡 训练建议</div>' +
-            '<ul style="margin:0;padding-left:18px;font-size:13px;color:#334155;line-height:1.7;">' + recs + '</ul>' +
-          '</div>' : '') +
-          '<div style="margin-top:12px;font-size:11px;color:#94a3b8;text-align:center;">☁️ 数据来自云端 (治疗师工作台)</div>' +
-        '</div>' +
-      '</div>';
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
-    document.body.appendChild(overlay);
+    var overallEl = document.getElementById('overall-score');
+    var levelEl = document.getElementById('overall-level');
+    if (overallEl) overallEl.textContent = rec.overall != null ? rec.overall : '--';
+    if (levelEl) {
+      var ov = rec.overall || 0;
+      levelEl.textContent = ov >= 80 ? '优秀' : (ov >= 60 ? '良好' : (ov >= 40 ? '一般' : '需关注'));
+    }
+    // 5 项明细
+    var scoreMap = [
+      ['position', 'result-position', 'bar-position'],
+      ['stability', 'result-stability', 'bar-stability'],
+      ['rom', 'result-rom', 'bar-rom'],
+      ['coordination', 'result-coordination', 'bar-coordination']
+    ];
+    scoreMap.forEach(function (m) {
+      var v = scores[m[0]];
+      var valEl = document.getElementById(m[1]);
+      var barEl = document.getElementById(m[2]);
+      if (valEl) valEl.textContent = v != null ? v : '--';
+      if (barEl) barEl.style.width = (v != null ? Math.max(0, Math.min(100, v)) : 0) + '%';
+    });
+    // 前庭功能评估
+    var vest = rec.vestibular || {};
+    var vestResult = document.getElementById('vestibular-result');
+    var vestRec = document.getElementById('vestibular-recommendation');
+    var vestBox = document.getElementById('vestibular-assessment');
+    if (vestResult) vestResult.textContent = vest.result || '-';
+    if (vestRec) vestRec.textContent = vest.recommendation || '-';
+    if (vestBox) vestBox.style.display = (vest.result || vest.recommendation) ? '' : 'none';
+    // 训练建议
+    var sugBox = document.getElementById('rehab-suggestions');
+    var sugContent = document.getElementById('rehab-suggestions-content');
+    var recs = rec.recommendations || [];
+    if (sugBox) sugBox.style.display = recs.length ? '' : 'none';
+    if (sugContent) {
+      sugContent.innerHTML = recs.map(function (r) {
+        return '<div style="margin-bottom:4px;">• ' + _esc(typeof r === 'string' ? r : (r.text || JSON.stringify(r))) + '</div>';
+      }).join('');
+    }
+    // 隐藏"保存数据"按钮 (云端数据已存, 不需要再存)
+    var saveBtn = document.getElementById('save-patient-btn');
+    if (saveBtn) saveBtn.style.display = 'none';
+    // 标题改为患者姓名 (原版是"检测完成")
+    var titleEl = modal.querySelector('.modal-title');
+    if (titleEl) titleEl.textContent = '🎯 ' + (rec.patient_name || '匿名') + ' · 头动追踪报告';
+    var subEl = modal.querySelector('.modal-subtitle');
+    if (subEl) subEl.textContent = new Date(rec.date).toLocaleString('zh-CN') + ' · 云端存档';
+
+    modal.classList.add('show');
   }
 
   // 加载认知报告
