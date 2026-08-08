@@ -208,7 +208,9 @@
   }
 
   // ============ 治疗师面板 (share_links + 自评报告) ============
-  function openDashboard() {
+  // opts: { kind?: 'qnr'|'cognitive'|'gait', tab?: 'create'|'reports'|'links' }
+  function openDashboard(opts) {
+    opts = opts || {};
     if (!global.SupabaseClient || !global.SupabaseClient.isConfigured()) {
       alert('Supabase 未配置');
       return;
@@ -221,6 +223,7 @@
     var overlay = document.createElement('div');
     overlay.id = 'bm-dashboard-modal';
     overlay.className = 'bm-modal-overlay';
+    var initialKind = opts.kind || 'qnr';
     overlay.innerHTML =
       '<div class="bm-modal" style="max-width:720px;" onclick="event.stopPropagation()">' +
         '<h3>📋 治疗师工作台' +
@@ -232,9 +235,9 @@
             '<div style="font-weight:600;color:#0f172a;margin-bottom:10px;">📱 创建 QR 分享链接</div>' +
             '<div style="margin-bottom:8px;">' +
               '<select id="bm-link-kind" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;background:#fff;">' +
-                '<option value="qnr">📋 神经系统自评 (100 题)</option>' +
-                '<option value="cognitive">🧠 认知评估 (12 项游戏)</option>' +
-                '<option value="gait">🚶 步态分析</option>' +
+                '<option value="qnr"' + (initialKind === 'qnr' ? ' selected' : '') + '>📋 神经系统自评 (100 题)</option>' +
+                '<option value="cognitive"' + (initialKind === 'cognitive' ? ' selected' : '') + '>🧠 认知评估 (12 项游戏)</option>' +
+                '<option value="gait"' + (initialKind === 'gait' ? ' selected' : '') + '>🚶 步态分析</option>' +
               '</select>' +
             '</div>' +
             '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">' +
