@@ -248,13 +248,19 @@
             '<button class="bm-btn-block" onclick="window.BmTherapistUI.createShareLink()" style="margin-bottom:6px;">+ 创建链接 (30 天有效)</button>' +
             '<div id="bm-link-result"></div>' +
           '</div>' +
-          // 已有的分享链接
-          '<div style="font-weight:600;color:#0f172a;margin-bottom:10px;">🔗 我的分享链接</div>' +
+          // 已有的分享链接 (带搜索框)
+          '<div style="font-weight:600;color:#0f172a;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">' +
+            '<span>🔗 我的分享链接</span>' +
+            '<input id="bm-link-search" type="text" placeholder="🔍 搜索患者/token" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;width:180px;outline:none;" />' +
+          '</div>' +
           '<div id="bm-link-list" style="margin-bottom:18px;">' +
             '<div class="bm-empty">加载中...</div>' +
           '</div>' +
-          // 患者报告 (自评 / 认知 / 步态 / 头动追踪)
-          '<div style="font-weight:600;color:#0f172a;margin-bottom:10px;">📊 患者报告</div>' +
+          // 患者报告 (自评 / 认知 / 步态 / 头动追踪) + 搜索框
+          '<div style="font-weight:600;color:#0f172a;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">' +
+            '<span>📊 患者报告</span>' +
+            '<input id="bm-report-search" type="text" placeholder="🔍 搜索患者姓名/年龄" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;width:180px;outline:none;" />' +
+          '</div>' +
           '<div class="bm-modal-tabs" style="margin-bottom:12px;">' +
             '<div class="bm-modal-tab active" data-rtab="qnr" onclick="window.BmTherapistUI.switchReportTab(\'qnr\')">自评</div>' +
             '<div class="bm-modal-tab" data-rtab="cognitive" onclick="window.BmTherapistUI.switchReportTab(\'cognitive\')">认知</div>' +
@@ -270,10 +276,39 @@
       if (e.target === overlay) overlay.remove();
     });
     document.body.appendChild(overlay);
-    _loadShareLinks();
+    _shareLinksQuery = '';
+    _reportQuery = '';
+    _loadShareLinks('');
     // 只加载当前 tab 的报告 (直接调 _loadAssessments 会与后续 tab 切换产生异步竞态)
     switchReportTab(_currentReportTab);
+    // 搜索框 (share_link)
+    var linkSearch = document.getElementById('bm-link-search');
+    if (linkSearch) {
+      var debounce;
+      linkSearch.addEventListener('input', function () {
+        clearTimeout(debounce);
+        debounce = setTimeout(function () {
+          _shareLinksQuery = linkSearch.value.trim();
+          _loadShareLinks(_shareLinksQuery);
+        }, 200);
+      });
+    }
+    // 搜索框 (报告)
+    var reportSearch = document.getElementById('bm-report-search');
+    if (reportSearch) {
+      var debounce2;
+      reportSearch.addEventListener('input', function () {
+        clearTimeout(debounce2);
+        debounce2 = setTimeout(function () {
+          _reportQuery = reportSearch.value.trim();
+          switchReportTab(_currentReportTab);
+        }, 200);
+      });
+    }
   }
+
+  var _shareLinksQuery = '';
+  var _reportQuery = '';
 
   // ============ 类型化链接 (qnr=自评 / cognitive=认知 / gait=步态) ============
   var KIND_LABEL = { qnr: '自评', cognitive: '认知', gait: '步态' };
@@ -292,12 +327,15 @@
   }
 
   // 加载 share_links
-  function _loadShareLinks() {
+  function _loadShareLinks(query) {
     var list = document.getElementById('bm-link-list');
     if (!list) return;
-    global.SupabaseClient.listShareLinks({ limit: 20 }).then(function (rows) {
+    var promise = query
+      ? global.SupabaseClient.searchShareLinks(query)
+      : global.SupabaseClient.listShareLinks({ limit: 50 });
+    promise.then(function (rows) {
       if (!rows || !rows.length) {
-        list.innerHTML = '<div class="bm-empty">还没有分享链接。点击上方创建第一个。</div>';
+        list.innerHTML = '<div class="bm-empty">' + (query ? '没有匹配 "' + _esc(query) + '" 的分享链接' : '还没有分享链接。点击上方创建第一个。') + '</div>';
         return;
       }
       list.innerHTML = rows.map(function (r) {
@@ -318,7 +356,7 @@
           '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">' +
             '<button onclick="window.BmTherapistUI.showQR(\'' + r.token + '\',\'' + _esc(r.prefilled_name || '未指定') + '\',\'' + kind + '\')" style="padding:5px 10px;background:#0d9488;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">📱 显示 QR</button>' +
             '<button onclick="window.BmTherapistUI.copyLink(\'' + url + '\')" style="padding:5px 10px;background:#e0f2fe;color:#0284c7;border:none;border-radius:6px;font-size:12px;cursor:pointer;">🔗 复制链接</button>' +
-            (!r.revoked ? '<button onclick="window.BmTherapistUI.revokeLink(\'' + r.token + '\')" style="padding:5px 10px;background:#fef2f2;color:#dc2626;border:none;border-radius:6px;font-size:12px;cursor:pointer;">🚫 撤销</button>' : '') +
+            '<button onclick="window.BmTherapistUI.deleteShareLinkConfirm(\'' + r.token + '\')" style="padding:5px 10px;background:#fef2f2;color:#dc2626;border:none;border-radius:6px;font-size:12px;cursor:pointer;">🗑 删除</button>' +
           '</div>' +
         '</div>';
       }).join('');
@@ -327,31 +365,64 @@
     });
   }
 
-  // 加载自评报告
+  // 统一确认删除 (带确认, 防止误删)
+  function _confirmDelete(message, onYes) {
+    if (!confirm(message)) return;
+    onYes();
+  }
+
+  // 删除 share_link (硬删)
+  function deleteShareLinkConfirm(token) {
+    _confirmDelete('确认删除这个分享链接? 删除后患者扫码将无法再提交报告。', function () {
+      global.SupabaseClient.deleteShareLink(token).then(function () {
+        _toast('✅ 链接已删除');
+        _loadShareLinks(_shareLinksQuery);
+      }).catch(function (err) {
+        _toast('删除失败: ' + (err.message || err), true);
+      });
+    });
+  }
+
+  // 加载自评报告 (支持搜索)
   function _loadAssessments() {
     var list = document.getElementById('bm-report-list');
     if (!list) return;
-    global.SupabaseClient.listMyAssessments({ limit: 50 }).then(function (rows) {
-      if (_currentReportTab !== 'qnr') return; // 异步返回时 tab 已切换, 丢弃过期结果
+    if (_currentReportTab !== 'qnr') return; // 异步返回时 tab 已切换, 丢弃过期结果
+    var promise = _reportQuery ? global.SupabaseClient.searchMyAssessments(_reportQuery, { limit: 50 }) : global.SupabaseClient.listMyAssessments({ limit: 50 });
+    promise.then(function (rows) {
       _qnrRows = rows || [];
       if (!rows || !rows.length) {
-        list.innerHTML = '<div class="bm-empty">还没有自评报告。等患者扫码提交...</div>';
+        list.innerHTML = '<div class="bm-empty">' + (_reportQuery ? '没有匹配 "' + _esc(_reportQuery) + '" 的自评报告' : '还没有自评报告。等患者扫码提交...') + '</div>';
         return;
       }
       list.innerHTML = rows.map(function (r) {
         var sevColor = { normal:'#16a34a', mild:'#ca8a04', moderate:'#ea580c', severe:'#dc2626' };
         var sevLabel = { normal:'正常', mild:'轻度', moderate:'中度', severe:'重度' };
-        return '<div class="bm-list-item" style="cursor:pointer;" onclick="window.BmTherapistUI.openQnrReport(\'' + r.id + '\')" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'transparent\'">' +
+        return '<div class="bm-list-item">' +
           '<div class="bm-list-item-head">' +
             '<div><b>' + _esc(r.patient_name) + '</b> ' + (r.patient_age ? '· ' + r.patient_age + '岁' : '') + ' ' + (r.patient_gender || '') + '</div>' +
             '<span style="background:' + (sevColor[r.worst_severity] || '#94a3b8') + ';color:#fff;font-size:11px;padding:2px 10px;border-radius:999px;">' + (sevLabel[r.worst_severity] || '—') + ' · ' + r.percent + '%</span>' +
           '</div>' +
-          '<div class="bm-list-item-meta">' + new Date(r.submitted_at).toLocaleString('zh-CN') + ' · ' + (r.source || 'qr') + ' · 点击查看报告</div>' +
-          '<div style="margin-top:6px;font-size:12px;color:#475569;">' + (r.burden_groups && r.burden_groups.length ? '高负担: ' + _esc(r.burden_groups.join('、')) : '无明显负担') + '</div>' +
+          '<div class="bm-list-item-meta" style="cursor:pointer;" onclick="window.BmTherapistUI.openQnrReport(\'' + r.id + '\')">' + new Date(r.submitted_at).toLocaleString('zh-CN') + ' · ' + (r.source || 'qr') + ' · 点击查看报告</div>' +
+          '<div style="margin-top:6px;font-size:12px;color:#475569;display:flex;justify-content:space-between;align-items:center;">' +
+            '<span style="cursor:pointer;flex:1;" onclick="window.BmTherapistUI.openQnrReport(\'' + r.id + '\')">' + (r.burden_groups && r.burden_groups.length ? '高负担: ' + _esc(r.burden_groups.join('、')) : '无明显负担') + '</span>' +
+            '<button onclick="event.stopPropagation();window.BmTherapistUI.deleteQnrConfirm(\'' + r.id + '\')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;padding:2px 6px;" title="删除报告">🗑 删除</button>' +
+          '</div>' +
         '</div>';
       }).join('');
     }).catch(function (err) {
       list.innerHTML = '<div class="bm-empty" style="color:#dc2626;">加载失败: ' + (err.message || err) + '</div>';
+    });
+  }
+
+  // 删除自评报告 (确认 modal)
+  function deleteQnrConfirm(id) {
+    if (!confirm('确认删除这份神经系统自评报告? 删除后无法恢复。')) return;
+    global.SupabaseClient.deleteQnrAssessment(id).then(function () {
+      _toast('✅ 报告已删除');
+      _loadAssessments();
+    }).catch(function (err) {
+      _toast('删除失败: ' + (err.message || err), true);
     });
   }
 
@@ -374,31 +445,48 @@
     else _loadAssessments();
   }
 
-  // 加载头动追踪报告 (云端 cervical_tracking_records)
+  // 加载头动追踪报告 (云端 cervical_tracking_records, 支持搜索)
   var _trackingRows = [];
   function _loadTrackingRecords() {
     var list = document.getElementById('bm-report-list');
     if (!list) return;
-    global.SupabaseClient.listMyTrackingRecords({ limit: 50 }).then(function (rows) {
-      if (_currentReportTab !== 'tracking') return; // 异步返回时 tab 已切换, 丢弃过期结果
+    if (_currentReportTab !== 'tracking') return; // 异步返回时 tab 已切换, 丢弃过期结果
+    var promise = _reportQuery ? global.SupabaseClient.searchMyTrackingRecords(_reportQuery, { limit: 50 }) : global.SupabaseClient.listMyTrackingRecords({ limit: 50 });
+    promise.then(function (rows) {
       _trackingRows = rows || [];
       if (!_trackingRows.length) {
-        list.innerHTML = '<div class="bm-empty">还没有头动追踪报告。等治疗师做完保存...</div>';
+        list.innerHTML = '<div class="bm-empty">' + (_reportQuery ? '没有匹配 "' + _esc(_reportQuery) + '" 的头动追踪报告' : '还没有头动追踪报告。等治疗师做完保存...') + '</div>';
         return;
       }
       list.innerHTML = _trackingRows.map(function (r) {
         var overall = r.overall != null ? r.overall : 0;
         var overallColor = overall >= 80 ? '#16a34a' : (overall >= 60 ? '#ca8a04' : (overall >= 40 ? '#ea580c' : '#dc2626'));
-        return '<div class="bm-list-item" style="cursor:pointer;" onclick="window.BmTherapistUI.openTrackingReport(\'' + r.id + '\')" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'transparent\'">' +
+        return '<div class="bm-list-item">' +
           '<div class="bm-list-item-head">' +
-            '<div><b>' + _esc(r.patient_name || '匿名') + '</b> ' + (r.patient_age ? '· ' + r.patient_age + '岁' : '') + ' ' + (r.patient_gender || '') + '</div>' +
-            '<span style="background:' + overallColor + ';color:#fff;font-size:11px;padding:2px 10px;border-radius:999px;">综合 ' + overall + ' 分</span>' +
+            '<div style="cursor:pointer;flex:1;min-width:0;" onclick="window.BmTherapistUI.openTrackingReport(\'' + r.id + '\')">' +
+              '<b>' + _esc(r.patient_name || '匿名') + '</b> ' + (r.patient_age ? '· ' + r.patient_age + '岁' : '') + ' ' + (r.patient_gender || '') +
+            '</div>' +
+            '<div style="display:flex;gap:6px;align-items:center;">' +
+              '<span style="background:' + overallColor + ';color:#fff;font-size:11px;padding:2px 10px;border-radius:999px;">综合 ' + overall + ' 分</span>' +
+              '<button onclick="event.stopPropagation();window.BmTherapistUI.deleteTrackingConfirm(\'' + r.id + '\')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;padding:2px 6px;" title="删除报告">🗑 删除</button>' +
+            '</div>' +
           '</div>' +
-          '<div class="bm-list-item-meta">' + new Date(r.date).toLocaleString('zh-CN') + ' · 头动追踪 · 点击查看报告</div>' +
+          '<div class="bm-list-item-meta" style="cursor:pointer;" onclick="window.BmTherapistUI.openTrackingReport(\'' + r.id + '\')">' + new Date(r.date).toLocaleString('zh-CN') + ' · 头动追踪 · 点击查看报告</div>' +
         '</div>';
       }).join('');
     }).catch(function (err) {
       list.innerHTML = '<div class="bm-empty" style="color:#dc2626;">加载失败: ' + (err.message || err) + '</div>';
+    });
+  }
+
+  // 删除头动追踪报告
+  function deleteTrackingConfirm(id) {
+    if (!confirm('确认删除这份头动追踪报告? 删除后无法恢复。')) return;
+    global.SupabaseClient.deleteTrackingRecord(id).then(function () {
+      _toast('✅ 报告已删除');
+      _loadTrackingRecords();
+    }).catch(function (err) {
+      _toast('删除失败: ' + (err.message || err), true);
     });
   }
 
@@ -584,24 +672,30 @@
     modal.style.zIndex = '50000';
   }
 
-  // 加载认知报告
+  // 加载认知报告 (支持搜索)
   function _loadCognitiveAssessments() {
     var list = document.getElementById('bm-report-list');
     if (!list) return;
-    global.SupabaseClient.listMyCognitiveAssessments({ limit: 50 }).then(function (rows) {
-      if (_currentReportTab !== 'cognitive') return; // 异步返回时 tab 已切换, 丢弃过期结果
+    if (_currentReportTab !== 'cognitive') return; // 异步返回时 tab 已切换, 丢弃过期结果
+    var promise = _reportQuery ? global.SupabaseClient.searchMyCognitiveAssessments(_reportQuery, { limit: 50 }) : global.SupabaseClient.listMyCognitiveAssessments({ limit: 50 });
+    promise.then(function (rows) {
       _cogRows = rows || [];
       if (!_cogRows.length) {
-        list.innerHTML = '<div class="bm-empty">还没有认知报告。等患者扫码提交...</div>';
+        list.innerHTML = '<div class="bm-empty">' + (_reportQuery ? '没有匹配 "' + _esc(_reportQuery) + '" 的认知报告' : '还没有认知报告。等患者扫码提交...') + '</div>';
         return;
       }
       list.innerHTML = _cogRows.map(function (r) {
-        return '<div class="bm-list-item" style="cursor:pointer;" onclick="window.BmTherapistUI.openCognitiveReport(\'' + r.id + '\')">' +
+        return '<div class="bm-list-item">' +
           '<div class="bm-list-item-head">' +
-            '<div><b>' + _esc(r.patient_name) + '</b> ' + (r.patient_age ? '· ' + r.patient_age + '岁' : '') + ' ' + (r.patient_gender || '') + '</div>' +
-            '<span style="background:#7c3aed;color:#fff;font-size:11px;padding:2px 10px;border-radius:999px;">' + (r.is_quick6 ? '⚡6项' : '📊12项') + (r.overall_score != null ? ' · ' + r.overall_score + '分' : '') + '</span>' +
+            '<div style="cursor:pointer;flex:1;min-width:0;" onclick="window.BmTherapistUI.openCognitiveReport(\'' + r.id + '\')">' +
+              '<b>' + _esc(r.patient_name) + '</b> ' + (r.patient_age ? '· ' + r.patient_age + '岁' : '') + ' ' + (r.patient_gender || '') +
+            '</div>' +
+            '<div style="display:flex;gap:6px;align-items:center;">' +
+              '<span style="background:#7c3aed;color:#fff;font-size:11px;padding:2px 10px;border-radius:999px;">' + (r.is_quick6 ? '⚡6项' : '📊12项') + (r.overall_score != null ? ' · ' + r.overall_score + '分' : '') + '</span>' +
+              '<button onclick="event.stopPropagation();window.BmTherapistUI.deleteCognitiveConfirm(\'' + r.id + '\')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;padding:2px 6px;" title="删除报告">🗑 删除</button>' +
+            '</div>' +
           '</div>' +
-          '<div class="bm-list-item-meta">' + new Date(r.submitted_at).toLocaleString('zh-CN') + ' · 点击查看报告</div>' +
+          '<div class="bm-list-item-meta" style="cursor:pointer;" onclick="window.BmTherapistUI.openCognitiveReport(\'' + r.id + '\')">' + new Date(r.submitted_at).toLocaleString('zh-CN') + ' · 点击查看报告</div>' +
         '</div>';
       }).join('');
     }).catch(function (err) {
@@ -609,28 +703,56 @@
     });
   }
 
-  // 加载步态报告
+  // 删除认知报告
+  function deleteCognitiveConfirm(id) {
+    if (!confirm('确认删除这份认知评估报告? 删除后无法恢复。')) return;
+    global.SupabaseClient.deleteCognitiveAssessment(id).then(function () {
+      _toast('✅ 报告已删除');
+      _loadCognitiveAssessments();
+    }).catch(function (err) {
+      _toast('删除失败: ' + (err.message || err), true);
+    });
+  }
+
+  // 加载步态报告 (支持搜索)
   function _loadGaitAssessments() {
     var list = document.getElementById('bm-report-list');
     if (!list) return;
-    global.SupabaseClient.listMyGaitAssessments({ limit: 50 }).then(function (rows) {
-      if (_currentReportTab !== 'gait') return; // 异步返回时 tab 已切换, 丢弃过期结果
+    if (_currentReportTab !== 'gait') return; // 异步返回时 tab 已切换, 丢弃过期结果
+    var promise = _reportQuery ? global.SupabaseClient.searchMyGaitAssessments(_reportQuery, { limit: 50 }) : global.SupabaseClient.listMyGaitAssessments({ limit: 50 });
+    promise.then(function (rows) {
       _gaitRows = rows || [];
       if (!_gaitRows.length) {
-        list.innerHTML = '<div class="bm-empty">还没有步态报告。等患者扫码提交...</div>';
+        list.innerHTML = '<div class="bm-empty">' + (_reportQuery ? '没有匹配 "' + _esc(_reportQuery) + '" 的步态报告' : '还没有步态报告。等患者扫码提交...') + '</div>';
         return;
       }
       list.innerHTML = _gaitRows.map(function (r) {
-        return '<div class="bm-list-item" style="cursor:pointer;" onclick="window.BmTherapistUI.openGaitReport(\'' + r.id + '\')">' +
+        return '<div class="bm-list-item">' +
           '<div class="bm-list-item-head">' +
-            '<div><b>' + _esc(r.patient_name) + '</b> ' + (r.patient_age ? '· ' + r.patient_age + '岁' : '') + ' ' + (r.patient_gender || '') + '</div>' +
-            '<span style="background:#0f7b6c;color:#fff;font-size:11px;padding:2px 10px;border-radius:999px;">' + _esc(r.classification_primary || '—') + '</span>' +
+            '<div style="cursor:pointer;flex:1;min-width:0;" onclick="window.BmTherapistUI.openGaitReport(\'' + r.id + '\')">' +
+              '<b>' + _esc(r.patient_name) + '</b> ' + (r.patient_age ? '· ' + r.patient_age + '岁' : '') + ' ' + (r.patient_gender || '') +
+            '</div>' +
+            '<div style="display:flex;gap:6px;align-items:center;">' +
+              '<span style="background:#0f7b6c;color:#fff;font-size:11px;padding:2px 10px;border-radius:999px;">' + _esc(r.classification_primary || '—') + '</span>' +
+              '<button onclick="event.stopPropagation();window.BmTherapistUI.deleteGaitConfirm(\'' + r.id + '\')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;padding:2px 6px;" title="删除报告">🗑 删除</button>' +
+            '</div>' +
           '</div>' +
-          '<div class="bm-list-item-meta">' + new Date(r.submitted_at).toLocaleString('zh-CN') + ' · 点击查看报告</div>' +
+          '<div class="bm-list-item-meta" style="cursor:pointer;" onclick="window.BmTherapistUI.openGaitReport(\'' + r.id + '\')">' + new Date(r.submitted_at).toLocaleString('zh-CN') + ' · 点击查看报告</div>' +
         '</div>';
       }).join('');
     }).catch(function (err) {
       list.innerHTML = '<div class="bm-empty" style="color:#dc2626;">加载失败: ' + (err.message || err) + '</div>';
+    });
+  }
+
+  // 删除步态报告
+  function deleteGaitConfirm(id) {
+    if (!confirm('确认删除这份步态报告? 删除后无法恢复。')) return;
+    global.SupabaseClient.deleteGaitAssessment(id).then(function () {
+      _toast('✅ 报告已删除');
+      _loadGaitAssessments();
+    }).catch(function (err) {
+      _toast('删除失败: ' + (err.message || err), true);
     });
   }
 
@@ -953,6 +1075,11 @@
     openGaitReport: openGaitReport,
     openQnrReport: openQnrReport,
     openTrackingReport: openTrackingReport,
+    deleteQnrConfirm: deleteQnrConfirm,
+    deleteCognitiveConfirm: deleteCognitiveConfirm,
+    deleteGaitConfirm: deleteGaitConfirm,
+    deleteTrackingConfirm: deleteTrackingConfirm,
+    deleteShareLinkConfirm: deleteShareLinkConfirm,
     // 刷新工作台数据 (share_links + 当前 tab 的报告)
     refreshDashboard: function () {
       _loadShareLinks();

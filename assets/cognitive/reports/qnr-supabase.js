@@ -342,6 +342,99 @@
     }, true);
   }
 
+  // ============ 删除 API (硬删, RLS 校验 therapist_id = auth.uid()) ============
+
+  // 删除 share_link (硬删, 不再保留 revoked=true)
+  function deleteShareLink(token) {
+    return _rest('DELETE', '/rest/v1/qnr_share_links?token=eq.' + encodeURIComponent(token), undefined, true);
+  }
+
+  // 删除神经系统自评报告
+  function deleteQnrAssessment(id) {
+    return _rest('DELETE', '/rest/v1/qnr_self_assessments?id=eq.' + encodeURIComponent(id), undefined, true);
+  }
+
+  // 删除认知评估报告
+  function deleteCognitiveAssessment(id) {
+    return _rest('DELETE', '/rest/v1/cognitive_assessments?id=eq.' + encodeURIComponent(id), undefined, true);
+  }
+
+  // 删除步态报告
+  function deleteGaitAssessment(id) {
+    return _rest('DELETE', '/rest/v1/gait_assessments?id=eq.' + encodeURIComponent(id), undefined, true);
+  }
+
+  // 删除头动追踪报告
+  function deleteTrackingRecord(id) {
+    return _rest('DELETE', '/rest/v1/cervical_tracking_records?id=eq.' + encodeURIComponent(id), undefined, true);
+  }
+
+  // ============ 搜索 API (用 ilike 模糊匹配 patient_name 或 patient_age) ============
+
+  // 神经系统自评搜索
+  function searchMyAssessments(query, opts) {
+    opts = opts || {};
+    var q = '?select=*&order=submitted_at.desc';
+    if (opts.limit) q += '&limit=' + opts.limit;
+    if (query) {
+      var esc = query.replace(/[%_]/g, '\\$&');
+      q += '&or=(patient_name.ilike.*' + encodeURIComponent(esc) + '*,'
+        + 'patient_age::text.ilike.*' + encodeURIComponent(esc) + '*,'
+        + 'patient_gender.ilike.*' + encodeURIComponent(esc) + '*)';
+    }
+    return _rest('GET', '/rest/v1/qnr_self_assessments' + q, undefined, true);
+  }
+
+  // 认知评估搜索
+  function searchMyCognitiveAssessments(query, opts) {
+    opts = opts || {};
+    var q = '?select=*&order=submitted_at.desc&deleted_at=is.null';
+    if (opts.limit) q += '&limit=' + opts.limit;
+    if (query) {
+      var esc = query.replace(/[%_]/g, '\\$&');
+      q += '&or=(patient_name.ilike.*' + encodeURIComponent(esc) + '*,'
+        + 'patient_age::text.ilike.*' + encodeURIComponent(esc) + '*)';
+    }
+    return _rest('GET', '/rest/v1/cognitive_assessments' + q, undefined, true);
+  }
+
+  // 步态报告搜索
+  function searchMyGaitAssessments(query, opts) {
+    opts = opts || {};
+    var q = '?select=*&order=submitted_at.desc&deleted_at=is.null';
+    if (opts.limit) q += '&limit=' + opts.limit;
+    if (query) {
+      var esc = query.replace(/[%_]/g, '\\$&');
+      q += '&or=(patient_name.ilike.*' + encodeURIComponent(esc) + '*,'
+        + 'classification_primary.ilike.*' + encodeURIComponent(esc) + '*)';
+    }
+    return _rest('GET', '/rest/v1/gait_assessments' + q, undefined, true);
+  }
+
+  // 头动追踪搜索
+  function searchMyTrackingRecords(query, opts) {
+    opts = opts || {};
+    var q = '?select=*&order=date.desc';
+    if (opts.limit) q += '&limit=' + opts.limit;
+    if (query) {
+      var esc = query.replace(/[%_]/g, '\\$&');
+      q += '&or=(patient_name.ilike.*' + encodeURIComponent(esc) + '*,'
+        + 'patient_gender.ilike.*' + encodeURIComponent(esc) + '*)';
+    }
+    return _rest('GET', '/rest/v1/cervical_tracking_records' + q, undefined, true);
+  }
+
+  // share_link 搜索
+  function searchShareLinks(query) {
+    var q = '?select=*&order=created_at.desc';
+    if (query) {
+      var esc = query.replace(/[%_]/g, '\\$&');
+      q += '&or=(prefilled_name.ilike.*' + encodeURIComponent(esc) + '*,'
+        + 'token.ilike.*' + encodeURIComponent(esc) + '*)';
+    }
+    return _rest('GET', '/rest/v1/qnr_share_links' + q, undefined, true);
+  }
+
   // ============ Auth (Supabase GoTrue) ============
 
   function signIn(email, password) {
@@ -405,6 +498,16 @@
     listMyTrackingRecords: listMyTrackingRecords,
     listShareLinks: listShareLinks,
     createShareLink: createShareLink,
+    deleteShareLink: deleteShareLink,
+    deleteQnrAssessment: deleteQnrAssessment,
+    deleteCognitiveAssessment: deleteCognitiveAssessment,
+    deleteGaitAssessment: deleteGaitAssessment,
+    deleteTrackingRecord: deleteTrackingRecord,
+    searchMyAssessments: searchMyAssessments,
+    searchMyCognitiveAssessments: searchMyCognitiveAssessments,
+    searchMyGaitAssessments: searchMyGaitAssessments,
+    searchMyTrackingRecords: searchMyTrackingRecords,
+    searchShareLinks: searchShareLinks,
     revokeShareLink: revokeShareLink,
     signIn: signIn,
     signUp: signUp,
