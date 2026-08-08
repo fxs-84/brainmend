@@ -634,24 +634,77 @@
     });
   }
 
-  // 认知报告详情: payload 即完整认知记录, 注入 cog_records 后复用 _viewCogReport 渲染
+  // 认知报告详情: 直接渲染到 #cog-report-overlay (云端数据, 不依赖 patient 本机 record)
   function openCognitiveReport(id) {
     var rec = null;
     for (var i = 0; i < _cogRows.length; i++) { if (_cogRows[i].id === id) { rec = _cogRows[i]; break; } }
-    if (!rec || !rec.payload) return;
-    if (typeof global._viewCogReport !== 'function') {
-      alert('认知报告模块未加载, 请刷新页面重试');
-      return;
-    }
-    try {
-      var records = JSON.parse(localStorage.getItem('cog_records') || '[]');
-      records.unshift(rec.payload);
-      if (records.length > 100) records = records.slice(0, 100);
-      localStorage.setItem('cog_records', JSON.stringify(records));
-    } catch (e) {}
+    if (!rec) { alert('记录未找到,请刷新列表'); return; }
     var dash = document.getElementById('bm-dashboard-modal');
     if (dash) dash.remove();
-    global._viewCogReport(0);
+    var overlay = document.getElementById('cog-report-overlay');
+    if (!overlay) { alert('报告容器未加载'); return; }
+
+    var nav = document.getElementById('cog-report-nav');
+    var body = document.getElementById('cog-report-body');
+    if (nav) {
+      nav.innerHTML = '<div style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:6px 12px;border-radius:6px;font-size:13px;">🧠 认知评估报告 · 云端存档</div>';
+    }
+
+    var payload = rec.payload || {};
+    var moduleScores = payload.moduleScores || {};
+    var moduleLabels = {
+      reasoning: '推理能力', scenerecall: '场景回忆', shortmem: '短暂视觉记忆',
+      attention: '注意力测试', memory: '文字记忆', visual: '视觉记忆',
+      planning: '规划能力', flex: '变通能力', language: '语言理解',
+      memorg: '记忆组织提取', inhibition: '自制力 (Stroop)', observation: '观察能力'
+    };
+    // 模块得分列表 (按 12 模块顺序)
+    var modOrder = ['reasoning','scenerecall','shortmem','attention','memory','visual','planning','flex','language','memorg','inhibition','observation'];
+    var modRows = modOrder.map(function (k) {
+      var s = moduleScores[k];
+      var v = s && (s.score != null ? s.score : (s.correct || 0));
+      var color = v >= 80 ? '#16a34a' : (v >= 60 ? '#ca8a04' : (v >= 40 ? '#ea580c' : '#dc2626'));
+      var pct = Math.max(0, Math.min(100, v || 0));
+      return '<div style="display:flex;align-items:center;gap:12px;padding:10px 8px;margin:0 -8px;border-top:1px solid #f1f5f9;border-radius:6px;">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:13px;color:#0f172a;">' + (moduleLabels[k] || k) + '</div>' +
+          '<div style="height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden;margin-top:4px;"><div style="height:100%;width:' + pct + '%;background:' + color + ';border-radius:3px;"></div></div>' +
+        '</div>' +
+        '<span style="flex:0 0 auto;font-size:13px;font-weight:700;color:' + color + ';min-width:48px;text-align:right;">' + (v != null ? v + ' 分' : '--') + '</span>' +
+      '</div>';
+    }).join('');
+
+    var ov = rec.overall_score != null ? rec.overall_score : '--';
+    var ovColor = rec.overall_score >= 80 ? '#16a34a' : (rec.overall_score >= 60 ? '#ca8a04' : '#dc2626');
+    var dateStr = rec.submitted_at ? new Date(rec.submitted_at).toLocaleString('zh-CN') : '';
+    var isQ6 = !!rec.is_quick6;
+    var html =
+      // 头部: 患者 + 综合分
+      '<div style="background:#fff;border-radius:12px;padding:18px 20px;margin-bottom:14px;border-left:4px solid #7c3aed;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
+        '<div>' +
+          '<div style="font-size:18px;font-weight:700;color:#0f172a;">' + _esc(rec.patient_name || '未知') + ' 的认知评估 <span style="font-size:12px;color:#94a3b8;font-weight:400;">' + _esc(rec.patient_gender || '') + (rec.patient_age ? ' · ' + rec.patient_age + '岁' : '') + '</span></div>' +
+          '<div style="font-size:12px;color:#94a3b8;margin-top:2px;">' + dateStr + ' · ' + (isQ6 ? '⚡ 快速测试 (6项)' : '📊 完整测试 (12项)') + ' · 云端存档</div>' +
+        '</div>' +
+        '<span style="background:' + ovColor + ';color:#fff;font-size:14px;font-weight:700;padding:6px 16px;border-radius:999px;">综合 ' + ov + ' 分</span>' +
+      '</div>' +
+      // 模块明细
+      '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px 16px;margin-bottom:12px;">' +
+        '<div style="font-size:15px;font-weight:700;color:#0f172a;margin-bottom:10px;">🧩 各模块得分</div>' +
+        modRows +
+      '</div>' +
+      // 底部免责
+      '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:12px 16px;font-size:12px;color:#92400e;line-height:1.7;">⚠️ 本评估用于一般健康教育, 结果属于评估提示, 不等同于医学诊断。如结果异常或症状持续, 请到正规医疗机构进一步评估。</div>';
+    if (body) body.innerHTML = html;
+
+    // 显示 overlay + 提高 z-index (避免被其他 overlay 遮挡)
+    overlay.style.display = 'block';
+    overlay.style.zIndex = '50000';
+    var page2 = document.getElementById('page2');
+    if (page2) page2.style.display = 'none';
+    var footer = document.getElementById('cog-report-footer');
+    if (footer) footer.style.display = '';
+    var recNav = document.getElementById('cog-record-nav');
+    if (recNav) recNav.style.display = 'none';
   }
 
   // 步态报告详情: 复用 __gaitReport.renderReport 渲染到弹层 (phaseSnapshots 提交时已剥离, 报告会自动降级)
