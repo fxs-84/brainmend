@@ -271,7 +271,8 @@
     });
     document.body.appendChild(overlay);
     _loadShareLinks();
-    _loadAssessments();
+    // 只加载当前 tab 的报告 (直接调 _loadAssessments 会与后续 tab 切换产生异步竞态)
+    switchReportTab(_currentReportTab);
   }
 
   // ============ 类型化链接 (qnr=自评 / cognitive=认知 / gait=步态) ============
@@ -331,6 +332,7 @@
     var list = document.getElementById('bm-report-list');
     if (!list) return;
     global.SupabaseClient.listMyAssessments({ limit: 50 }).then(function (rows) {
+      if (_currentReportTab !== 'qnr') return; // 异步返回时 tab 已切换, 丢弃过期结果
       _qnrRows = rows || [];
       if (!rows || !rows.length) {
         list.innerHTML = '<div class="bm-empty">还没有自评报告。等患者扫码提交...</div>';
@@ -378,6 +380,7 @@
     var list = document.getElementById('bm-report-list');
     if (!list) return;
     global.SupabaseClient.listMyTrackingRecords({ limit: 50 }).then(function (rows) {
+      if (_currentReportTab !== 'tracking') return; // 异步返回时 tab 已切换, 丢弃过期结果
       _trackingRows = rows || [];
       if (!_trackingRows.length) {
         list.innerHTML = '<div class="bm-empty">还没有头动追踪报告。等治疗师做完保存...</div>';
@@ -399,7 +402,8 @@
     });
   }
 
-  // 头动追踪报告详情 — 直接复用 #result-modal 原版样式, 把云端数据塞进去
+  // 头动追踪报告详情 — 原版「颈椎功能综合评估报告」渲染 (window.renderFullReport)
+  // 数据契约照抄 bundle 的 window._viewRecord: 字段写到 window.state 上再渲染
   function openTrackingReport(id) {
     var rec = null;
     for (var i = 0; i < _trackingRows.length; i++) {
@@ -410,6 +414,118 @@
     var dash = document.getElementById('bm-dashboard-modal');
     if (dash) dash.remove();
 
+    // 原版渲染器可用 → 走原版报告页 (#view-report 全页替换, 页脚"返回"恢复)
+    if (typeof global.renderFullReport === 'function' && global.state) {
+      try {
+        _renderTrackingFullReport(rec);
+        return;
+      } catch (e) {
+        console.error('[therapist-ui] renderFullReport 失败, 降级简化视图', e);
+      }
+    }
+    // 回退: #result-modal 简化视图 (bundle 未加载等异常)
+    _renderTrackingFallback(rec);
+  }
+
+  // 原版渲染: 与 bundle _viewRecord 相同的字段装配
+  function _renderTrackingFullReport(rec) {
+    var details = rec.details || {};
+    // 新记录带完整 assessment; 旧记录 (无 assessment) 用 Gt 同款逻辑重建最小 assessment
+    var assessment = details.assessment || _rebuildTrackingAssessment(rec);
+    // #page2 (首页) 层级高于 #view-report (z-2000), 会盖住报告 — 渲染前隐藏, 关闭时恢复
+    var page2 = document.getElementById('page2');
+    if (page2) page2.style.display = 'none';
+    _wrapCloseFullReport();
+    var st = global.state;
+    st._reportSource = 'saved';
+    st._savedAssessment = assessment;
+    st.clientInfo = {
+      name: rec.patient_name || '匿名',
+      gender: rec.patient_gender || '',
+      age: rec.patient_age || '',
+      id: rec.patient_id || ''
+    };
+    if (rec.date) {
+      var d = new Date(rec.date);
+      st.clientInfo._reportDate = d.toLocaleDateString('zh-CN');
+      st.clientInfo._reportTime = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    }
+    st.positionResults =
+      (assessment.vestibularFunction && assessment.vestibularFunction.details && assessment.vestibularFunction.details.positionResults) ||
+      (details.position && details.position.results) || [];
+    st.romResults =
+      (assessment.cervicalFunction && assessment.cervicalFunction.details && assessment.cervicalFunction.details.romResults) ||
+      (details.rom && details.rom.angles) || {};
+    st.coordFullScores = details.coordFullScores || [];
+    // ⚠️ 渲染器 (Nf) 对空 coordTrails 会回退读 localStorage 本地轨迹 — 显式给空数组 key 阻止错配
+    var trails = details.coordTrails;
+    st.coordTrails = (trails && Object.keys(trails).length) ? trails : { horizontal: [], vertical: [], figure8: [] };
+    st.trail = details.trail || [];
+    st.testDuration = details.testDuration || 10;
+    st.reportFindings = assessment.findings || [];
+    st.brainRegions = assessment.brainRegions || [];
+    st.reportRecommendations = assessment.recommendations || rec.recommendations || [];
+    global.renderFullReport(st);
+  }
+
+  // 包装 bundle 的 closeFullReport: 报告页"返回"时恢复 #page2 (只包一次)
+  function _wrapCloseFullReport() {
+    if (global.__bmCloseWrapped) return;
+    global.__bmCloseWrapped = true;
+    if (typeof global.closeFullReport !== 'function') return;
+    var origClose = global.closeFullReport;
+    global.closeFullReport = function () {
+      var r = origClose.apply(this, arguments);
+      try {
+        var p2 = document.getElementById('page2');
+        if (p2) p2.style.display = '';
+      } catch (e) {}
+      return r;
+    };
+  }
+
+  // 旧格式记录 (details.assessment 缺失) → 重建最小 assessment
+  // (与 bundle Gt() 同逻辑; 缺数据的 section 渲染器自己会显示"数据不足")
+  function _rebuildTrackingAssessment(rec) {
+    var scores = rec.scores || {};
+    var vest = rec.vestibular || {};
+    return {
+      cervicalCurvature: {
+        available: !!scores.rom,
+        riskScore: scores.rom ? Math.round((1 - scores.rom / 100) * 100) : 0,
+        score: scores.rom || 0,
+        interpretation: '颈椎曲度评估',
+        indicators: [],
+        pattern: null
+      },
+      vestibularFunction: {
+        score: vest.score || scores.stability || 50,
+        interpretation: vest.assessment || '前庭功能评估',
+        details: {
+          stabilityScore: vest.score || scores.stability || 50,
+          smoothnessAvg: vest.smoothness || 50,
+          trackingAvg: vest.tracking || 50,
+          positionErrorAvg: vest.positionError || 5
+        }
+      },
+      cervicalFunction: {
+        score: rec.overall || 50,
+        interpretation: '颈椎功能评估',
+        details: {
+          romScore: scores.rom || 50,
+          positionScore: scores.position || 50,
+          coordinationScore: scores.coordination || 50
+        }
+      },
+      findings: [],
+      brainRegions: [],
+      recommendations: rec.recommendations || [],
+      symptomCorrelations: { cervicalCurvature: {}, vestibular: {}, cervicalFunction: {} }
+    };
+  }
+
+  // 回退: #result-modal 简化视图 (renderFullReport 不可用时)
+  function _renderTrackingFallback(rec) {
     var modal = document.getElementById('result-modal');
     if (!modal) { alert('报告 modal 未加载,请刷新页面'); return; }
 
@@ -473,6 +589,7 @@
     var list = document.getElementById('bm-report-list');
     if (!list) return;
     global.SupabaseClient.listMyCognitiveAssessments({ limit: 50 }).then(function (rows) {
+      if (_currentReportTab !== 'cognitive') return; // 异步返回时 tab 已切换, 丢弃过期结果
       _cogRows = rows || [];
       if (!_cogRows.length) {
         list.innerHTML = '<div class="bm-empty">还没有认知报告。等患者扫码提交...</div>';
@@ -497,6 +614,7 @@
     var list = document.getElementById('bm-report-list');
     if (!list) return;
     global.SupabaseClient.listMyGaitAssessments({ limit: 50 }).then(function (rows) {
+      if (_currentReportTab !== 'gait') return; // 异步返回时 tab 已切换, 丢弃过期结果
       _gaitRows = rows || [];
       if (!_gaitRows.length) {
         list.innerHTML = '<div class="bm-empty">还没有步态报告。等患者扫码提交...</div>';

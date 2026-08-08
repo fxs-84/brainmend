@@ -2276,7 +2276,7 @@
 <!-- ⚠️ 必须在 qnr-supabase.js 之前加载, 否则 URL/KEY 是 undefined -->
 <script src="./assets/config/supabase-config.js" onerror="console.warn('[brainmend] supabase-config.js 未配置')"></script>
 <script src="./assets/cognitive/reports/qnr-supabase.js?v=20260808a"></script>
-<script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260808a"></script>
+<script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260808b"></script>
 <script src="./assets/cognitive/reports/qnr-region-detail.js?v=20260808a"></script>
 <script>
   // ===== 头动追踪 (cervical_tracking_records) · 报告入库 hook =====
@@ -2285,6 +2285,27 @@
   // 顶栏的"分享"按钮 (#trk-qr-btn) 不动 — 那是给患者扫码的路径
   // 报告 modal (#result-modal) 也不动 — UI 位置保持不变
   (function _hookTrackingSubmitCloud() {
+    // 轨迹点瘦身: 坐标取 3 位小数 + 超 1500 点等距抽稀 (体积控制, 视觉无损)
+    function _slimTrailPoints(arr) {
+      if (!arr || !arr.length) return [];
+      var step = arr.length > 1500 ? Math.ceil(arr.length / 1500) : 1;
+      var out = [];
+      for (var i = 0; i < arr.length; i += step) {
+        var p = arr[i] || {};
+        var pt = { x: Math.round((p.x || 0) * 1000) / 1000, y: Math.round((p.y || 0) * 1000) / 1000 };
+        if (p.yaw != null) pt.yaw = Math.round(p.yaw * 1000) / 1000;
+        if (p.pitch != null) pt.pitch = Math.round(p.pitch * 1000) / 1000;
+        if (p.timestamp != null) pt.timestamp = p.timestamp;
+        out.push(pt);
+      }
+      return out;
+    }
+    function _slimCoordTrails(trails) {
+      var out = {};
+      if (!trails) return out;
+      Object.keys(trails).forEach(function(k) { out[k] = _slimTrailPoints(trails[k]); });
+      return out;
+    }
     var attempts = 0;
     var timer = setInterval(function() {
       attempts++;
@@ -2298,6 +2319,15 @@
           try {
             var sess = window.SupabaseClient && window.SupabaseClient.getSession && window.SupabaseClient.getSession();
             if (sess && sess.access_token && window.SupabaseClient.isConfigured()) {
+              // details 里补全完整评估数据 (云端原版报告渲染所需;
+              // 与本地 Rt/savePatientData 存的字段对齐: assessment/coordFullScores/coordTrails/trail/testDuration)
+              var details = Object.assign({}, scores.details || {}, {
+                assessment: scores.assessment || null,
+                coordFullScores: scores.coordFullScores || [],
+                coordTrails: _slimCoordTrails(scores.coordTrails),
+                trail: _slimTrailPoints(scores.trail),
+                testDuration: scores.testDuration || 10
+              });
               window.SupabaseClient.submitTrackingRecord({
                 patient_name: clientInfo.name || '匿名',
                 patient_age: clientInfo.age || null,
@@ -2306,7 +2336,7 @@
                 date: new Date().toISOString(),
                 overall: scores.overall,
                 scores: scores.scores || {},
-                details: scores.details || {},
+                details: details,
                 vestibular: scores.vestibular || {},
                 recommendations: scores.recommendations || []
               }).then(function(id) {

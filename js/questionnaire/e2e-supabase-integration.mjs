@@ -155,11 +155,21 @@ try {
     }
     await pp.click("#quiz-next");
     await pp.waitForSelector("#screen-result:not([style*='none']) .result-group", { timeout: 30000 });
-    await pp.waitForSelector("#qnr-reg-overlay", { state: "visible", timeout: 5000 });
-    // 沙箱模式下登记表单会预填 (prefilled_name), 但还需要点提交
-    // 等待 name 字段已预填, 然后点提交
-    await pp.waitForTimeout(500);
-    await pp.click("#qnr-reg-submit");
+    // 登记表单仅在 URL 未预填姓名时弹出; 本测试链接预填了姓名 → 直接内联渲染
+    const regVisible = await pp.waitForSelector("#qnr-reg-overlay", { state: "visible", timeout: 5000 })
+      .then(() => true).catch(() => false);
+    if (regVisible) {
+      await pp.waitForTimeout(500);
+      await pp.click("#qnr-reg-submit");
+    } else {
+      console.log("  ℹ️ 姓名已预填, 跳过登记表单 (内联渲染路径)");
+      // 确认内联报告已渲染
+      await pp.waitForFunction(() => {
+        var el = document.getElementById("qnr-report-body");
+        return el && el.innerHTML.length > 500;
+      }, null, { timeout: 15000 });
+      console.log("  ✅ 内联报告已渲染 (预填路径)");
+    }
     await pp.waitForTimeout(6000);
     // 验证 Supabase 中是否有新行
     // 治疗师 session 用的是全局 session, 这里直接 fetch
