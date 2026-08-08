@@ -372,6 +372,7 @@
   // ============ 搜索 API (用 ilike 模糊匹配 patient_name 或 patient_age) ============
 
   // 神经系统自评搜索
+  // 注: PostgREST 不支持 ::text 类型转换语法, age 用 cast 也不行; 改用 name/patient_gender/source ilike
   function searchMyAssessments(query, opts) {
     opts = opts || {};
     var q = '?select=*&order=submitted_at.desc';
@@ -379,8 +380,8 @@
     if (query) {
       var esc = query.replace(/[%_]/g, '\\$&');
       q += '&or=(patient_name.ilike.*' + encodeURIComponent(esc) + '*,'
-        + 'patient_age::text.ilike.*' + encodeURIComponent(esc) + '*,'
-        + 'patient_gender.ilike.*' + encodeURIComponent(esc) + '*)';
+        + 'patient_gender.ilike.*' + encodeURIComponent(esc) + '*,'
+        + 'source.ilike.*' + encodeURIComponent(esc) + '*)';
     }
     return _rest('GET', '/rest/v1/qnr_self_assessments' + q, undefined, true);
   }
@@ -393,7 +394,8 @@
     if (query) {
       var esc = query.replace(/[%_]/g, '\\$&');
       q += '&or=(patient_name.ilike.*' + encodeURIComponent(esc) + '*,'
-        + 'patient_age::text.ilike.*' + encodeURIComponent(esc) + '*)';
+        + 'patient_gender.ilike.*' + encodeURIComponent(esc) + '*,'
+        + 'is_quick6::text.ilike.*' + encodeURIComponent(esc) + '*)';
     }
     return _rest('GET', '/rest/v1/cognitive_assessments' + q, undefined, true);
   }
