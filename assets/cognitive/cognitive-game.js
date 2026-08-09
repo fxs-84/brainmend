@@ -599,13 +599,13 @@ function initCognitive() {
     var c = document.getElementById('cognitive-canvas');
     if (!c) return;
     var area = document.getElementById('detection-area');
-    c.width = area ? area.offsetWidth : 1070;
-    c.height = area ? area.offsetHeight : 746;
+    if (window._cogFitCanvas) window._cogFitCanvas();
+    else { c.width = area ? area.offsetWidth : 1070; c.height = area ? area.offsetHeight : 746; }
     initColumns();
     window.addEventListener('resize', function() {
         if (c.style.display !== 'none') {
-            c.width = area ? area.offsetWidth : 1070;
-            c.height = area ? area.offsetHeight : 746;
+            if (window._cogFitCanvas) window._cogFitCanvas();
+            else { c.width = area ? area.offsetWidth : 1070; c.height = area ? area.offsetHeight : 746; }
             calcColPositions();
         }
     });
@@ -636,6 +636,7 @@ window._showCognitive = function() {
     if (c) c.style.display = 'block';
     if (vc) vc.style.display = 'flex';
     if (xc) xc.style.display = 'none';
+    if (window._cogFitCanvas) window._cogFitCanvas();
     calcColPositions();
     if (window.__cogModule === 'planning') cog.showReady();
     updateUI();

@@ -348,7 +348,7 @@
         </header>
         <main>
             <div id="detection-area" style="position:relative;">
-                    <canvas id="cognitive-canvas" style="position:absolute;inset:0;z-index:10;display:none;"></canvas>>
+                    <canvas id="cognitive-canvas" style="position:absolute;inset:0;width:100%;height:100%;z-index:10;display:none;"></canvas>
                     <canvas id="crosshair-canvas"></canvas>
                     <div id="coord-bottom-bar" style="display:none;position:fixed;bottom:20px;right:20px;gap:8px;padding:10px 20px;background:rgba(255,255,255,0.95);border-radius:14px;box-shadow:0 2px 16px rgba(0,0,0,0.15);z-index:1000;">
                         <button class="collect-btn" id="zero-btn-coord-bar" style="padding:10px 16px;background:var(--secondary);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;">⟳ 归零</button>
@@ -950,6 +950,7 @@
 
 
 <script src="./assets/cognitive/scoring-utils.js"></script>
+<script src="./assets/cognitive/cognitive-fit.js"></script>
 <script src="./assets/cognitive/cognitive-game.js"></script>
 <script src="./assets/cognitive/cognitive-stroop.js"></script>
 <script src="./assets/cognitive/cognitive-memory.js"></script>
@@ -1156,15 +1157,7 @@
             window.__cogModule = id;
             // Show cognitive canvas
             var c = document.getElementById("cognitive-canvas");
-            if (c) {
-              c.style.display = "block";
-              // 响应式: canvas 内部尺寸跟视口 (避免模块按固定 800x600 算坐标溢出)
-              var rect = c.getBoundingClientRect();
-              if (rect.width > 0 && rect.height > 0) {
-                c.width = Math.floor(rect.width);
-                c.height = Math.floor(rect.height);
-              }
-            }
+            if (c) c.style.display = "block";
             var vc = document.getElementById("view-cognitive");
             if (vc) vc.style.display = "flex";
             var xc = document.getElementById("crosshair-canvas");
@@ -1178,8 +1171,9 @@
             if (sp) { sp.style.setProperty("display","none","important"); sp.style.setProperty("width","0","important"); sp.style.setProperty("min-width","0","important"); sp.style.setProperty("overflow","hidden","important"); }
             var area = document.getElementById("detection-area");
             if (area) { area.style.setProperty("flex","1","important"); area.style.setProperty("min-width","","important"); }
-            // 强制 canvas 尺寸跟随布局变化
-            if (c && area) { c.width = area.offsetWidth; c.height = area.offsetHeight; }
+            // 画布自适应: 虚拟分辨率等比缩放 (小屏保证题目完整、双框不重叠)
+            if (window._cogFitCanvas) window._cogFitCanvas();
+            else if (c && area) { c.width = area.offsetWidth; c.height = area.offsetHeight; }
             // Panel: planning needs start-btn, others reuse inhibition panel (stroop-status/stroop-score)
             var pp = document.getElementById("cog-panel-planning");
             var ip = document.getElementById("cog-panel-inhibition");
