@@ -128,10 +128,17 @@ for (const cfg of configs) {
   await p.waitForTimeout(600);
   await p.screenshot({ path: `${OUT}/${cfg.name}-3-flex-dualbox.png` });
 
-  // --- 6. 场景回忆 ready 屏 (460px 反馈框模块) ---
+  // --- 6. 场景回忆: ready 屏 + 实际网格界面 (格子高度约束验证) ---
   await activate("scenerecall", "__scenerecall");
   await p.waitForTimeout(800);
   await p.screenshot({ path: `${OUT}/${cfg.name}-4-scenerecall-ready.png` });
+  await clickCanvas(p, W / 2, H / 2 + 50); // ready 开始教程
+  await p.waitForTimeout(400);
+  await clickCanvas(p, W / 2, H / 2 + 56); // tutorial_text 继续 → tutorial_1 记忆阶段网格
+  await p.waitForTimeout(800);
+  const srPhase = await p.evaluate(() => window.__scenerecall.phase);
+  console.log("  scenerecall phase:", srPhase, srPhase === "tutorial_1" ? "OK" : "FAIL");
+  await p.screenshot({ path: `${OUT}/${cfg.name}-6-scenerecall-grid.png` });
 
   await ctx.close();
 }

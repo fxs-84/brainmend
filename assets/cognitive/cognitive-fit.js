@@ -5,7 +5,7 @@
 //   · 无 letterbox, canvas 始终填满检测区
 //   · 点击坐标各模块已通过 getBoundingClientRect 比例换算, 自动适配无需改动
 (function(){
-var COG_MIN_W = 1070, COG_MIN_H = 746;
+var COG_MIN_W = 1070, COG_MIN_H = 600;
 
 window._cogFitCanvas = function() {
     var c = document.getElementById('cognitive-canvas');
@@ -66,6 +66,9 @@ function _applyForceLandscape() {
     app.style.transformOrigin = 'left top';
     app.style.transform = 'rotate(-90deg)';
     document.body.style.overflow = 'hidden';
+    // 隐藏 header 释放高度 (手机横屏可用高度本来就只有 ~375px)
+    var hd = document.querySelector('#app header');
+    if (hd) { hd.dataset.cogForcedHide = '1'; hd.style.display = 'none'; }
     setTimeout(function() { window._cogFitCanvas(); _refresh(); }, 80);
 }
 
@@ -79,6 +82,8 @@ function _removeForceLandscape() {
         app.style.transformOrigin = ''; app.style.transform = '';
     }
     document.body.style.overflow = '';
+    var hd = document.querySelector('#app header');
+    if (hd && hd.dataset.cogForcedHide) { hd.style.display = ''; delete hd.dataset.cogForcedHide; }
     setTimeout(function() { window._cogFitCanvas(); }, 80);
 }
 
