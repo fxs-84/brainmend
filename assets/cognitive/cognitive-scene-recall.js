@@ -2,7 +2,8 @@
 (function(){
 var GOLD='#C9A84C',GRID=6,MAX_LIVES=3,INITIAL_ICONS=5,INITIAL_TIME=6;
 // 响应式 cell: 6x6 网格自适应, 同时受宽度和高度约束 (矮屏横屏不溢出), 最小 36px, 最大 80px
-function _srCell(W,H){return Math.max(36,Math.min(80,Math.floor((W-80)/6),Math.floor(((H||746)-140)/6)));}
+// 高度预留 155px: 顶部 100px (放大镜+倒计时/爱心) + 底部 55px (操作提示)
+function _srCell(W,H){return Math.max(36,Math.min(80,Math.floor((W-80)/6),Math.floor(((H||746)-155)/6)));}
 var _srCellCache=null;
 var ICON_FILES=['a-183_xigua.svg','a-189_shu-4.svg','a-202_daxiang.svg','jianbiandise-01.svg','hanbao.svg','zhaipeisong.svg','gongjiaoche.svg','zhishengji.svg','baicai.svg','dalanqiu.svg'];
 
@@ -128,7 +129,8 @@ function gridMetrics(W,H){
 	var CELL=_srCell(W,H);
 	var GAP=Math.max(2,Math.floor(CELL*0.05));
 	var gw=GRID*(CELL+GAP)-GAP,gh=gw;
-	return{gw:gw,gh:gh,ox:W/2-gw/2,oy:H/2-gh/2-10,CELL:CELL,GAP:GAP};
+	// oy 保底 100: 给顶部放大镜(oy-55,r≈22)和倒计时/爱心文字(oy-70)留足空间
+	return{gw:gw,gh:gh,ox:W/2-gw/2,oy:Math.max(H/2-gh/2-10,100),CELL:CELL,GAP:GAP};
 }
 
 function renderSceneRecall(){
@@ -305,8 +307,8 @@ function renderGame(ctx,W,H){
 	if(isQuery){for(var i3=0;i3<sr.positions.length;i3++){var p=sr.positions[i3];sr._posHitboxes.push({idx:i3,x:ox+p.c*(CELL+GAP),y:oy+p.r*(CELL+GAP),w:CELL,h:CELL});}}
 
 	// Instructional text
-	if(isQuery&&!isTut1){ctx.font='bold 15px sans-serif';ctx.fillStyle='#aaa';ctx.textAlign='center';ctx.fillText('点击放大镜中元素对应位置',W/2,oy+gh+40);ctx.textAlign='start';}
-	if(isQuery&&isTut1){ctx.font='bold 15px sans-serif';ctx.fillStyle='#aaa';ctx.textAlign='center';ctx.fillText('点击手指指向的元素位置',W/2,oy+gh+40);ctx.textAlign='start';}
+	if(isQuery&&!isTut1){ctx.font='bold 15px sans-serif';ctx.fillStyle='#aaa';ctx.textAlign='center';ctx.fillText('点击放大镜中元素对应位置',W/2,oy+gh+30);ctx.textAlign='start';}
+	if(isQuery&&isTut1){ctx.font='bold 15px sans-serif';ctx.fillStyle='#aaa';ctx.textAlign='center';ctx.fillText('点击手指指向的元素位置',W/2,oy+gh+30);ctx.textAlign='start';}
 }
 
 function handleClick(ex,ey){

@@ -138,6 +138,9 @@ for (const cfg of configs) {
   await p.waitForTimeout(800);
   const srPhase = await p.evaluate(() => window.__scenerecall.phase);
   console.log("  scenerecall phase:", srPhase, srPhase === "tutorial_1" ? "OK" : "FAIL");
+  // 等 memorize(3s) 结束进入 query → 放大镜出现, 验证顶部安全区
+  await p.waitForFunction(() => window.__scenerecall.subPhase === "query", null, { timeout: 10000 });
+  await p.waitForTimeout(400);
   await p.screenshot({ path: `${OUT}/${cfg.name}-6-scenerecall-grid.png` });
 
   await ctx.close();

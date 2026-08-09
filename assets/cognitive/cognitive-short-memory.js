@@ -161,8 +161,8 @@ function renderSMGame(ctx,W,H){
     // "新的回合" 覆盖提示
     if(sm.displayPhase==='ready_countdown'){var animDur=700,el3=n2-sm.showTimer,t3=Math.min(1,el3/animDur),c1=1.70158,c3v=c1+1,e3=1+c3v*Math.pow(t3-1,3)+c1*Math.pow(t3-1,2);ctx.save();ctx.translate(W/2,H/2);ctx.rotate(-180*(1-e3)*Math.PI/180);ctx.scale(e3,e3);ctx.globalAlpha=e3;ctx.font='bold 36px sans-serif';ctx.fillStyle='rgba(255,255,255,0.95)';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('新的回合',0,0);ctx.restore();}
     // 下方提示
-    if(sm.displayPhase==='input'){ctx.font='bold 16px sans-serif';ctx.fillStyle='#aaa';ctx.textAlign='center';ctx.fillText('请按顺序点击出现过熊猫的方格',W/2,off.y+GRID_SZ*(CELL_SZ+GAP)+20);ctx.textAlign='start';}
-    if(sm.phase==='tutorial_1'&&sm.displayPhase==='finger'){ctx.font='bold 16px sans-serif';ctx.fillStyle='#aaa';ctx.textAlign='center';ctx.fillText('大熊猫出现的顺序是？',W/2,off.y+GRID_SZ*(CELL_SZ+GAP)+20);ctx.textAlign='start';}
+    if(sm.displayPhase==='input'){ctx.font='bold 16px sans-serif';ctx.fillStyle='#aaa';ctx.textAlign='center';ctx.fillText('请按顺序点击出现过熊猫的方格',W/2,off.y+GRID_SZ*(off.CELL+off.GAP)+20);ctx.textAlign='start';}
+    if(sm.phase==='tutorial_1'&&sm.displayPhase==='finger'){ctx.font='bold 16px sans-serif';ctx.fillStyle='#aaa';ctx.textAlign='center';ctx.fillText('大熊猫出现的顺序是？',W/2,off.y+GRID_SZ*(off.CELL+off.GAP)+20);ctx.textAlign='start';}
 }
 
 function handleClick(ex,ey){
@@ -178,7 +178,7 @@ function handleClick(ex,ey){
     if(sm.phase==='ready_game'&&sm._rgb){var rgb=sm._rgb;if(mx>=rgb.x&&mx<=rgb.x+rgb.w&&my>=rgb.y&&my<=rgb.y+rgb.h){sm.showReadyStart();return true;}return false;}
     if(sm.phase==='done'){if(sm._db1&&mx>=sm._db1.x&&mx<=sm._db1.x+sm._db1.w&&my>=sm._db1.y&&my<=sm._db1.y+sm._db1.h){sm.showReadyStart();return true;}if(sm._db2&&mx>=sm._db2.x&&mx<=sm._db2.x+sm._db2.w&&my>=sm._db2.y&&my<=sm._db2.y+sm._db2.h){window._nextModule("shortmem");return true;}return false;}
     // grid
-    if(sm.phase==='tutorial_1'||sm.phase==='tutorial_2'||sm.phase==='playing'){var off=gridOff(W,H);for(var r=0;r<GRID_SZ;r++){for(var c3=0;c3<GRID_SZ;c3++){var cp=cellXY(off,r,c3);if(mx>=cp.x&&mx<=cp.x+CELL_SZ&&my>=cp.y&&my<=cp.y+CELL_SZ){clickCell(r,c3);return true;}}}}
+    if(sm.phase==='tutorial_1'||sm.phase==='tutorial_2'||sm.phase==='playing'){var off=gridOff(W,H);for(var r=0;r<GRID_SZ;r++){for(var c3=0;c3<GRID_SZ;c3++){var cp=cellXY(off,r,c3);if(mx>=cp.x&&mx<=cp.x+off.CELL&&my>=cp.y&&my<=cp.y+off.CELL){clickCell(r,c3);return true;}}}}
     return false;
 }
 
