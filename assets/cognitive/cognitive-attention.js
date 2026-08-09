@@ -3,6 +3,9 @@
 (function(){
 var GOLD='#C9A84C';
 var GRID=6, BOX_W=224, BOX_H=224, CELL=Math.floor(BOX_W/GRID), ICON_SIZE=Math.floor(CELL*0.78);
+// 响应式: 两个方框在小屏上自动缩小, 大屏保持原大小
+// 总宽 = 2*BOX_W + gap, 但小屏留 20px padding 后单方框宽 = (W-40-gap)/2
+function _atBox(W){var minBox=80,maxBox=224,gap=12;return Math.max(minBox,Math.min(maxBox,Math.floor((W-40-gap)/2)));}
 var ICON_PAD=(CELL-ICON_SIZE)/2;
 var START_N=9, MIN_N=8, MAX_N=13;
 var ICON_FILES=[
@@ -374,6 +377,12 @@ function renderGame(ctx,W,H){
   if(at.feedbackText&&performance.now()-at.feedbackT>at.feedbackDur){
     at.feedbackText='';
   }
+
+  // 响应式: 两个方框自适应 viewport
+  var BOX_W=_atBox(W);
+  var BOX_H=BOX_W;  // 正方形
+  var CELL=Math.floor(BOX_W/GRID);
+  var ICON_SIZE=Math.floor(CELL*0.78);
 
   // 关键设计: box merge — 答完两框向中心收敛重叠
   // 静止时 gap=40 (两框分开); 答完动画 gap 从 40 收到 -100 (重叠 100px 做对比)

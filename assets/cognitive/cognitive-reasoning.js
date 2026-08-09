@@ -196,7 +196,13 @@ function renderReasoning(){
 		ctx.fillText('倒计时 '+min+':'+(sec<10?'0':'')+sec,W/2,40);
 		ctx.textAlign='start';
 	}
-	var cellSz=120,gridGap=8,gridW=cellSz*3+gridGap*2,gridH=cellSz*3+gridGap*2;
+	// 响应式 grid: 小屏自动缩小方框, 避免溢出
+	// W=canvas.width (viewport 宽), H=canvas.height (viewport 高)
+	// portrait (W<500) 用小方框, landscape (W>700) 用大方框
+	var cellSz=Math.min((W-80)/3,(H-120)/3,120);
+	cellSz=Math.max(cellSz,40);  // 最小 40px 保证可点击
+	var gridGap=Math.max(6,Math.floor(cellSz*0.06));
+	var gridW=cellSz*3+gridGap*2,gridH=cellSz*3+gridGap*2;
 	var gx=W/2-gridW/2,gy=H/2-gridH/2-40;
 	rn._cells=[];
 	for(var r=0;r<3;r++){

@@ -1,6 +1,9 @@
 // 模块3: 场景回忆能力 — 图标位置记忆+放大镜查询
 (function(){
-var GOLD='#C9A84C',GRID=6,CELL=48,GAP=2,MAX_LIVES=3,INITIAL_ICONS=5,INITIAL_TIME=6;
+var GOLD='#C9A84C',GRID=6,MAX_LIVES=3,INITIAL_ICONS=5,INITIAL_TIME=6;
+// 响应式 cell: 4x4 网格自适应, 最小 36px, 最大 80px
+function _srCell(W){return Math.max(36,Math.min(80,Math.floor((W-80)/6)));}
+var _srCellCache=null;
 var ICON_FILES=['a-183_xigua.svg','a-189_shu-4.svg','a-202_daxiang.svg','jianbiandise-01.svg','hanbao.svg','zhaipeisong.svg','gongjiaoche.svg','zhishengji.svg','baicai.svg','dalanqiu.svg'];
 
 var sr=window.__scenerecall={
@@ -121,7 +124,12 @@ sr.showReadyGame=function(){sr.phase='ready_game';updateUI();};
 sr.showReadyStart=function(){sr.phase='ready_start';updateUI();};
 function startPlaying(){sr.phase='playing';sr.trials=0;sr.correct=0;sr.lives=MAX_LIVES;sr.showCardBacks=true;genTrial(INITIAL_ICONS,INITIAL_TIME);updateUI();}
 
-function gridMetrics(W,H){var gw=GRID*(CELL+GAP)-GAP,gh=gw;return{gw:gw,gh:gh,ox:W/2-gw/2,oy:H/2-gh/2-10};}
+function gridMetrics(W,H){
+	var CELL=_srCell(W);
+	var GAP=Math.max(2,Math.floor(CELL*0.05));
+	var gw=GRID*(CELL+GAP)-GAP,gh=gw;
+	return{gw:gw,gh:gh,ox:W/2-gw/2,oy:H/2-gh/2-10,CELL:CELL,GAP:GAP};
+}
 
 function renderSceneRecall(){
 	var c=document.getElementById('cognitive-canvas');if(!c||c.style.display==='none'||!sr||sr.phase==='idle')return;
@@ -222,7 +230,7 @@ function renderGame(ctx,W,H){
 	}
 
 	// Draw grid cells (no visible border unless tutorial_3 or formal)
-
+	var CELL=gm.CELL,GAP=gm.GAP;
 	for(var r=0;r<GRID;r++){
 		for(var c2=0;c2<GRID;c2++){
 			var x=ox+c2*(CELL+GAP),y=oy+r*(CELL+GAP);

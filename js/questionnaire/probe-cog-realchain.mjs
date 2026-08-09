@@ -157,9 +157,11 @@ try {
     assert("C3. therapist_id = 当前治疗师", dbRows[0].therapist_id === sess2.user.id, dbRows[0].therapist_id);
     assert("C4. source = qr", dbRows[0].source === 'qr', dbRows[0].source);
     const payload = dbRows[0].payload || {};
-    const hasRealScores = payload.moduleScores && Object.keys(payload.moduleScores).length > 0;
-    assert("C5. payload 有真实模块分数 (非编造)", hasRealScores, "modules=" + Object.keys(payload.moduleScores || {}).join(','));
+    const hasRealScores = payload.rawScores && Object.keys(payload.rawScores).length > 0;
+    assert("C5. payload 有真实模块分数 (rawScores, 非编造)", hasRealScores, "modules=" + Object.keys(payload.rawScores || {}).join(','));
     assert("C6. payload.overallScore = 本机一致", payload.overallScore != null, String(payload.overallScore));
+    assert("C7. payload 有 brainRegions (10 脑区真算)", payload.brainRegions && Object.keys(payload.brainRegions).length >= 10, String(Object.keys(payload.brainRegions || {}).length));
+    assert("C8. payload 有 riskIndex", payload.riskIndex != null, String(payload.riskIndex));
   }
   await pp.screenshot({ path: "js/questionnaire/screenshot-cog-realchain.png", fullPage: true });
   await pCtx.close();

@@ -1156,7 +1156,15 @@
             window.__cogModule = id;
             // Show cognitive canvas
             var c = document.getElementById("cognitive-canvas");
-            if (c) c.style.display = "block";
+            if (c) {
+              c.style.display = "block";
+              // 响应式: canvas 内部尺寸跟视口 (避免模块按固定 800x600 算坐标溢出)
+              var rect = c.getBoundingClientRect();
+              if (rect.width > 0 && rect.height > 0) {
+                c.width = Math.floor(rect.width);
+                c.height = Math.floor(rect.height);
+              }
+            }
             var vc = document.getElementById("view-cognitive");
             if (vc) vc.style.display = "flex";
             var xc = document.getElementById("crosshair-canvas");
@@ -2198,7 +2206,7 @@
 <!-- ⚠️ 必须在 qnr-supabase.js 之前加载, 否则 URL/KEY 是 undefined -->
 <script src="./assets/config/supabase-config.js" onerror="console.warn('[brainmend] supabase-config.js 未配置')"></script>
 <script src="./assets/cognitive/reports/qnr-supabase.js?v=20260808f"></script>
-<script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260808f"></script>
+<script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260808g"></script>
 <script src="./assets/cognitive/reports/qnr-region-detail.js?v=20260808a"></script>
 <script>
   // ===== 头动追踪 (cervical_tracking_records) · 报告入库 hook =====
