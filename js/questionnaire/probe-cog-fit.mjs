@@ -16,15 +16,20 @@ const configs = [
   { name: "m-landscape",  width: 812,  height: 375, hasTouch: true },
 ];
 
-// 把 canvas 内部坐标转换为页面 client 坐标后分发点击 (模拟用户点按)
+// 把 canvas 内部坐标转换为可视 client 坐标后真实点击 (走生产分发链路)
 async function clickCanvas(p, mx, my) {
-  await p.evaluate(({ mx, my }) => {
+  const pt = await p.evaluate(({ mx, my }) => {
     const c = document.getElementById("cognitive-canvas");
-    const r = c.getBoundingClientRect();
-    const cx = r.left + (mx * r.width) / c.width;
-    const cy = r.top + (my * r.height) / c.height;
-    window._handleCogClick(cx, cy);
+    const R = c.getBoundingClientRect();
+    const app = document.getElementById("app");
+    const forced = app && app.style.transform.indexOf("rotate") >= 0;
+    if (forced) {
+      // 旋转态: client = (T + lh*fy, innerHeight - (L + lw*fx))
+      return [R.left + R.width * (my / c.height), R.top + R.height * (1 - mx / c.width)];
+    }
+    return [R.left + R.width * (mx / c.width), R.top + R.height * (my / c.height)];
   }, { mx, my });
+  await p.mouse.click(pt[0], pt[1]);
 }
 
 for (const cfg of configs) {
@@ -83,19 +88,33 @@ for (const cfg of configs) {
   console.log("  rotate-hint(激活后):", hintAfter);
   await p.screenshot({ path: `${OUT}/${cfg.name}-1-hint-or-ready.png` });
 
-  // 若有引导遮罩 → 点"继续竖屏"关掉, 验证可关闭
+  // 若有引导遮罩 → 点"全屏并横屏", 验证 1s 后 CSS 强制横屏生效
   if (hintAfter === "flex") {
-    await p.click("#cog-rotate-skip");
-    await p.waitForTimeout(400);
-    const closed = await p.evaluate(() => getComputedStyle(document.getElementById("cog-rotate-hint")).display);
-    console.log("  rotate-hint(关闭后):", closed);
+    await p.click("#cog-rotate-go");
+    await p.waitForTimeout(1800);
+    const forced = await p.evaluate(() => {
+      const app = document.getElementById("app");
+      const c = document.getElementById("cognitive-canvas");
+      const area = document.getElementById("detection-area");
+      return {
+        transform: app.style.transform,
+        backing: c.width + "x" + c.height,
+        area: area.offsetWidth + "x" + area.offsetHeight,
+      };
+    });
+    console.log("  强制横屏:", JSON.stringify(forced));
+    await p.screenshot({ path: `${OUT}/${cfg.name}-5-forced-landscape.png` });
   }
 
   // --- 3. ready 屏 (440px 固定宽框) 截图 ---
   await p.screenshot({ path: `${OUT}/${cfg.name}-2-flex-ready.png` });
 
-  // --- 4. 点击"开始教程"验证缩放后的点击映射 ---
-  const W = dims.cw, H = dims.ch;
+  // --- 4. 点击"开始教程"验证缩放后的点击映射 (强制横屏后重新取 backing 尺寸) ---
+  const dim2 = await p.evaluate(() => {
+    const c = document.getElementById("cognitive-canvas");
+    return { cw: c.width, ch: c.height };
+  });
+  const W = dim2.cw, H = dim2.ch;
   await clickCanvas(p, W / 2, H / 2 + 52); // ready 按钮中心
   await p.waitForTimeout(400);
   let phase = await p.evaluate(() => window.__flex.phase);

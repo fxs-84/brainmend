@@ -971,8 +971,12 @@
 <script src="./assets/gait-report.js"></script>
 <script>
     // 全局点击分发 (认知模块)
+    // 经 _cogMapPointer 转换: CSS 强制横屏(rotate(-90deg))下把 client 坐标
+    // 映射回未旋转坐标系, 保证各模块 rect 比例换算仍然正确
     document.addEventListener('click', function(e) {
-        if (window._handleCogClick && window._handleCogClick(e.clientX, e.clientY)) {
+        var px = e.clientX, py = e.clientY;
+        if (window._cogMapPointer) { var mp = window._cogMapPointer(px, py); px = mp[0]; py = mp[1]; }
+        if (window._handleCogClick && window._handleCogClick(px, py)) {
             e.stopPropagation(); e.preventDefault();
         }
     }, true);

@@ -47,8 +47,62 @@ function _cogActive() {
 }
 function _isPortrait() { return window.innerHeight > window.innerWidth; }
 
+// ---------- CSS 强制横屏 (orientation.lock 失败 / iOS 的兜底) ----------
+// 原理: 浏览器停在竖屏时, 把 #app 容器旋转 90° 渲染,
+// 布局宽度取视口高度 → 内容以横屏形态呈现, 用户横握手机即正常阅读
+var _forced = false;
+
+function _applyForceLandscape() {
+    if (_forced) return;
+    var app = document.getElementById('app');
+    if (!app) return;
+    _forced = true;
+    app.style.position = 'fixed';
+    app.style.left = '0';
+    app.style.top = '100%';
+    app.style.width = '100vh';
+    app.style.height = '100vw';
+    app.style.margin = '0';
+    app.style.transformOrigin = 'left top';
+    app.style.transform = 'rotate(-90deg)';
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { window._cogFitCanvas(); _refresh(); }, 80);
+}
+
+function _removeForceLandscape() {
+    if (!_forced) return;
+    _forced = false;
+    var app = document.getElementById('app');
+    if (app) {
+        app.style.position = ''; app.style.left = ''; app.style.top = '';
+        app.style.width = ''; app.style.height = ''; app.style.margin = '';
+        app.style.transformOrigin = ''; app.style.transform = '';
+    }
+    document.body.style.overflow = '';
+    setTimeout(function() { window._cogFitCanvas(); }, 80);
+}
+
+// CSS 强制横屏下的指针坐标映射 (供全局点击分发调用)
+// rotate(-90deg) 且容器位于 left:0/top:100% 时:
+//   内容坐标 (cx,cy) → client (cy, innerHeight-cx)
+//   由 canvas 旋转后的外接矩形 R 反推布局矩形, 解出等价的"未旋转" client 坐标
+window._cogMapPointer = function(px, py) {
+    if (!_forced) return [px, py];
+    var c = document.getElementById('cognitive-canvas');
+    if (!c) return [px, py];
+    var R = c.getBoundingClientRect();
+    if (!R.width || !R.height) return [px, py];
+    var ex = R.left + R.width  * (R.top + R.height - py) / R.height;
+    var ey = R.top  + R.height * (px - R.left) / R.width;
+    return [ex, ey];
+};
+
 function _refresh() {
-    var need = !_dismissed && Date.now() >= _snoozeUntil && _cogActive() && _isPortrait() && _isCoarseSmall();
+    // 浏览器真转横了 → 摘掉 CSS 强制横屏
+    if (_forced && !_isPortrait()) { _removeForceLandscape(); }
+    // 退出认知评估(含报告页) → 摘掉 CSS 强制横屏
+    if (_forced && !_cogActive()) { _removeForceLandscape(); }
+    var need = !_forced && !_dismissed && Date.now() >= _snoozeUntil && _cogActive() && _isPortrait() && _isCoarseSmall();
     if (need) { _ensureOverlay().style.display = 'flex'; }
     else if (_overlay) { _overlay.style.display = 'none'; }
 }
@@ -83,6 +137,12 @@ function _ensureOverlay() {
                 }).catch(function() {});
             }
         } catch(e) {}
+        // 等待系统旋转; 1 秒后仍是竖屏 → CSS 强制横屏兜底
+        setTimeout(function() {
+            if (_cogActive() && _isPortrait() && !_forced) {
+                _applyForceLandscape();
+            }
+        }, 1000);
     });
     _overlay.querySelector('#cog-rotate-skip').addEventListener('click', function() {
         _dismissed = true;
