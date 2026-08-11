@@ -935,6 +935,7 @@
     var regionDefs = dataMod.BRAIN_REGION_DEFS || [];
     var items = rec.responses || {};
     var formatted = {
+      id: rec.id, // PDF 导出路由 (_qnrExportReport) 需要 id 定位/兜底记录
       patientInfo: { name: rec.patient_name, age: rec.patient_age, gender: rec.patient_gender, id: '' },
       date: rec.submitted_at ? rec.submitted_at.substring(0, 10) : '',
       time: rec.submitted_at ? rec.submitted_at.substring(11, 16) : '',

@@ -1838,8 +1838,9 @@
                         if (byIdx && byIdx.type === 'questionnaire') rec = byIdx;
                     } catch(e) {}
                 }
-                if (rec && rec.id) {
-                    window._qnrExportReport(rec.id);
+                if (rec && (rec.id || rec.type === 'questionnaire')) {
+                    // 云端记录可能没有 id (旧版工作台 formatted 无 id), 直接传记录对象
+                    window._qnrExportReport(rec.id || rec);
                     return;
                 }
             }
@@ -1849,9 +1850,11 @@
             }
         };
 
-        window._qnrExportReport = async function(recId) {
+        window._qnrExportReport = async function(recOrId) {
+            // 支持传记录 id (string) 或直接传记录对象 (云端记录可能无 id / 不在本机 cog_records)
+            var recId = (recOrId && typeof recOrId === 'object') ? recOrId.id : recOrId;
             // 找按钮 (做禁用 + 进度提示); 经 _exportCurrentReport 路由进来时兜底用 footer 导出按钮
-            var btn = document.querySelector('button[onclick*="_qnrExportReport(\'' + recId + '\')"]') ||
+            var btn = (recId ? document.querySelector('button[onclick*="_qnrExportReport(\'' + recId + '\')"]') : null) ||
                       document.getElementById('cog-report-export-btn');
             var setBtn = function(text, disabled) {
                 if (btn) { btn.disabled = disabled; btn.textContent = text; }
@@ -1869,6 +1872,7 @@
                 if (!rec && window.__qnrCurrentReportRec && window.__qnrCurrentReportRec.id === recId) {
                     rec = window.__qnrCurrentReportRec;
                 }
+                if (!rec && recOrId && typeof recOrId === 'object') rec = recOrId;
                 if (!rec) throw new Error('未找到该记录');
 
                 var body = document.getElementById('cog-report-body');
@@ -2207,7 +2211,7 @@
 <!-- ⚠️ 必须在 qnr-supabase.js 之前加载, 否则 URL/KEY 是 undefined -->
 <script src="./assets/config/supabase-config.js" onerror="console.warn('[brainmend] supabase-config.js 未配置')"></script>
 <script src="./assets/cognitive/reports/qnr-supabase.js?v=20260808f"></script>
-<script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260808g"></script>
+<script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260811a"></script>
 <script src="./assets/cognitive/reports/qnr-region-detail.js?v=20260808a"></script>
 <script>
   // ===== 头动追踪 (cervical_tracking_records) · 报告入库 hook =====
