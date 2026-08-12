@@ -17,7 +17,7 @@ import {
     {id:'memory',      name:'文字记忆能力', icon:'📝', cat:'B', desc:'考验你大脑记住数字与文字的能力，分数越高代表着你记忆力越强。'},
     {id:'flex',        name:'变通能力',     icon:'🔄', cat:'C', desc:'考验你大脑灵活变通的能力，分数越高代表着你的思考方式越灵活。'},
     {id:'language',    name:'语言理解能力', icon:'💬', cat:'A', desc:'指理解和解释口头或书面语言的能力，分数越高代表你语言理解能力越强。'},
-    {id:'reasoning',   name:'推理能力',     icon:'🧩', cat:'A', desc:'评估你的逻辑推理能力，分数越高代表着你越聪明。'},
+    {id:'reasoning',   name:'推理能力',     icon:'🧩', cat:'A', desc:'评估你的逻辑推理能力，分数越高代表该项表现越好。'},
     {id:'planning',    name:'规划能力',     icon:'📐', cat:'D', desc:'考验你提前计划的能力，分数越高代表着你规划未来的能力越强。'},
     {id:'scenerecall', name:'场景回忆能力', icon:'🏞️', cat:'C', desc:'考验你回忆特殊事件的能力，分数越高代表着你记忆力越强。'},
     {id:'memorg',      name:'记忆组织提取', icon:'🐒', cat:'C', desc:'考验你记住与处理复杂信息的能力，分数越高代表着你处理能力越强。'},
@@ -230,7 +230,7 @@ import {
   }
 
   // 排名文案 (假设 50 人排名场景)
-  // 匹配样例: pct=70.91 → "您位于第 15 名, 短期内可提升 11 名"
+  // 匹配样例: pct=70.91 → "您位于第 15 名, 坚持训练，这个排位还有上升空间"
   function getRankInfo(pct) {
     var rank = Math.max(1, Math.ceil((100 - pct) * 50 / 100));
     var target = Math.max(1, Math.ceil(pct / 20));
@@ -812,7 +812,7 @@ import {
        Math.min(getScoreCap(age), s.language * ageFactor(age,'language'))) / 3
     );
     var learnTri = learnScore >= 120 ? 0 : learnScore >= 105 ? 1 : learnScore >= 85 ? 2 : learnScore >= 65 ? 3 : learnScore >= 45 ? 4 : 5;
-    var learnLabel = learnTri <= 0 ? '无风险' : learnTri <= 2 ? '低风险' : learnTri <= 3 ? '中风险' : '高风险';
+    var learnLabel = learnTri <= 0 ? '状态出色' : learnTri <= 2 ? '状态良好' : learnTri <= 3 ? '值得关注' : '建议加强';
     var learnDesc = '随着课程难度增加，可能会出现学习困难和成绩下滑。';
 
     // 心理健康: inhibition + reasoning + flex (年龄校正)
@@ -822,8 +822,8 @@ import {
        Math.min(getScoreCap(age), s.flex * ageFactor(age,'flex'))) / 3
     );
     var mentalTri = mentalScore >= 120 ? 0 : mentalScore >= 105 ? 1 : mentalScore >= 85 ? 2 : mentalScore >= 65 ? 3 : mentalScore >= 45 ? 4 : 5;
-    var mentalLabel = mentalTri <= 0 ? '无风险' : mentalTri <= 2 ? '低风险' : mentalTri <= 3 ? '中风险' : '高风险';
-    var mentalDesc = '由生活、事业和人际关系等压力，容易导致焦虑和抑郁。';
+    var mentalLabel = mentalTri <= 0 ? '状态出色' : mentalTri <= 2 ? '状态良好' : mentalTri <= 3 ? '值得关注' : '建议加强';
+    var mentalDesc = '由生活、事业和人际关系等压力，可能伴随情绪压力积累。';
 
     // 失智风险: memory + scenerecall + memorg (年龄校正)
     var dementiaScore = Math.round(
@@ -832,7 +832,7 @@ import {
        Math.min(getScoreCap(age), s.memorg * ageFactor(age,'memorg'))) / 3
     );
     var dementiaTri = dementiaScore >= 120 ? 0 : dementiaScore >= 105 ? 1 : dementiaScore >= 85 ? 2 : dementiaScore >= 65 ? 3 : dementiaScore >= 45 ? 4 : 5;
-    var dementiaLabel = dementiaTri <= 0 ? '无风险' : dementiaTri <= 2 ? '低风险' : dementiaTri <= 3 ? '中风险' : '高风险';
+    var dementiaLabel = dementiaTri <= 0 ? '状态出色' : dementiaTri <= 2 ? '状态良好' : dementiaTri <= 3 ? '值得关注' : '建议加强';
     var dementiaDesc = '开始容易忘记近期的人或事物，但很久以前发生的事情仍然记得。';
 
     // 人际关系: observation + language + inhibition (年龄校正)
@@ -842,7 +842,7 @@ import {
        Math.min(getScoreCap(age), s.inhibition * ageFactor(age,'inhibition'))) / 3
     );
     var socialTri = socialScore >= 120 ? 0 : socialScore >= 105 ? 1 : socialScore >= 85 ? 2 : socialScore >= 65 ? 3 : socialScore >= 45 ? 4 : 5;
-    var socialLabel = socialTri <= 0 ? '无风险' : socialTri <= 2 ? '低风险' : socialTri <= 3 ? '中风险' : '高风险';
+    var socialLabel = socialTri <= 0 ? '状态出色' : socialTri <= 2 ? '状态良好' : socialTri <= 3 ? '值得关注' : '建议加强';
     var socialDesc = '随生活阶段变化可能导致人际关系的紧张与冲突，与不同环境的人作为伙伴难以相处。';
 
     // 脑退化: memory + visual + observation (年龄校正)
@@ -852,7 +852,7 @@ import {
        Math.min(getScoreCap(age), s.observation * ageFactor(age,'observation'))) / 3
     );
     var brainTri = brainScore >= 120 ? 0 : brainScore >= 105 ? 1 : brainScore >= 85 ? 2 : brainScore >= 65 ? 3 : brainScore >= 45 ? 4 : 5;
-    var brainLabel = brainTri <= 0 ? '无风险' : brainTri <= 2 ? '低风险' : brainTri <= 3 ? '中风险' : '高风险';
+    var brainLabel = brainTri <= 0 ? '状态出色' : brainTri <= 2 ? '状态良好' : brainTri <= 3 ? '值得关注' : '建议加强';
     var brainDesc = '思考对你来说变得费力，且反应变慢，感觉你的脑子没有以前好使。';
 
     // 脊柱健康: 左右脑平衡度, 重点看顶叶(索引2左/3右), 兼顾额叶(0/1)和整体对称 (regions已由外部computeBrainRegions age校正)
@@ -866,8 +866,8 @@ import {
     // 加权: 顶叶50%+额叶25%+整体25%, 差值越大→三角越多
     var imbalance = parietalDiff * 0.5 + frontalDiff * 0.25 + overallDiff * 0.25;
     var spineTri = imbalance <= 5 ? 0 : imbalance <= 8 ? 1 : imbalance <= 15 ? 2 : imbalance <= 25 ? 3 : imbalance <= 38 ? 4 : 5;
-    var spineLabel = spineTri <= 0 ? '无风险' : spineTri <= 2 ? '低风险' : spineTri <= 3 ? '中风险' : '高风险';
-    var spineDesc = '左右脑功能不平衡，尤其是顶叶差异较大时，可能导致慢性脊柱不适的风险升高。';
+    var spineLabel = spineTri <= 0 ? '状态出色' : spineTri <= 2 ? '状态良好' : spineTri <= 3 ? '值得关注' : '建议加强';
+    var spineDesc = '左右脑功能不平衡，尤其是顶叶差异较大时，可能伴随体态与脊柱不适的状态变化。';
 
     // 未来发展潜力 (正向指标, 用星级): avgScore based
     var fPot = ageFactor(age, 'attention'); var potAdj = Math.round(avgScore * fPot); var potentialLevel = potAdj >= 120 ? 5 : potAdj >= 100 ? 4 : potAdj >= 80 ? 3 : potAdj >= 60 ? 2 : 1;
@@ -877,24 +877,24 @@ import {
     // 情感忠诚度 (正向指标, 用星级): 基于自制力(inhibition)
     var inhibitionScore = Math.round((s.inhibition||50) * ageFactor(age, 'inhibition'));
     var loyaltyLevel = inhibitionScore >= 120 ? 5 : inhibitionScore >= 100 ? 4 : inhibitionScore >= 80 ? 3 : inhibitionScore >= 60 ? 2 : 1;
-    var loyaltyLabel = loyaltyLevel >= 5 ? '忠诚度高' : loyaltyLevel >= 4 ? '忠诚度良' : loyaltyLevel >= 3 ? '忠诚度中' : '忠诚度偏低';
-    var loyaltyDesc = '在认真的两性关系中，保持专一和忠诚。';
+    var loyaltyLabel = loyaltyLevel >= 5 ? '状态出色' : loyaltyLevel >= 4 ? '状态良好' : loyaltyLevel >= 3 ? '值得关注' : '建议加强';
+    var loyaltyDesc = '大脑按得住自动反应的能力。生活中体现为抵制诱惑、按计划行事、说到做到。';
 
     var items = [
-      { icon: '📖', name: '学习能力下降风险指数', type: 'risk', level: learnTri, label: learnLabel, desc: learnDesc },
-      { icon: '<img src="./assets/mental-health-icon.jpg" style="width:18px;height:18px;vertical-align:middle;border-radius:3px;">', name: '心理健康风险指数',       type: 'risk', level: mentalTri, label: mentalLabel, desc: mentalDesc },
-      { icon: '🧠', name: '失智风险指数',            type: 'risk', level: dementiaTri, label: dementiaLabel, desc: dementiaDesc },
-      { icon: '🤝', name: '人际关系风险指数',        type: 'risk', level: socialTri, label: socialLabel, desc: socialDesc },
-      { icon: '🧍', name: '脑退化风险指数',          type: 'risk', level: brainTri, label: brainLabel, desc: brainDesc },
-      { icon: '🧘', name: '脊柱健康风险指数',        type: 'risk', level: spineTri, label: spineLabel, desc: spineDesc },
+      { icon: '📖', name: '学习力状态指数',            type: 'risk', level: learnTri, label: learnLabel, desc: learnDesc },
+      { icon: '<img src="./assets/mental-health-icon.jpg" style="width:18px;height:18px;vertical-align:middle;border-radius:3px;">', name: '情绪活力状态指数',       type: 'risk', level: mentalTri, label: mentalLabel, desc: mentalDesc },
+      { icon: '🧠', name: '认知储备状态指数',          type: 'risk', level: dementiaTri, label: dementiaLabel, desc: dementiaDesc },
+      { icon: '🤝', name: '社交活力状态指数',          type: 'risk', level: socialTri, label: socialLabel, desc: socialDesc },
+      { icon: '🧍', name: '脑活力状态指数',            type: 'risk', level: brainTri, label: brainLabel, desc: brainDesc },
+      { icon: '🧘', name: '体态协调状态指数',          type: 'risk', level: spineTri, label: spineLabel, desc: spineDesc },
       { icon: '✨', name: '未来发展潜力指数',          type: 'star', level: potentialLevel, label: potentialLabel, desc: potentialDesc },
-      { icon: '❤️', name: '情感忠诚指数',            type: 'star', level: loyaltyLevel, label: loyaltyLabel, desc: loyaltyDesc }
+      { icon: '❤️', name: '抗诱惑力指数',              type: 'star', level: loyaltyLevel, label: loyaltyLabel, desc: loyaltyDesc }
     ];
 
     // 紧凑版 (适配左栏, 无描述行, SVG 缩至 18x16)
     var html = '';
     html += '<div style="background:#fff;border-radius:10px;padding:10px 14px;box-shadow:0 1px 4px rgba(0,0,0,0.06);">';
-    html += '<h3 style="margin:0 0 6px;font-size:15px;color:#222;">⚠️ 多维度风险评估</h3>';
+    html += '<h3 style="margin:0 0 6px;font-size:15px;color:#222;">🧭 多维度状态画像</h3>';
 
     for (var idx = 0; idx < items.length; idx++) {
       var it = items[idx];
@@ -992,9 +992,9 @@ import {
       brainAge = Math.round(chronologicalAge + (expectedScore - allAvg) * 1.5);
       brainAge = Math.max(18, Math.min(90, brainAge));
       var ageDiff = brainAge - chronologicalAge;
-      if (ageDiff <= -5) brainAgeLabel = '比实际年轻 ' + Math.abs(ageDiff) + ' 岁';
-      else if (ageDiff >= 5) brainAgeLabel = '比实际年长 ' + ageDiff + ' 岁';
-      else brainAgeLabel = '与实际年龄相符';
+      if (ageDiff <= -5) brainAgeLabel = '优于参考基准';
+      else if (ageDiff >= 5) brainAgeLabel = '低于参考基准';
+      else brainAgeLabel = '接近参考基准';
     }
     var brainDiff = leftBrain - rightBrain;
     var balancePart, extroPart, brainTypeIcon;
@@ -1006,9 +1006,9 @@ import {
     var isDysfunction = ratio < 0.70;
     var isSubhealth = ratio >= 0.70 && ratio < 0.85;
     if (isDysfunction) {
-      brainType = '全面脑区功能偏低';
+      brainType = '多项表现低于参考区间';
       brainTypeIcon = '⚠️';
-      brainTypeDesc = '⚠️ 检测到脑区平均分仅 ' + Math.round(allAvg) + ' 分, 为同龄正常值 ' + Math.round(expectedScore) + ' 的 ' + Math.round(ratio*100) + '% (障碍线为 70%)。强烈建议尽快到正规医院神经内科/康复科进一步评估。常见可能原因: 脑供血不足、长期睡眠剥夺、抑郁焦虑、注意力缺陷、神经发育迟缓等。完成首次评估后建议 4 周内复测, 观察趋势变化。';
+      brainTypeDesc = '⚠️ 多项表现低于本工具参考区间（脑区平均分 ' + Math.round(allAvg) + ' 分，约为参考值 ' + Math.round(expectedScore) + ' 的 ' + Math.round(ratio*100) + '%）。建议到正规医疗机构做个常规评估；平时注意规律作息、睡眠和运动，可在 4 周后复测观察趋势变化。';
       fam = { cn: '', en: '', desc: '' };
       btd = null;
     } else {
@@ -1109,7 +1109,8 @@ import {
     html += '<span style="font-size:15px;font-weight:700;color:#0c4a6e;">您的大脑是 <span style="color:#0284c7;">'+brainType+'</span></span>';
     if (brainAge != null) {
       var baColor = brainAge < chronologicalAge ? '#16a34a' : brainAge > chronologicalAge ? '#e67e22' : '#888';
-      html += '<span style="font-size:13px;font-weight:600;color:'+baColor+';">🧠 脑力年龄 <b style="font-size:16px;">'+brainAge+'</b> 岁 ('+brainAgeLabel+')</span>';
+      html += '<span style="font-size:13px;font-weight:600;color:'+baColor+';">🧠 脑龄指数 <b style="font-size:16px;">'+brainAge+'</b> ('+brainAgeLabel+')</span>';
+      html += '<span style="font-size:10px;color:#94a3b8;font-weight:400;">按本工具模型估算，仅供趣味参考</span>';
     }
     html += '</div></div>';
     if (btd) {
@@ -1217,7 +1218,7 @@ import {
     if (age && Number(age) < 18) {
       html += '<div style="font-size:12px;color:#888;margin-top:3px;letter-spacing:0.5px;">原始 <b style="color:#555;font-weight:700;">'+score+'</b> · 满分 200</div>';
     }
-    html += '<div style="font-size:14px;color:#555;margin-top:6px;">超过 <b style="color:'+color+';font-size:19px;">'+pct+'%</b> 的同龄测试者</div>';
+    html += '<div style="font-size:14px;color:#555;margin-top:6px;">超过本工具 <b style="color:'+color+';font-size:19px;">'+pct+'%</b> 的参考值</div>';
 
     html += '</div>';
     // 金字塔 box - max-width 340, 占据左栏主视觉
@@ -1292,10 +1293,10 @@ import {
     // 4) 详细排名文案 (全宽, 字号匹配, 醒目突出)
     html += '<div style="font-size:15px;color:#222;line-height:1.65;background:linear-gradient(90deg,#fffbea,#fff8d6);padding:11px 16px;border-left:4px solid #f59e0b;border-radius:6px;border:1px solid #fde68a;">';
     html += '<span style="display:inline-block;font-size:13px;color:#b45309;font-weight:700;letter-spacing:0.5px;margin-right:8px;">📊 排名解读</span>';
-    html += '您的 <b style="color:'+color+';font-size:17px;">'+mod.name+'</b> 超过了 <b style="color:'+color+';font-size:17px;">'+pct+'%</b> 的人群。';
+    html += '您的 <b style="color:'+color+';font-size:17px;">'+mod.name+'</b> 超过本工具 <b style="color:'+color+';font-size:17px;">'+pct+'%</b> 的参考值。';
     html += '假如有 50 人排名，您位于第 <b style="color:'+color+';font-size:17px;">'+rankInfo.rank+'</b> 名';
     if (rankInfo.improve > 0) {
-      html += '，短期内可提升 <b style="color:#ef4444;font-size:17px;">'+rankInfo.improve+'</b> 名';
+      html += '，<b style="color:#ef4444;font-size:17px;">坚持训练，这个排位还有上升空间</b>';
     } else {
       html += '，<b style="color:#22c55e;font-size:17px;">已达到优秀水平</b>';
     }

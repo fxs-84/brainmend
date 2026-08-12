@@ -179,7 +179,7 @@ function renderReasoning(){
 		var bwBox=440,bhBox=74,bxBox=W/2-bwBox/2,byBox=H/2-58;
 		drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
 		ctx.fillStyle='#fff';ctx.font='18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-		ctx.fillText('评估你的逻辑推理能力',W/2,byBox+27);ctx.fillText('分数越高代表着你越聪明',W/2,byBox+50);
+		ctx.fillText('评估你的逻辑推理能力',W/2,byBox+27);ctx.fillText('分数越高代表该项表现越好',W/2,byBox+50);
 		ctx.textBaseline='alphabetic';ctx.textAlign='start';
 		var bw=200,bh=56,bx=W/2-bw/2,by=byBox+bhBox+10;
 		drawGoldButton(ctx,bx,by,bw,bh,'开始教程',20);
@@ -292,7 +292,7 @@ setTimeout(function(){
 		var bwBox=440,bhBox=74,bxBox=W/2-bwBox/2,byBox=H/2-58;
 		drawRR(ctx,bxBox,byBox,bwBox,bhBox,12);ctx.strokeStyle=GOLD;ctx.lineWidth=2;ctx.stroke();
 		ctx.fillStyle='#fff';ctx.font='18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-		ctx.fillText('评估你的逻辑推理能力',W/2,byBox+27);ctx.fillText('分数越高代表着你越聪明',W/2,byBox+50);
+		ctx.fillText('评估你的逻辑推理能力',W/2,byBox+27);ctx.fillText('分数越高代表该项表现越好',W/2,byBox+50);
 		ctx.textBaseline='alphabetic';ctx.textAlign='start';
 		var bw=200,bh=56,bx=W/2-bw/2,by=byBox+bhBox+10;
 		drawGoldButton(ctx,bx,by,bw,bh,'开始',20);
