@@ -806,6 +806,8 @@
       });
       // 免责
       bodyInner += '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:12px 16px;font-size:12px;color:#92400e;line-height:1.7;">⚠️ 本评估用于一般健康教育,结果属于评估提示,不等同于医学诊断。如结果异常或症状持续,请到正规医疗机构进一步评估。</div>';
+      // 做题详情 (含所有 100 题 + 患者作答) — 渲染进报告 DOM, PDF 截图自动包含
+      bodyInner += '<div id="qnr-questions-section"><div style="padding:14px 16px;background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;color:#92400e;font-size:13px;">⏳ 题目加载中...</div></div>';
       bodyInner += '</div>';
       html += bodyInner;
       // 操作栏: 导出 PDF + 完成
@@ -816,6 +818,8 @@
       // 写 DOM
       var bodyEl = document.getElementById('qnr-report-body');
       if (bodyEl) bodyEl.innerHTML = html;
+      // 数据模块可能尚未就绪, 填占位后由 __qnrFillQuestionsSection 轮询替换
+      if (typeof window.__qnrFillQuestionsSection === 'function') window.__qnrFillQuestionsSection(rec);
       // 绑定导出 PDF
       var exportBtn = document.getElementById('qnr-export-pdf-btn');
       if (exportBtn) exportBtn.addEventListener('click', function(){ _exportInlinePDF(rec); });

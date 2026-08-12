@@ -49,13 +49,21 @@ async function runCase(label, rec) {
     localStorage.removeItem("cog_records"); // 云端记录不在本机
     window._qnrRenderCloud(r);
   }, rec);
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(300);
 
   const state = await page.evaluate(() => ({
     hasQnrMarker: !!document.querySelector("#cog-report-body #qnr-cloud-status, #cog-report-body [data-qnr-region-row]"),
-    hasCogSections: !!document.querySelector("#cog-report-body #cog-section-overview")
+    hasCogSections: !!document.querySelector("#cog-report-body #cog-section-overview"),
+    qSection: !!document.querySelector("#cog-report-body [data-qnr-questions-section]"),
+    regionCount: document.querySelectorAll("#cog-report-body [data-qnr-q-region]").length,
+    itemCount: document.querySelectorAll("#cog-report-body [data-qnr-q-item]").length,
+    pdfHasQSection: document.querySelector("#cog-report-body")?.innerHTML.includes("data-qnr-questions-section") === true
   }));
   if (!state.hasQnrMarker) { console.log(`❌ [${label}] 自评报告未渲染出 DOM 标记`); return false; }
+  if (!state.qSection) { console.log(`❌ [${label}] 做题详情区块 (qnr-questions-section) 缺失`); return false; }
+  if (state.regionCount < 16) { console.log(`❌ [${label}] 做题详情应包含 16 分区, 实际 ${state.regionCount}`); return false; }
+  if (state.itemCount < 90) { console.log(`❌ [${label}] 做题详情题目数异常: ${state.itemCount}`); return false; }
+  console.log(`✅ [${label}] 报告含 ${state.regionCount} 分区 / ${state.itemCount} 题`);
 
   const downloadPromise = page.waitForEvent("download", { timeout: 60000 });
   // 诊断: 点击前打印按钮可见性链
