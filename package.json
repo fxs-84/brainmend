@@ -7,11 +7,21 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/game-3d/biomes/__tests__/scenery-factory.test.js tests/reports/classify.test.js",
+    "test": "node --test src/game-3d/biomes/__tests__/scenery-factory.test.js tests/reports/classify.test.js src/vor/input/__tests__/ble-imu-parse.test.js src/vor/core/__tests__/vor-quality-drill.test.js",
     "test:reports": "node --test tests/reports/classify.test.js",
     "test:e2e:report": "node tests/e2e/report-categorize.spec.mjs",
     "test:e2e:xss": "node tests/e2e/report-xss.spec.mjs",
-    "test:e2e:search": "node tests/e2e/report-search.spec.mjs"
+    "test:e2e:search": "node tests/e2e/report-search.spec.mjs",
+    "test:e2e:vor": "node tests/e2e/vor-mode.spec.cjs",
+    "test:e2e:shooting": "node tests/e2e/shooting-regression.spec.cjs",
+    "patch:vor": "node tools/patch-vor-mode.cjs",
+    "test:e2e:vor-coins": "node tests/e2e/vor-coins-planets.spec.cjs",
+    "test:e2e:vor-vis": "node tests/e2e/vor-visibility.spec.cjs",
+    "test:e2e:vor-fire": "node tests/e2e/vor-fire-discipline.spec.cjs",
+    "test:e2e:vor-drift": "node tests/e2e/vor-drift-detector.spec.cjs",
+    "test:e2e:vor-ch1": "node tests/e2e/vor-ch1-demo.spec.cjs",
+    "test:e2e:vor-ch1-drift": "node tests/e2e/vor-ch1-drift.spec.cjs",
+    "test:e2e:vor-ch1-panel": "node tests/e2e/vor-ch1-panel.spec.cjs"
   },
   "devDependencies": {
     "@gltf-transform/cli": "^4.4.2",

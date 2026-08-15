@@ -1,3 +1,10 @@
 node_modules/
 tests/e2e/screenshots/
 screenshots/
+
+# VOR 补丁的构建产物备份（904KB，本地回滚用，不入库）
+tools/*.bak-vor
+tools/*.bak-vor3d
+
+# GLB 原始未压缩素材（153MB，不入库）
+tools/glb/raw/

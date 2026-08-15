@@ -40,7 +40,6 @@
     }
   </script>
   <script type="module" crossorigin src="./assets/index-Cc2Ik-Ku.js"></script>
-  <script defer src="./assets/vor-drift-detector.js"></script>
   <script>
   (function(){
     // GAMEOVER 后任意键返回选择面板的统一入口
@@ -165,6 +164,7 @@
   }
   </script>
   <script type="module" src="./src/game-3d/integrate.js"></script>
+  <script type="module" src="./src/vor/integrate.js"></script>
 </head>
 <body>
     <!-- 首页 -->
@@ -1098,7 +1098,18 @@
             var sp = document.getElementById('side-panel');
             if (vc) vc.style.display = 'none';
             if (vm) vm.style.display = '';
-            if (sp) { sp.style.setProperty("display","flex","important"); sp.style.setProperty("width","210px","important"); sp.style.setProperty("min-width","210px","important"); }
+            if (sp) {
+              // fs-active 时跳过（让 body.fs-active / :fullscreen CSS 接管全屏布局）
+              if (!document.body.classList.contains('fs-active') && !document.fullscreenElement) {
+                var isNarrow = window.innerWidth <= 767;
+                var pri = isNarrow ? '' : 'important';
+                sp.style.setProperty('display', 'flex', pri);
+                if (!isNarrow) {
+                  sp.style.setProperty('width', '210px', 'important');
+                  sp.style.setProperty('min-width', '210px', 'important');
+                }
+              }
+            }
         });
 
         // 4. 侧边栏返回首页按钮
@@ -2150,13 +2161,9 @@
             });
             // 免责
             html += '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:12px 16px;font-size:12px;color:#92400e;line-height:1.7;">⚠️ 本评估用于一般健康教育，结果属于评估提示，不等同于医学诊断。如结果异常或症状持续，请到正规医疗机构进一步评估。</div>';
-            // 做题详情 (含所有 100 题 + 患者作答) — 直接渲染进报告 DOM, PDF 截图自动包含
-            html += '<div id="qnr-questions-section"><div style="padding:14px 16px;background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;color:#92400e;font-size:13px;">⏳ 题目加载中...</div></div>';
             // 注: 导出按钮已在 footer 的 cog-report-export-btn (智能路由 _exportCurrentReport) 处理
             // 这里不再重复按钮, 避免两处「📄 导出 PDF」
             body.innerHTML = html;
-            // 数据模块可能尚未就绪, 填占位后由 __qnrFillQuestionsSection 轮询替换
-            if (typeof window.__qnrFillQuestionsSection === 'function') window.__qnrFillQuestionsSection(rec);
             overlay.scrollTop = 0;
         }
 
@@ -2217,7 +2224,7 @@
 <script src="./assets/config/supabase-config.js" onerror="console.warn('[brainmend] supabase-config.js 未配置')"></script>
 <script src="./assets/cognitive/reports/qnr-supabase.js?v=20260808f"></script>
 <script src="./assets/cognitive/reports/qnr-therapist-ui.js?v=20260811a"></script>
-<script src="./assets/cognitive/reports/qnr-region-detail.js?v=20260812a"></script>
+<script src="./assets/cognitive/reports/qnr-region-detail.js?v=20260808a"></script>
 <script>
   // ===== 头动追踪 (cervical_tracking_records) · 报告入库 hook =====
   // 第一性原理: 治疗师已登录 → 自动上云端 (therapist_id = auth.uid())
