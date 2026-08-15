@@ -1099,15 +1099,13 @@
             if (vc) vc.style.display = 'none';
             if (vm) vm.style.display = '';
             if (sp) {
-              // fs-active 时跳过（让 body.fs-active / :fullscreen CSS 接管全屏布局）
-              if (!document.body.classList.contains('fs-active') && !document.fullscreenElement) {
-                var isNarrow = window.innerWidth <= 767;
-                var pri = isNarrow ? '' : 'important';
-                sp.style.setProperty('display', 'flex', pri);
-                if (!isNarrow) {
-                  sp.style.setProperty('width', '210px', 'important');
-                  sp.style.setProperty('min-width', '210px', 'important');
-                }
+              // 永远保留侧边栏（用户明确要求）。窄屏不加 important，让 mobile CSS 媒体查询
+              // （底部抽屉布局）覆盖；桌面端强制 210px 防止被压缩。
+              var isNarrow = window.innerWidth <= 767;
+              sp.style.setProperty('display', 'flex', isNarrow ? '' : 'important');
+              if (!isNarrow) {
+                sp.style.setProperty('width', '210px', 'important');
+                sp.style.setProperty('min-width', '210px', 'important');
               }
             }
         });
