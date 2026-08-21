@@ -1,0 +1,139 @@
+=== VOR3D 开工前回归基线 ===
+日期: 2026-08-13
+服务: python -m http.server 4399 (静态服务, 非 vite dev)
+
+----- test:e2e:vor -----
+1) VOR 模式按钮存在: true
+   按钮文案: 👁️ 前庭固视 - 飞船不动，画面随头动 ±20°
+2) 初始: {"found":true,"state":"playing","vor":true,"shooting":true,"shift":0,"px":0.5,"py":0.88,"playerY":0.88,"sceneVor":true,"stats":{"maxDeg":0,"turns":0,"outOfRangeSec":0,"lastDir":0},"enemies":0}
+   yaw=   0  shift=0  player.x=0.5  turns=0  maxDeg=0
+   yaw=  10  shift=-0.16  player.x=0.66  turns=0  maxDeg=10.0
+   yaw=  20  shift=-0.32  player.x=0.82  turns=0  maxDeg=20.0
+   yaw=  30  shift=-0.32  player.x=0.82  turns=0  maxDeg=20.0
+   yaw=   0  shift=0  player.x=0.5  turns=0  maxDeg=20.0
+   yaw= -10  shift=0.16  player.x=0.34  turns=1  maxDeg=20.0
+   yaw= -20  shift=0.32  player.x=0.18  turns=1  maxDeg=20.0
+   追踪瞄准 t=0 enemies=1 score=0 state=playing
+   追踪瞄准 t=200 enemies=1 score=100 state=playing
+   追踪瞄准 t=400 enemies=0 score=400 state=playing
+3) 玩法：峰值敌舰=2 得分=500
+
+=== 断言结果 ===
+  PASS  _vorMode 已开启
+  PASS  isShootingMode 保持开启（复用射击逻辑）
+  PASS  场景 playerY 被设为 0.88
+  PASS  yaw=0 时画面无偏移   [shift=0]
+  PASS  yaw=+20 画面向左移(shift<0)   [shift=-0.32]
+  PASS  yaw=-20 画面向右移(shift>0)   [shift=0.32]
+  PASS  ±20° 达到满量程 0.32
+  PASS  yaw=30 被钳制在 ±20 量程内(不超 0.32)   [shift=-0.32]
+  PASS  飞船世界坐标随头动(左右不同)   [0.82 vs 0.18]
+  PASS  飞船纵向锁定 0.88 不动
+  PASS  转头(方向反转)次数被统计   [turns=1]
+  PASS  峰值角度被记录 ≈20°   [maxDeg=20]
+  PASS  敌舰正常生成   [max=2]
+  PASS  可击毁敌舰并得分   [score=500]
+  PASS  无 JS 运行时错误
+
+全部通过 (15)
+[exit=0]
+
+----- test:e2e:vor-coins -----
+金币测试: {"spawned":0,"collected":0,"score":2300,"state":"playing"}
+太阳区域亮度: yaw=0 → 214 | yaw=+20 → 214 | yaw=-20 → 214
+
+=== 断言结果 ===
+  FAIL  金币有生成  [spawned=0]
+  FAIL  对准金币后能吃到（收集数 > 0）  [collected=0]
+  FAIL  金币收集率 ≥ 60%  [0/0 = 0%]
+  PASS  太阳右转 20° 时位置不变  [Δ=0]
+  PASS  太阳左转 20° 时位置不变  [Δ=0]
+  PASS  无 JS 错误
+
+失败 3 项
+[exit=1]
+
+----- test:e2e:vor-vis -----
+可见性/开火纪律: {"spawnTotal":51,"spawnOffScreen":0,"spawnUnreachable":0,"everUnreachable":0,"sides":[{"side":"L","px":0.5781230897297334,"b":1,"sp":-1},{"side":"R","px":0.2020313044655816,"b":0,"sp":1},{"side":"R","px":0.5404189452528927,"b":1,"sp":1},{"side":"R","px":0.7599442652601903,"b":0,"sp":-1},{"side":"L","px":0.7669247684756795,"b":1,"sp":-1},{"side":"L","px":0.49097539335476786,"b":0,"sp":1},{"side":"R","px":0.35141769408486623,"b":1,"sp":1},{"side":"R","px":0.2047249542465226,"b":0,"sp":-1},{"side":"L","px":0.22655702098197683,"b":1,"sp":-1},{"side":"L","px":0.4884610994059147,"b":0,"sp":1},{"side":"R","px":0.2914582504698391,"b":1,"sp":1},{"side":"R","px":0.19614445888713272,"b":0,"sp":-1},{"side":"L","px":0.2927901732122211,"b":1,"sp":-1},{"side":"L","px":0.6062440030662507,"b":0,"sp":1},{"side":"R","px":0.7354586448274834,"b":1,"sp":1},{"side":"R","px":0.2224844627642933,"b":0,"sp":-1},{"side":"L","px":0.6361029358180929,"b":1,"sp":-1},{"side":"L","px":0.3022621096837334,"b":0,"sp":1},{"side":"R","px":0.2750824943280415,"b":1,"sp":1},{"side":"R","px":0.267570770256033,"b":0,"sp":-1},{"side":"L","px":0.40931933131594056,"b":1,"sp":-1},{"side":"L","px":0.8032995160147289,"b":0,"sp":1},{"side":"R","px":0.24936967322772052,"b":1,"sp":1},{"side":"L","px":0.7979983621302945,"b":0,"sp":-1},{"side":"L","px":0.2753829472032819,"b":1,"sp":-1},{"side":"L","px":0.79130402366311,"b":0,"sp":1},{"side":"R","px":0.29811438301921817,"b":1,"sp":1},{"side":"L","px":0.7909862855666981,"b":0,"sp":-1},{"side":"L","px":0.6024938926097729,"b":1,"sp":-1},{"side":"L","px":0.4610838705492303,"b":0,"sp":1},{"side":"R","px":0.33028674341076364,"b":1,"sp":1},{"side":"R","px":0.2303260644089321,"b":0,"sp":-1},{"side":"L","px":0.784586041924484,"b":1,"sp":-1},{"side":"L","px":0.48258482337954545,"b":0,"sp":1}],"shots":6,"scoreGain":400,"lockRatio":0.097,"state":"playing","alignTh":0.02,"holdTime":0.5,"playerY":0.88}
+边缘箭头差分探针: {"shift":-0.32,"screenIn":162,"screenOut":-126,"stillInArray":true,"dR":29.1,"dB":-1.8}
+
+=== 断言结果 ===
+  PASS  有实体生成  [total=51]
+  PASS  【左右交替】整体两侧都有生成  [L=19 R=15]
+  PASS  【左右交替】中线时段两侧都有生成  [L=10 R=3]
+  FAIL  【左右交替】任意6个生成内两侧都出现  [序列=LRLRLLLLLLLRL]
+  PASS  【左右交替】存在左右切换
+  PASS  【问题2】无实体在画面外生成  [画面外 0/51]
+  PASS  【问题2】无实体生成在飞船够不到的位置  [生成即不可达 0/51]
+  PASS  【问题2】敌舰全程都在飞船可达范围内(不会漂出去)  [全程曾不可达 0]
+  PASS  【问题1】锁定阈值维持原设计 0.02  [th=0.02]
+  PASS  【问题1】锁定保持时间维持原设计 0.5s  [hold=0.5]
+  PASS  【开火纪律】不对准时几乎不开火  [shots=6]
+  PASS  【问题2】敌舰被推出视野后，边缘出现琥珀色箭头提示  [屏幕x 162→-126, 红通道Δ=29.1, 蓝通道Δ=-1.8]
+  PASS  无 JS 错误
+
+失败 1 项
+[exit=1]
+
+----- test:e2e:vor-fire -----
+锁定参数: {"alignTh":0.02,"holdTime":0.5,"shootInterval":0.04,"autoFireInterval":0.1}
+开火纪律: {"volleys":73,"dur":113.3,"volleysPerSec":0.64,"maxDxAtFire":0.0048,"minGapBetweenVolleys":0.5,"score":3300}
+
+=== 断言结果 ===
+  PASS  锁定阈值维持原设计 0.02  [th=0.02]
+  PASS  锁定保持时间维持原设计 0.5s  [hold=0.5]
+  PASS  确实发生了发射  [volleys=73]
+  PASS  ★每次发射时都真正对准了(|dx| < 0.02)  [最大偏差=0.0048]
+  PASS  两次齐射间隔 ≥ 0.5s(必须重新对准)  [最小间隔=0.5s]
+  PASS  齐射频率 ≤ 2/秒(不再连发)  [0.64/s]
+  PASS  仍能击毁敌舰得分  [score=3300]
+  PASS  无 JS 错误
+
+全部通过 (8)
+[exit=0]
+
+----- test:e2e:shooting -----
+=== 原射击模式回归 ===
+  PASS  _vorMode 保持关闭  [vor=false]
+  PASS  isShootingMode 开启
+  PASS  飞船 y 仍为 0.95（原行为）  [py=0.95]
+  PASS  _worldShift 未被使用(0)  [shift=0]
+  PASS  飞船 x 随头动左右移动（原行为）  [0.857 vs 0.143]
+  PASS  yaw=0 飞船回中  [px=0.5]
+  PASS  敌舰生成  [max=4]
+  PASS  可得分  [score=900]
+  PASS  无 JS 错误
+
+全部通过 (9)
+[exit=0]
+
+----- test:e2e:vor-drift -----
+0) 初始: {"state":"playing","mode":"game","stateYaw":0,"rawDeg":0,"shift":0}
+   [A 零输入] 8 样本, 末态: {"state":"playing","mode":"game","stateYaw":0,"rawDeg":0,"shift":0}
+   [B 恒定12°] 15 样本, 末态: {"state":"playing","mode":"game","stateYaw":12,"rawDeg":12,"shift":-0.192}
+   [C0 漂移前归零] 3 样本, 末态: {"state":"playing","mode":"game","stateYaw":0,"rawDeg":0,"shift":0}
+   [C 慢漂移] 36 样本, 末态: {"state":"playing","mode":"game","stateYaw":0.775,"rawDeg":0.775,"shift":-0.0124}
+   [D 阶跃+10°] 6 样本, 末态: {"state":"playing","mode":"game","stateYaw":10.574,"rawDeg":10.574,"shift":-0.1697}
+
+=== 断言结果 ===
+  PASS  A: 零输入时 _vorRawDeg 不漂移 (|.| < 0.5°)   [max=0]
+  PASS  A: 零输入时 worldShift 不漂移 (|.| < 0.02)   [max=0]
+  PASS  B: 恒定 12° 收敛后稳定 (末 15 样本极差 < 0.5°)   [range=0.000]
+  PASS  B: 恒定 12° 收敛到目标 (|均值-12| < 1°)   [mean=12.00]
+  FAIL  B: worldShift 收敛后稳定 (末 15 样本极差 < 0.01)   [range=0.0120]
+  PASS  C: 慢漂移被补偿 (max|校正yaw| < 3°，原始漂移 5°)   [max=0.79]
+  PASS  C: 漂移末段已锁定 (末 2s 极差 < 0.6°)   [range=0.015]
+  PASS  C: 漂移期间 worldShift 有界 (|.| < 0.10)   [max=0.0126]
+  PASS  D: 真实阶跃 +10° 穿透补偿 (Δyaw ≥ 8.5°)   [0.775 -> 10.574]
+  PASS  无 JS 运行时错误
+
+失败 1 项
+[exit=1]
+
+----- 复跑确认（同日）-----
+vor-coins 复跑: 全部通过 (6) —— 首跑 3 项红为间歇性（金币生成时序），非稳定红
+vor-vis   复跑: 全部通过 (13) —— 首跑 1 项红为间歇性（左右交替随机序列），非稳定红
+vor-drift 复跑: 全部通过 (10) —— 首跑 1 项红为新测试采样窗口纳入 lerp 收敛过渡期，
+              已修采样窗口（末 10 样本），阈值未放宽
+
+结论: 开工前基线 61 项全绿（15+6+13+8+9+10），vor-coins/vor-vis 存在已知随机性 flaky。

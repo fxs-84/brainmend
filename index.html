@@ -10,6 +10,11 @@
   <style>
     .cog-mod-btn { background:transparent; border:1px solid rgba(255,255,255,0.15); color:var(--text); border-radius:6px; cursor:pointer; }
 
+    /* 游戏选择面板：游戏增多后内容超高，开始按钮被挤出屏幕——限高 + 内部滚动 */
+    #game-select-panel { max-height: 92vh !important; overflow-y: auto !important; }
+    #game-select-panel::-webkit-scrollbar { width: 6px; }
+    #game-select-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+
     /* 认知模块选择弹窗 */
     .cog-modal-overlay { position:fixed;inset:0;z-index:20000;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.7); }
     .cog-modal-overlay.show { display:flex; }
@@ -165,6 +170,8 @@
   </script>
   <script type="module" src="./src/game-3d/integrate.js"></script>
   <script type="module" src="./src/vor/integrate.js"></script>
+  <script type="module" src="./src/runner/integrate.js"></script>
+  <script type="module" src="./src/vor/integrate-ch2.js"></script>
 </head>
 <body>
     <!-- 首页 -->

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>海风球道 · 头控跑酷</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1020; }
+  #app, #app canvas { position: fixed; inset: 0; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./assets/vendor/three/build/three.module.js",
+    "three/addons/": "./assets/vendor/three/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app"></div>
+<!-- 必须通过 http(s) 访问（file:// 会被 Chrome 拦截 ES module，页面无反应） -->
+<script type="module" src="./src/runner/main.js"></script>
+</body>
+</html>

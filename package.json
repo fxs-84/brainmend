@@ -21,7 +21,11 @@
     "test:e2e:vor-drift": "node tests/e2e/vor-drift-detector.spec.cjs",
     "test:e2e:vor-ch1": "node tests/e2e/vor-ch1-demo.spec.cjs",
     "test:e2e:vor-ch1-drift": "node tests/e2e/vor-ch1-drift.spec.cjs",
-    "test:e2e:vor-ch1-panel": "node tests/e2e/vor-ch1-panel.spec.cjs"
+    "test:e2e:vor-ch1-panel": "node tests/e2e/vor-ch1-panel.spec.cjs",
+    "test:e2e:vor-ch2": "node tests/e2e/vor-ch2-demo.spec.cjs",
+    "test:e2e:vor-ch2-drift": "node tests/e2e/vor-ch2-drift.spec.cjs",
+    "test:e2e:vor-ch2-panel": "node tests/e2e/vor-ch2-panel.spec.cjs",
+    "test:e2e:runner": "node tests/e2e/runner.spec.cjs"
   },
   "devDependencies": {
     "@gltf-transform/cli": "^4.4.2",

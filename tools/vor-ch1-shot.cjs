@@ -1,0 +1,22 @@
+const { spawn } = require('child_process');
+const path = require('path');
+const { chromium } = require('playwright');
+(async () => {
+  const server = spawn('node', [path.join(process.cwd(), 'tests/static-server.mjs')], { env: { ...process.env, PORT: '8799' }, stdio: 'pipe' });
+  await new Promise(r => server.stdout.once('data', r));
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  page.on('pageerror', e => console.log('PAGEERROR', e.message));
+  await page.goto('http://localhost:8799/vor.html?mode=auto&blocks=2', { waitUntil: 'load' });
+  await page.waitForFunction(() => window.__vorDemo, null, { timeout: 10000 });
+  await page.waitForFunction(() => window.__vorDemo.pace.state === 'active', null, { timeout: 8000 });
+  await page.waitForTimeout(2500);
+  await page.waitForFunction(() => window.__vorDemo.drill.stats.hits >= 1, null, { timeout: 30000 });
+  await page.screenshot({ path: 'screenshots/vor-ch1-hits.png' });
+  console.log('hits-shot saved');
+  await page.waitForFunction(() => window.__vorDemo.drill.stats.hits >= 3, null, { timeout: 30000 });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: 'screenshots/vor-ch1-multi-hits.png' });
+  console.log('multi-shot saved');
+  await browser.close(); server.kill();
+})().catch(e => { console.error('SHOT ERR:', e.message); process.exit(1); });

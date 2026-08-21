@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>GLB Viewer</title>
+<style>body,html{margin:0;padding:0;background:#1a1d29;overflow:hidden;font-family:sans-serif}canvas{display:block}#info{position:fixed;top:8px;left:8px;color:#fff;background:rgba(0,0,0,.5);padding:8px 12px;border-radius:4px;font-size:12px;z-index:10}</style>
+<script type="importmap">
+{"imports":{"three":"/assets/vendor/three/build/three.module.js","three/addons/":"/assets/vendor/three/examples/jsm/"}}
+</script>
+</head>
+<body>
+<div id="info">Loading…</div>
+<canvas id="c"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {DRACOLoader} from 'three/addons/loaders/DRACOLoader.js';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+
+const params = new URLSearchParams(location.search);
+const file = params.get('file') || '';
+document.getElementById('info').textContent = file;
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1d29);
+
+const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 100);
+camera.position.set(2.5, 1.8, 3.5);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444466, 1.2));
+const dir = new THREE.DirectionalLight(0xffffff, 1.5);
+dir.position.set(2, 3, 1);
+scene.add(dir);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+
+const loader = new GLTFLoader();
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+loader.setDRACOLoader(dracoLoader);
+loader.load('/assets/3d/' + file, (gltf) => {
+  const obj = gltf.scene;
+  scene.add(obj);
+  // 自动框
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  camera.position.copy(center).add(new THREE.Vector3(maxDim*1.4, maxDim*0.8, maxDim*1.4));
+  camera.lookAt(center);
+  controls.target = (center.clone());
+  controls.update();
+  document.getElementById('info').textContent =
+    file + ' | size ' + size.toArray().map(v=>v.toFixed(2)).join('×') + ' | tri ' + countTri(obj);
+}, (xhr) => {
+  if (xhr.total) document.getElementById('info').textContent =
+    file + ' | ' + ((xhr.loaded/xhr.total)*100|0) + '%';
+}, (err) => {
+  document.getElementById('info').textContent = 'ERR: ' + err.message;
+  console.error(err);
+});
+
+function countTri(obj){
+  let t=0;
+  obj.traverse(c => {
+    if (c.isMesh && c.geometry && c.geometry.attributes && c.geometry.attributes.POSITION) {
+      t += c.geometry.attributes.POSITION.count/3 | 0;
+    }
+  });
+  return t;
+}
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w/h;
+  camera.updateProjectionMatrix();
+}
+resize();
+addEventListener('resize', resize);
+
+(function tick(){
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+})();
+window.__ready = true;
+</script>
+</body>
+</html>

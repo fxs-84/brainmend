@@ -1,0 +1,13 @@
+vor-mode                 全部通过 (15) 
+vor-coins-planets        全部通过 (6) 
+vor-visibility           全部通过 (13) 
+vor-fire-discipline      全部通过 (8) 
+shooting-regression      全部通过 (9) 
+vor-drift-detector       全部通过 (10) 
+vor3d-init               全部通过 (6) 
+vor3d-shift                FAIL  飞船屏幕位置固定 (renderPlayer 恒为 0.5,0.5)   [样本=0] 
+vor3d-z                  全部通过 (15) 
+vor3d-shoot              全部通过 (7) 
+vor3d-alternation        全部通过 (6) 
+vor3d-fire               全部通过 (4) 
+vor3d-stats              全部通过 (14) 

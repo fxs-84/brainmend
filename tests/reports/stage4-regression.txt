@@ -1,0 +1,226 @@
+=== vor-mode ===
+PASS vor-mode
+--- tail ---
+3) 玩法：峰值敌舰=2 得分=750
+
+=== 断言结果 ===
+  PASS  _vorMode 已开启
+  PASS  isShootingMode 保持开启（复用射击逻辑）
+  PASS  场景 playerY 被设为 0.88
+  PASS  yaw=0 时画面无偏移   [shift=0]
+  PASS  yaw=+20 画面向左移(shift<0)   [shift=-0.32]
+  PASS  yaw=-20 画面向右移(shift>0)   [shift=0.32]
+  PASS  ±20° 达到满量程 0.32
+  PASS  yaw=30 被钳制在 ±20 量程内(不超 0.32)   [shift=-0.32]
+  PASS  飞船世界坐标随头动(左右不同)   [0.82 vs 0.18]
+  PASS  飞船纵向锁定 0.88 不动
+  PASS  转头(方向反转)次数被统计   [turns=1]
+  PASS  峰值角度被记录 ≈20°   [maxDeg=20]
+  PASS  敌舰正常生成   [max=2]
+  PASS  可击毁敌舰并得分   [score=750]
+  PASS  无 JS 运行时错误
+
+全部通过 (15)
+=== vor-coins-planets ===
+PASS vor-coins-planets
+--- tail ---
+金币测试: {"spawned":5,"collected":5,"score":1950,"state":"playing"}
+太阳区域亮度: yaw=0 → 214 | yaw=+20 → 214 | yaw=-20 → 214
+
+=== 断言结果 ===
+  PASS  金币有生成  [spawned=5]
+  PASS  对准金币后能吃到（收集数 > 0）  [collected=5]
+  PASS  金币收集率 ≥ 60%  [5/5 = 100%]
+  PASS  太阳右转 20° 时位置不变  [Δ=0]
+  PASS  太阳左转 20° 时位置不变  [Δ=0]
+  PASS  无 JS 错误
+
+全部通过 (6)
+=== vor-visibility ===
+FAIL vor-visibility
+--- tail ---
+可见性/开火纪律: {"spawnTotal":81,"spawnOffScreen":0,"spawnUnreachable":0,"everUnreachable":0,"sides":[{"side":"L","px":0.6650881631515102,"b":1,"sp":-1},{"side":"L","px":0.2667266091270672,"b":0,"sp":1},{"side":"R","px":0.517222476784897,"b":1,"sp":1},{"side":"R","px":0.7059771106987657,"b":0,"sp":-1},{"side":"L","px":0.33473240885817657,"b":1,"sp":-1},{"side":"R","px":0.1952218262765727,"b":0,"sp":1},{"side":"R","px":0.5916562336168021,"b":1,"sp":1},{"side":"L","px":0.7995045698449078,"b":0,"sp":-1},{"side":"L","px":0.6045363509242345,"b":1,"sp":-1},{"side":"L","px":0.22090202905504341,"b":0,"sp":1},{"side":"R","px":0.7328673337649485,"b":1,"sp":1},{"side":"R","px":0.6881694667148038,"b":0,"sp":-1},{"side":"L","px":0.29020736659574503,"b":1,"sp":-1},{"side":"L","px":0.24689453597034206,"b":0,"sp":1},{"side":"R","px":0.6026514621889437,"b":1,"sp":1},{"side":"L","px":0.7848664417694988,"b":0,"sp":-1},{"side":"R","px":0.2048032173042491,"b":1,"sp":-1},{"side":"L","px":0.26700984707982833,"b":0,"sp":1},{"side":"R","px":0.5401045565727205,"b":1,"sp":1},{"side":"R","px":0.3137414958585696,"b":0,"sp":-1},{"side":"R","px":0.1932104690279013,"b":1,"sp":-1},{"side":"L","px":0.47550588191910814,"b":0,"sp":1},{"side":"R","px":0.41880740908211705,"b":1,"sp":1},{"side":"R","px":0.28175030265781753,"b":0,"sp":-1},{"side":"L","px":0.5511839648702881,"b":1,"sp":-1},{"side":"L","px":0.4073470663389121,"b":0,"sp":1},{"side":"R","px":0.20002571631060906,"b":1,"sp":1},{"side":"R","px":0.4869869386153377,"b":0,"sp":-1},{"side":"L","px":0.7967192269084774,"b":1,"sp":-1},{"side":"L","px":0.3757844845546369,"b":0,"sp":1},{"side":"R","px":0.19511538063231226,"b":1,"sp":1},{"side":"R","px":0.3072960883752137,"b":0,"sp":-1},{"side":"L","px":0.49698100190653693,"b":1,"sp":-1},{"side":"L","px":0.3103867091560308,"b":0,"sp":1},{"side":"R","px":0.231319029531956,"b":1,"sp":1},{"side":"R","px":0.3835708967746871,"b":0,"sp":-1},{"side":"L","px":0.5857009443802778,"b":1,"sp":-1},{"side":"L","px":0.7359388571424352,"b":0,"sp":1},{"side":"R","px":0.2551338283309136,"b":1,"sp":1},{"side":"R","px":0.4145655180571801,"b":0,"sp":-1},{"side":"L","px":0.6063359327806469,"b":1,"sp":-1},{"side":"L","px":0.24900066676830523,"b":0,"sp":1},{"side":"R","px":0.576079599397401,"b":1,"sp":1},{"side":"L","px":0.7984805633338324,"b":0,"sp":-1},{"side":"L","px":0.6250143834067612,"b":1,"sp":-1},{"side":"L","px":0.3182192883612327,"b":0,"sp":1},{"side":"R","px":0.5117644874469198,"b":1,"sp":1},{"side":"R","px":0.7070468799457148,"b":0,"sp":-1},{"side":"L","px":0.6442296908010914,"b":1,"sp":-1},{"side":"L","px":0.3433458860224047,"b":0,"sp":1},{"side":"R","px":0.49518378454914713,"b":1,"sp":1},{"side":"L","px":0.7890358035847328,"b":0,"sp":-1},{"side":"L","px":0.7032989540069914,"b":1,"sp":-1},{"side":"R","px":0.19039631233019794,"b":0,"sp":1}],"shots":12,"scoreGain":1450,"lockRatio":0.115,"state":"playing","alignTh":0.02,"holdTime":0.5,"playerY":0.88}
+边缘箭头差分探针: {"shift":-0.315,"screenIn":167,"screenOut":-121,"stillInArray":true,"dR":27.4,"dB":-2.4}
+
+=== 断言结果 ===
+  PASS  有实体生成  [total=81]
+  PASS  【左右交替】整体两侧都有生成  [L=28 R=26]
+  PASS  【左右交替】中线时段两侧都有生成  [L=15 R=14]
+  PASS  【左右交替】任意6个生成内两侧都出现  [序列=LRLRLRRRRLRLLRLR]
+  PASS  【左右交替】存在左右切换
+  PASS  【问题2】无实体在画面外生成  [画面外 0/81]
+  PASS  【问题2】无实体生成在飞船够不到的位置  [生成即不可达 0/81]
+  PASS  【问题2】敌舰全程都在飞船可达范围内(不会漂出去)  [全程曾不可达 0]
+  PASS  【问题1】锁定阈值维持原设计 0.02  [th=0.02]
+  PASS  【问题1】锁定保持时间维持原设计 0.5s  [hold=0.5]
+  FAIL  【开火纪律】不对准时几乎不开火  [shots=12]
+  PASS  【问题2】敌舰被推出视野后，边缘出现琥珀色箭头提示  [屏幕x 167→-121, 红通道Δ=27.4, 蓝通道Δ=-2.4]
+  PASS  无 JS 错误
+
+失败 1 项
+=== vor-fire-discipline ===
+PASS vor-fire-discipline
+--- tail ---
+锁定参数: {"alignTh":0.02,"holdTime":0.5,"shootInterval":0.04,"autoFireInterval":0.1}
+开火纪律: {"volleys":55,"dur":112.8,"volleysPerSec":0.49,"maxDxAtFire":0,"minGapBetweenVolleys":0.5,"score":2800}
+
+=== 断言结果 ===
+  PASS  锁定阈值维持原设计 0.02  [th=0.02]
+  PASS  锁定保持时间维持原设计 0.5s  [hold=0.5]
+  PASS  确实发生了发射  [volleys=55]
+  PASS  ★每次发射时都真正对准了(|dx| < 0.02)  [最大偏差=0]
+  PASS  两次齐射间隔 ≥ 0.5s(必须重新对准)  [最小间隔=0.5s]
+  PASS  齐射频率 ≤ 2/秒(不再连发)  [0.49/s]
+  PASS  仍能击毁敌舰得分  [score=2800]
+  PASS  无 JS 错误
+
+全部通过 (8)
+=== shooting-regression ===
+PASS shooting-regression
+--- tail ---
+=== 原射击模式回归 ===
+  PASS  _vorMode 保持关闭  [vor=false]
+  PASS  isShootingMode 开启
+  PASS  飞船 y 仍为 0.95（原行为）  [py=0.95]
+  PASS  _worldShift 未被使用(0)  [shift=0]
+  PASS  飞船 x 随头动左右移动（原行为）  [0.857 vs 0.143]
+  PASS  yaw=0 飞船回中  [px=0.5]
+  PASS  敌舰生成  [max=3]
+  PASS  可得分  [score=300]
+  PASS  无 JS 错误
+
+全部通过 (9)
+=== vor-drift-detector ===
+PASS vor-drift-detector
+--- tail ---
+0) 初始: {"state":"playing","mode":"game","stateYaw":0,"rawDeg":0,"shift":0}
+   [A 零输入] 8 样本, 末态: {"state":"playing","mode":"game","stateYaw":0,"rawDeg":0,"shift":0}
+   [B 恒定12°] 13 样本, 末态: {"state":"playing","mode":"game","stateYaw":12,"rawDeg":12,"shift":-0.192}
+   [C0 漂移前归零] 3 样本, 末态: {"state":"playing","mode":"game","stateYaw":0,"rawDeg":0,"shift":0}
+   [C 慢漂移] 35 样本, 末态: {"state":"playing","mode":"game","stateYaw":0.812,"rawDeg":0.812,"shift":-0.013}
+   [D 阶跃+10°] 6 样本, 末态: {"state":"playing","mode":"game","stateYaw":10.571,"rawDeg":10.571,"shift":-0.1696}
+
+=== 断言结果 ===
+  PASS  A: 零输入时 _vorRawDeg 不漂移 (|.| < 0.5°)   [max=0]
+  PASS  A: 零输入时 worldShift 不漂移 (|.| < 0.02)   [max=0]
+  PASS  B: 恒定 12° 收敛后稳定 (末 10 样本极差 < 0.5°)   [range=0.000]
+  PASS  B: 恒定 12° 收敛到目标 (|均值-12| < 1°)   [mean=12.00]
+  PASS  B: worldShift 收敛后稳定 (末 10 样本极差 < 0.01)   [range=0.0000]
+  PASS  C: 慢漂移被补偿 (max|校正yaw| < 3°，原始漂移 5°)   [max=0.814]
+  PASS  C: 漂移末段已锁定 (末 2s 极差 < 0.6°)   [range=0.010]
+  PASS  C: 漂移期间 worldShift 有界 (|.| < 0.10)   [max=0.013]
+  PASS  D: 真实阶跃 +10° 穿透补偿 (Δyaw ≥ 8.5°)   [0.812 -> 10.571]
+  PASS  无 JS 运行时错误
+
+全部通过 (10)
+=== vor3d-init ===
+PASS vor3d-init
+--- tail ---
+1) VOR3D 按钮存在: true  文案: 🚀 太空 VOR 3D - 纯水平凝视训练
+2) 启动后: {"found":true,"state":"playing","vor3dFlag":true,"gyroYaw":0,"score":0,"mainEngineState":"menu"}
+3) 喂 yaw=15 后: {"found":true,"state":"playing","vor3dFlag":true,"gyroYaw":15,"score":0,"mainEngineState":"menu"}
+
+=== 断言结果 ===
+  PASS  VOR3D 按钮存在
+  PASS  按钮文案包含「太空 VOR 3D」   [🚀 太空 VOR 3D - 纯水平凝视训练]
+  PASS  window.vor3dEngine 句柄已建立
+  PASS  引擎进入 PLAYING   [playing]
+  PASS  陀螺仪通路生效 (gyro.yaw≈15)   [yaw=15]
+  PASS  无 JS 运行时错误
+
+全部通过 (6)
+=== vor3d-shift ===
+PASS vor3d-shift
+--- tail ---
+   yaw=   0  shift=0  px=0.5 py=0.5 pz=5 rawDeg=0
+   yaw=  20  shift=-0.32  px=0.5 py=0.5 pz=5 rawDeg=20
+   yaw= -20  shift=0.32  px=0.5 py=0.5 pz=5 rawDeg=-20
+   yaw=   0  shift=0  px=0.5 py=0.5 pz=5 rawDeg=0
+
+=== 断言结果 ===
+  PASS  _vor3dMode 已开启
+  PASS  player.x 锁 0.5 (±1e-6)
+  PASS  player.y 锁 0.5 (±1e-6)
+  PASS  player.z = 5
+  PASS  yaw=0 时 worldShift≈0 (<0.01)   [shift=0]
+  PASS  yaw=+20 时 worldShift≈-0.32 (±0.02)   [shift=-0.32]
+  PASS  yaw=-20 时 worldShift≈+0.32 (±0.02)   [shift=0.32]
+  PASS  飞船屏幕位置固定 (renderPlayer 恒为 0.5,0.5)   [样本=10]
+  PASS  背景随头动平移 (±20° 间差异像素 > 5%)   [diff=1081/2304]
+  PASS  无 JS 运行时错误
+
+全部通过 (10)
+=== vor3d-z ===
+FAIL vor3d-z
+--- tail ---
+11) 回退: {"state":"playing","layerFallback":true,"engineFallback":true,"fbCalls":3}
+
+=== 断言结果 ===
+  PASS  敌舰初始 z=50 (±0.5)   [z=50]
+  PASS  敌舰 z 单调递减   [46.99972727272728→33.7738181818182 n=25]
+  PASS  敌舰 z<5 撞毁移除（不误判玩家被撞）   [{"removed":true,"ms":96.29999995231628,"state":"playing"}]
+  PASS  敌舰渲染变大（z 44→12 投影宽度单调增）   [31.8→163.2px]
+  FAIL  子弹 z 单调递减（朝 -z 飞）   [undefined→undefined]
+  PASS  子弹越界失效   [{"gone":true,"ms":14.700000047683716}]
+  PASS  眼睛不需要上下扫（敌舰 y=0.5、玩家 y=0.5、投影 y=屏幕中线 ±2px）   [projY=273 vs 273]
+  PASS  击毁事件：中线敌舰被击毁且 +200 分   [{"killed":true,"ms":1213,"dScore":200}]
+  PASS  GLB 加载成功（ready=true）
+  PASS  三模型各有 ≥1 mesh   [ship=1 enemy=1 prop=1]
+  PASS  双层对齐（方向一致、幅度误差 <10%）   [gl=-280 canvas=-288]
+  PASS  难度分档 z 速度 ≈ 6.4/8.2/11.3 (±10%)   [{"easy":6.428571428571429,"normal":8.181818181818182,"hard":11.25}]
+  PASS  回退路径：WebGL 失败仍 PLAYING + 占位渲染   [{"engineFallback":true,"fbCalls":3,"state":"playing"}]
+  PASS  回退路径：无未捕获异常
+  PASS  无 JS 运行时错误
+
+失败 1 项
+=== vor3d-shoot ===
+PASS vor3d-shoot
+--- tail ---
+1) 对准后开火节奏: {"count":3,"gameSec":2.03}
+2) 子弹方向: {"ang":0,"wx":0,"z":-11.67,"s":11.67}
+3) hp 序列: {"destroyed":true,"seen":[2,1,0],"dScore":200,"ms":1550}
+4) 偏出不命中: {"hp":3,"alive":true}
+5) 转头瞄准: {"killed":true,"dScore":200,"ms":722}
+
+=== 断言结果 ===
+  PASS  对准中线敌舰后自动开火（2 游戏秒 ≥ 2 发）   [{"count":3,"gameSec":2.03}]
+  PASS  子弹沿相机朝向（yaw=0 时世界 x≈0、z<-8）   [{"ang":0,"wx":0,"z":-11.67,"s":11.67}]
+  PASS  命中事件 hp 逐级递减（2→1→击毁）   [seen=[2,1,0]]
+  PASS  击毁 +200 分   [dScore=200]
+  PASS  偏离中线不命中（hp 不变、敌舰存活）   [{"hp":3,"alive":true}]
+  PASS  转头瞄准可命中（yaw=+20 击中 x=0.7 敌舰）   [{"killed":true,"dScore":200,"ms":722}]
+  PASS  无 JS 运行时错误
+
+全部通过 (7)
+=== vor3d-alternation ===
+PASS vor3d-alternation
+--- tail ---
+spawn 样本: [{"x":0.29201480013785175,"y":0.5,"timer":2},{"x":0.23146387719954578,"y":0.5,"timer":2},{"x":0.8128816208072929,"y":0.5,"timer":2},{"x":0.7925900763524598,"y":0.5,"timer":2},{"x":0.4324915588647621,"y":0.5,"timer":2},{"x":0.1964118509634124,"y":0.5,"timer":2},{"x":0.786474901922807,"y":0.5,"timer":2},{"x":0.5864071765548964,"y":0.5,"timer":2},{"x":0.2549324340077629,"y":0.5,"timer":2},{"x":0.37564733175011333,"y":0.5,"timer":2},{"x":0.6322183037944086,"y":0.5,"timer":2},{"x":0.5520859166903965,"y":0.5,"timer":2},{"x":0.25518219090187166,"y":0.5,"timer":2},{"x":0.25984521460127785,"y":0.5,"timer":2},{"x":0.7080914268089464,"y":0.5,"timer":2}]
+在场上限峰值: 3
+
+=== 断言结果 ===
+  PASS  两侧都有生成（左/右均 > 0）   [L=8 R=7]
+  PASS  任意连续 6 个生成内两侧都出现   [xs=0.29,0.23,0.81,0.79,0.43,0.20,0.79,0.59,0.25,0.38,0.63,0.55,0.26,0.26,0.71]
+  PASS  在场上限峰值 = 3（不随难度增长）   [peak=3]
+  PASS  生成间隔 ≈ 2s（复位值 spawnInt*2）   [timer=2,2,2,2,2,2,2,2,2,2,2,2,2,2,2]
+  PASS  y 恒为 0.5   [y=0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5]
+  PASS  无 JS 运行时错误
+
+全部通过 (6)
+=== vor3d-fire ===
+PASS vor3d-fire
+--- tail ---
+开火纪律: {"firesA":0,"firesB":2,"killed":true,"dScore":200,"yaw":9.09}
+
+=== 断言结果 ===
+  PASS  不对准几乎不开火（2 游戏秒 0 发）   [firesA=0]
+  PASS  追踪对准后锁定并开火（fires > 0）   [firesB=2]
+  PASS  开火命中 +200 分   [killed=true dScore=200 hp=undefined]
+  PASS  无 JS 运行时错误
+
+全部通过 (4)
+=== DONE ===
+
+=== 复跑结论 ===
+vor3d-z：首跑 FAIL(子弹z单调递减) → 修正测试第5项后复跑 15/15 全绿
+vor-visibility：首跑 FAIL(不对准 shots=12) → 复跑 13/13 全绿（计划§0已知间歇红，与vor3d改动无关）
