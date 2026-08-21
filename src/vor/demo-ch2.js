@@ -50,7 +50,7 @@ export function bootVorCh2({
     dailyLimitMin: rx.dailyLimit ?? overrides.dailyLimitMin ?? 20,
     token: rx.token,
     skipVas: rx.skipVas,
-    segs: 12, perfectPerSeg: 3,           // 每 3 完美周期修复 1 齿轮（36 完美周期满修复）
+    segs: 12,                           // 12 齿轮（每 100 能量修复 1 个，见 addEnergy）
   };
 
   // --- 挂载点 ---
@@ -196,26 +196,21 @@ export function bootVorCh2({
     },
   });
 
-  // --- 能量：命中 +20（节拍命中 +30），完美周期再 +10（驱动光球亮度，不直接修复）---
+  // --- 能量：命中 +20（节拍命中 +30），完美周期再 +10；每 100 能量修复 1 齿轮 ---
+  // （与第一章同款经济：修复只绑完美周期时，真人点头 quality≥0.85 太难达成，永远修不动——实测反馈）
   let energy = 0;
   function addEnergy(n, flashColor) {
     if (finished) return;
     energy += n;
     if (flashColor) ch2.flash(flashColor);
-    while (energy >= 100) energy -= 100;   // 能量环回，仅作光球充能反馈
-    ch2.setEnergy(energy / 100);
-  }
-
-  // --- 修复：每 3 完美周期修复 1 齿轮（12 齿轮全修复 → 敲响铜铃终演）---
-  let perfectCount = 0;
-  function onPerfectCycle() {
-    perfectCount++;
-    if (perfectCount % CFG.perfectPerSeg !== 0 || ch2.repaired >= CFG.segs) return;
-    ch2.repairSegment();
-    metronome.chime([523, 659, 784, 1047], 0.11, 0.40); // 修复：长尾大三和弦钟声
-    const wp = new THREE.Vector3();
-    ch2.burst(ch2.orbWorldPos(wp), 24, 1.4);
-    hud.floatText(`修复齿轮 ${ch2.repaired}/${CFG.segs}`, '#9fd8ff');
+    while (energy >= 100 && ch2.repaired < CFG.segs) {
+      energy -= 100;
+      ch2.repairSegment();
+      metronome.chime([523, 659, 784, 1047], 0.11, 0.40); // 修复：长尾大三和弦钟声
+      const wp = new THREE.Vector3();
+      ch2.burst(ch2.orbWorldPos(wp), 24, 1.4);
+      hud.floatText(`修复齿轮 ${ch2.repaired}/${CFG.segs}`, '#9fd8ff');
+    }
     if (ch2.repaired >= CFG.segs) {
       pace.stop();
       ch2.ringBell();   // 修复完成：全部齿轮咬合 + 钟摆满幅 + 铜铃敲响
@@ -224,6 +219,7 @@ export function bootVorCh2({
         `12 个齿轮全部咬合，沉睡的铜钟再次敲响！<br>` +
         `命中 ${drill.stats.hits} 次 · 节拍命中 ${drill.stats.onBeat} · 最佳连击 x${drill.stats.bestCombo}`, { askVas: true });
     }
+    ch2.setEnergy(energy / 100);
   }
 
   // --- 靶心命中（核心玩法：点头到目标方位 = 击中，上下交替 = 垂直 VOR 往复）---
@@ -250,7 +246,6 @@ export function bootVorCh2({
       recorder.perfectCycle();
       addEnergy(10, 0xffd977);
       hud.floatText(`完美周期 ${(c.quality * 100).toFixed(0)}%`, '#ffd977');
-      onPerfectCycle();
     }
   });
   evaluator.onTurn(() => {

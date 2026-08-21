@@ -53,6 +53,8 @@ function assert(name, cond, detail = '') {
     assert('第 1 块命中 ≥ 3', true, `hits=${await page.evaluate(() => window.__vorDemo.drill.stats.hits)}`);
 
     console.log('2) 靶心方位 = 中线 ± amp（中线跟随漂移）');
+    // 等首个完整周期评估完成（命中 ≥3 可能早于首个周期闭合，直接读会竞态 midline=null）
+    await page.waitForFunction(() => window.__vorDemo.evaluator.lastCycle, null, { timeout: 15000 });
     const follow = await page.evaluate(() => ({
       bearing: window.__vorDemo.drill.bearing,
       midline: window.__vorDemo.evaluator.lastCycle ? window.__vorDemo.evaluator.lastCycle.midline : null,
