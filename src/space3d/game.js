@@ -80,7 +80,7 @@ export function bootSpace3D({
     composer.setPixelRatio(pr);
     composer.addPass(new RenderPass(scene, camera));
     bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight),
-      parseFloat(qs.get('bloomstr') || '0.35'), 0.4, parseFloat(qs.get('bloomth') || '0.85'));
+      parseFloat(qs.get('bloomstr') || '0'), 0.4, parseFloat(qs.get('bloomth') || '0.85'));  // 泛光默认关：真机实测 bloomstr=0 最舒服（用户）
     composer.addPass(bloomPass);
     composer.addPass(new OutputPass());
     // PBR 环境贴图：GLB 是高金属度 Standard 材质，没有 environment 时金属面无反射源→近黑，
