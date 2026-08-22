@@ -1,6 +1,7 @@
 // 太空3D飞行（头控真3D）· 主装配（嵌入主游戏选择面板运行）
-// 玩法（对齐旧版生存计分制）：第三人称追尾视角，头控飞船在走廊内闪避——
-//   陨石（撞=伤害）/ 水晶（+100）/ 穿越门（穿过 +150）/ 缺口陨石墙 / 躲过陨石 +50；
+// 玩法（对齐旧版生存计分制 + 射击）：第三人称追尾视角，头控飞船在走廊内闪避——
+//   陨石（撞=伤害）/ 敌舰（撞=伤害，自动开火击毁 +200）/ 水晶（+100）/ 穿越门（穿过 +150）/
+//   缺口陨石墙 / 躲过陨石或漏过敌舰 +50 / 弹丸击碎小陨石 +25；
 //   3 条命，受击 1.5s 无敌闪烁，命尽 GAMEOVER（任意键/点击返回面板）。
 // bootSpace3D(opts) → api；stop() 完整清理（循环/音频/DOM/订阅/轮询）
 import * as THREE from 'three';
@@ -88,7 +89,7 @@ export function bootSpace3D({
   const sfx = new Metronome();          // 只当音效合成器用（不调 start()）
   const hud = new SpaceHUD(mount);
   const world = buildSpaceWorld(scene);
-  const shipApi = buildShip(scene);
+  const shipApi = buildShip(scene, { noRender });   // GLB 异步加载，norender 空 Group 占位
   const ship = shipApi.group;
 
   // 与现有游戏同一注入通道（链式调用原实现，嵌套模式下主游戏 bundle 的 D 状态不断流）
@@ -107,14 +108,16 @@ export function bootSpace3D({
 
   // --- 运行状态（playing → gameover）---
   let state = 'playing';
-  let hearts = 3, crystals = 0, gates = 0, dodges = 0;
-  let bonus = 0;              // 水晶/门/躲陨石的奖励分
+  let hearts = 3, crystals = 0, gates = 0, dodges = 0, kills = 0, shatters = 0;
+  let bonus = 0;              // 水晶/门/躲陨石/击毁/击碎的奖励分
   let aliveT = 0;
   let speed = CFG.baseSpeed;
   let invincible = 0;         // 受击 1.5s 无敌（闪烁）
   let shipX = 0, shipY = 0;   // 飞船逻辑位置（世界坐标）
   let shakeT = 0;             // 受击相机抖动
   let paused = false;
+  let autoFire = true;        // 自动开火（康复场景头戴设备、手不按键盘）
+  let fireT = 0;              // 开火计时（射速 2.5 发/s）
 
   const score = () => Math.floor(aliveT * 10) + bonus;
   function readBest() { try { return parseInt(localStorage.getItem('space3d_best') || '0', 10); } catch { return 0; } }
@@ -147,6 +150,23 @@ export function bootSpace3D({
       dodges++;
       bonus += 50;
     },
+    // 弹丸击毁敌舰 +200：爆炸低频 punch + 噪声（与激光的高频短促"咻"分层）
+    onKillEnemy() {
+      if (state !== 'playing') return;
+      kills++;
+      bonus += 200;
+      sfx.punch(70, 0.30, 0.25);
+      sfx.noise(0.35, 0.28);
+      hud.floatText('+200', '#ffb050');
+    },
+    // 弹丸击碎小陨石 +25：轻量碎裂音
+    onShatter() {
+      if (state !== 'playing') return;
+      shatters++;
+      bonus += 25;
+      sfx.noise(0.12, 0.15);
+      hud.floatText('+25', '#9fdcff');
+    },
     onHit() {
       if (state !== 'playing') return;
       if (!CFG.god) hearts--;
@@ -159,6 +179,7 @@ export function bootSpace3D({
     },
   });
   spawner.prewarm();
+  spawner.loadEnemy(noRender);          // 敌舰 GLB 模板异步加载（norender 跳过）
 
   // --- 游戏结束：写历史最佳，任意键/点击返回面板 ---
   function doGameover() {
@@ -169,7 +190,7 @@ export function bootSpace3D({
     writeBest(best);
     hud.showOverlay('游戏结束',
       `存活 <b>${aliveT.toFixed(1)}s</b> · 分数 <b>${sc}</b>（历史最佳 ${best}）<br>` +
-      `水晶 ${crystals} · 穿越门 ${gates} · 躲过陨石 ${dodges}<br><br>按任意键或点击返回菜单`);
+      `击毁敌舰 ${kills} · 水晶 ${crystals} · 穿越门 ${gates} · 躲过 ${dodges}<br><br>按任意键或点击返回菜单`);
     addEventListener('keydown', onGameoverExit);
     hud.el.overlay.addEventListener('click', onGameoverExit);
   }
@@ -236,6 +257,16 @@ export function bootSpace3D({
       ship.rotation.z = -yawN * 0.6;
       ship.rotation.x = pitchN * 0.35;
       shipApi.update(dt, speed);
+
+      // 自动开火：2.5 发/s，从舰艏 -Z 射出发光弹（激光音 = 高频短促下滑"咻"，与爆炸低频分层）
+      if (autoFire) {
+        fireT += dt;
+        if (fireT >= 0.4) {
+          fireT -= 0.4;
+          spawner.spawnBullet(shipX, shipY, -2.4);
+          sfx.grind(0.05, 0.07);
+        }
+      }
 
       world.update(dt, speed, camera);
       spawner.update(dt, speed, shipX, shipY, invincible <= 0, gapNow);
@@ -313,10 +344,18 @@ export function bootSpace3D({
     get shipX() { return shipX; },
     get shipY() { return shipY; },
     get objCount() { return spawner.objs.length; },
+    get kills() { return kills; },
+    get shatters() { return shatters; },
+    get bullets() { return spawner.bullets.length; },
+    get fired() { return spawner.fired; },
+    get shipLoaded() { return shipApi.loaded; },
+    setAutoFire: (b) => { autoFire = !!b; fireT = 0; },
     debugSpawnMeteor: (x, y, z) => spawner.debugSpawnMeteor(x, y, z),
     debugSpawnCrystal: (x, y, z) => spawner.debugSpawnCrystal(x, y, z),
     debugSpawnGate: (x, y, z) => spawner.debugSpawnGate(x, y, z),
     debugSpawnWall: (gx, gy, z) => spawner.debugSpawnWall(gx, gy, z),
+    debugSpawnEnemy: (x, y, z) => spawner.debugSpawnEnemy(x, y, z),
+    debugExplode: (x, y, z, color) => spawner.explode(x, y, z, color),
     setInvincible: (s) => { invincible = s; },
   };
   window.__space3d = api;

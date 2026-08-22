@@ -53,9 +53,10 @@ function assert(name, cond, detail = '') {
     assert('引擎 boot（window.__space3d）', true);
     assert('进入 playing', await page.evaluate(() => window.__space3d.state === 'playing'));
     assert('预铺生成物件（objCount>0）', await page.evaluate(() => window.__space3d.objCount > 0));
-    // 立刻关自然生成并清场：后续判定全部确定性（预铺/自然物件会随机撞船/被躲，污染计数）
+    // 立刻关自然生成+自动开火并清场：后续判定全部确定性（预铺/自然物件、弹丸击碎会污染计数）
     await page.evaluate(() => {
       window.__space3d.spawner.autoSpawn = false;
+      window.__space3d.setAutoFire(false);
       window.__space3d.spawner.clearAll();
     });
 
@@ -130,6 +131,43 @@ function assert(name, cond, detail = '') {
     assert('无敌期内再撞不扣命', heartsInv === beforeH - 1, `hearts=${heartsInv}`);
     await page.evaluate(() => window.__space3d.setInvincible(0));
 
+    // --- 敌舰：漏过 +50 / 撞玩家扣命 ---
+    console.log('6b) 敌舰（漏过 +50 / 撞击扣命）');
+    const beforeE = await page.evaluate(() => ({ d: window.__space3d.dodges, b: window.__space3d.bonus, n: window.__space3d.objCount }));
+    await page.evaluate(() => window.__space3d.debugSpawnEnemy(5, 5, -15));
+    assert('敌舰生成入列', await page.evaluate((n) => window.__space3d.objCount === n + 1, beforeE.n));
+    await page.waitForFunction((d) => window.__space3d.dodges === d + 1, beforeE.d, { timeout: 8000 });
+    const afterE = await page.evaluate(() => window.__space3d.bonus);
+    assert('敌舰漏过按躲过 +50', afterE - beforeE.b === 50, `Δbonus=${afterE - beforeE.b}`);
+    const heartsBE = await page.evaluate(() => window.__space3d.hearts);
+    await page.evaluate(() => window.__space3d.debugSpawnEnemy(0, 0, -4));   // 贴脸生成，弹丸来不及拦
+    await page.waitForFunction((h) => window.__space3d.hearts === h - 1, heartsBE, { timeout: 8000 });
+    assert('敌舰撞玩家扣命', true, `hearts=${heartsBE}→${heartsBE - 1}`);
+    await page.evaluate(() => window.__space3d.setInvincible(0));
+
+    // --- 射击：自动开火 / 弹丸击毁敌舰 +200 / 击碎小陨石 +25 ---
+    console.log('6c) 射击（自动开火 / 击毁 +200 / 击碎 +25）');
+    await page.evaluate(() => {
+      window.__space3d.spawner.clearAll();
+      window.__space3d.setAutoFire(true);
+    });
+    const beforeS = await page.evaluate(() => ({ f: window.__space3d.fired, k: window.__space3d.kills, b: window.__space3d.bonus }));
+    await page.evaluate(() => window.__space3d.debugSpawnEnemy(0, 0, -30));
+    await page.waitForFunction((k) => window.__space3d.kills === k + 1, beforeS.k, { timeout: 8000 });
+    const afterS = await page.evaluate(() => ({ f: window.__space3d.fired, b: window.__space3d.bonus, h: window.__space3d.hearts }));
+    assert('自动开火存在（fired 递增）', afterS.f > beforeS.f, `fired=${beforeS.f}→${afterS.f}`);
+    assert('弹丸击毁敌舰 +200', afterS.b - beforeS.b === 200, `Δbonus=${afterS.b - beforeS.b}`);
+    assert('敌舰被拦截未撞玩家（不扣命）', afterS.h === heartsBE - 1, `hearts=${afterS.h}`);
+    const beforeSh = await page.evaluate(() => ({ s: window.__space3d.shatters, b: window.__space3d.bonus }));
+    await page.evaluate(() => window.__space3d.debugSpawnMeteor(0, 0, -25));   // scale 1.0 → 可击碎小陨石
+    await page.waitForFunction((s) => window.__space3d.shatters === s + 1, beforeSh.s, { timeout: 8000 });
+    const afterSh = await page.evaluate(() => window.__space3d.bonus);
+    assert('弹丸击碎小陨石 +25', afterSh - beforeSh.b === 25, `Δbonus=${afterSh - beforeSh.b}`);
+    await page.evaluate(() => {
+      window.__space3d.setAutoFire(false);
+      window.__space3d.spawner.clearAll();
+    });
+
     // --- 返回按钮恢复面板 ---
     console.log('7) 返回菜单');
     await page.evaluate(() => document.getElementById('space3d-back-btn').click());
@@ -150,6 +188,7 @@ function assert(name, cond, detail = '') {
     await page.waitForFunction(() => window.__space3d, null, { timeout: 10000 });
     await page.evaluate(() => {
       window.__space3d.spawner.autoSpawn = false;
+      window.__space3d.setAutoFire(false);       // 小陨石会被弹丸击碎，gameover 用撞击判定要关掉开火
       window.__space3d.spawner.clearAll();
     });
     for (let i = 0; i < 3; i++) {

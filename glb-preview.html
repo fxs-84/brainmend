@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>glb preview</title>
+<style>body{margin:0;background:#111}</style>
+<script type="importmap">{"imports":{"three":"./assets/vendor/three/build/three.module.js","three/addons/":"./assets/vendor/three/examples/jsm/"}}</script>
+</head><body>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+const params = new URLSearchParams(location.search);
+const file = params.get('m') || 'models/ship-player-v1.glb';
+const view = params.get('view') || 'iso'; // iso | front | side | top | rear
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x182030);
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const sun = new THREE.DirectionalLight(0xfff2dd, 2.0); sun.position.set(5, 8, 6); scene.add(sun);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.6); fill.position.set(-6, 2, -5); scene.add(fill);
+scene.add(new THREE.GridHelper(4, 8, 0x334155, 0x1e293b));
+const axes = new THREE.AxesHelper(1.5); scene.add(axes); // X红 Y绿 Z蓝
+
+const draco = new DRACOLoader().setDecoderPath('./assets/vendor/draco/gltf/');
+const loader = new GLTFLoader().setDRACOLoader(draco);
+const gltf = await loader.loadAsync('./' + file);
+const model = gltf.scene;
+scene.add(model);
+const box = new THREE.Box3().setFromObject(model);
+const size = box.getSize(new THREE.Vector3());
+const center = box.getCenter(new THREE.Vector3());
+console.log('BBOX', JSON.stringify({ size, center }));
+
+const cam = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 100);
+const d = Math.max(size.x, size.y, size.z) * 2.2;
+const views = {
+  iso:   [d * 0.7, d * 0.5, d * 0.7],
+  front: [0, size.y * 0.3, -d],   // 从 -Z 看
+  rear:  [0, size.y * 0.3, d],
+  side:  [d, size.y * 0.3, 0],
+  top:   [0, d, 0.001],
+};
+cam.position.set(...(views[view] || views.iso));
+cam.lookAt(center);
+renderer.render(scene, cam);
+window.__ready = true;
+</script></body></html>

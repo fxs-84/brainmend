@@ -36,6 +36,31 @@ function makeNebulaTex(seed) {
   return new THREE.CanvasTexture(c);
 }
 
+// 气态大行星纹理：横向条纹 + 椭圆色斑
+function makePlanetTex() {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 256;
+  const g = c.getContext('2d');
+  const bands = ['#c8a06a', '#a87e50', '#e0c090', '#8a6a48', '#d8b58a', '#b08a5c', '#e8d0a8'];
+  let y = 0;
+  for (let i = 0; y < 256; i++) {
+    const h = 14 + (i % 3) * 10;
+    g.fillStyle = bands[i % bands.length];
+    g.beginPath();
+    g.moveTo(0, y);
+    for (let x = 0; x <= 512; x += 16) g.lineTo(x, y + Math.sin(x / 60 + i * 2) * 4);
+    g.lineTo(512, y + h); g.lineTo(0, y + h);
+    g.closePath(); g.fill();
+    y += h;
+  }
+  // 大红斑式椭圆色斑
+  for (const [sx, sy, rx, ry, col] of [[350, 150, 46, 20, 'rgba(160,80,50,.8)'], [150, 90, 26, 12, 'rgba(120,90,60,.6)'], [430, 70, 18, 9, 'rgba(100,70,50,.5)']]) {
+    g.fillStyle = col;
+    g.beginPath(); g.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2); g.fill();
+  }
+  return new THREE.CanvasTexture(c);
+}
+
 export function buildSpaceWorld(scene) {
   scene.background = new THREE.Color(0x030509);
   scene.fog = new THREE.FogExp2(0x050a16, 0.0085);   // 极淡近黑蓝雾，拉纵深
@@ -90,6 +115,22 @@ export function buildSpaceWorld(scene) {
     nebulas.push({ spr, bx, by, f: 0.05 + Math.random() * 0.08, amp: 4 + Math.random() * 6, ph: Math.random() * Math.PI * 2 });
   }
 
+  // --- 远景大行星：程序化气态行星 + 大气边缘辉光，侧前方极远处撑场面（几乎不动）---
+  // 注：fog=false——FogExp2 在 ~270m 处已把任何东西吞没，行星必须豁免雾
+  const planet = new THREE.Mesh(
+    new THREE.SphereGeometry(45, 48, 32),
+    new THREE.MeshLambertMaterial({ map: makePlanetTex(), fog: false }),
+  );
+  planet.position.set(-140, 30, -260);
+  scene.add(planet);
+  const planetGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeStarTex(), color: 0xc8a878, transparent: true, opacity: 0.45,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  planetGlow.scale.set(128, 128, 1);
+  planetGlow.position.copy(planet.position);
+  scene.add(planetGlow);
+
   // --- 速度线：3D 空间里环绕飞行走廊的发光短棒，随速度向后飞掠（非屏幕空间放射线）---
   const LINE_N = 60;
   const lineGeo = new THREE.BoxGeometry(0.05, 0.05, 1);
@@ -117,6 +158,8 @@ export function buildSpaceWorld(scene) {
       n.spr.position.x = n.bx + Math.sin(t * n.f + n.ph) * n.amp;
       n.spr.position.y = n.by + Math.cos(t * n.f * 0.7 + n.ph) * n.amp * 0.6;
     }
+    // 行星极慢自转（远景几乎不动，只给一点活气）
+    planet.rotation.y += dt * 0.012;
     // 速度线：比障碍更快的相对速度向后飞掠，长度随速度拉伸
     const vz = speed * 2.0 + 8;
     const len = 1.2 + speed * 0.22;
