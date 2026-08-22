@@ -41,8 +41,8 @@ export function bootSpace3D({
     speedMaxMul: 1.6,       // 封顶 base×1.6
     yawRange: parseFloat(qs.get('yawrange') || '20'),     // yaw ±20° → 横向满幅（35° 太钝，用户嫌不灵敏）
     pitchRange: parseFloat(qs.get('pitchrange') || '16'), // pitch ±16° → 纵向满幅
-    yawInv: qs.get('yawinv') === '1' ? -1 : 1,      // 真机方向 A/B 开关
-    pitchInv: qs.get('pitchinv') === '1' ? 1 : -1,  // D 通道抬头=负值（road3d 实证），默认取反=抬头上升
+    yawInv: qs.get('yawinv') ? parseInt(qs.get('yawinv')) : 1,   // 真机方向 A/B 开关（?yawinv=-1 翻左右）
+    pitchInv: qs.get('pitchinv') ? parseInt(qs.get('pitchinv')) : 1,  // 用户实机：gyroFeed 链路抬头=正值（与 road3d 注释相反，以实机为准）；?pitchinv=-1 翻上下
     deadzone: 2.4,          // |yaw|<2.4° 回中死区
     boundX: 10, boundY: 6,  // 飞船可动域
     follow: 12,             // 位置平滑跟随 lerp 速率（9 偏钝）

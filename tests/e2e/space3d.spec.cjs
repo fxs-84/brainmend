@@ -84,12 +84,12 @@ function assert(name, cond, detail = '') {
     await setPose(-10, 0); await page.waitForTimeout(900);
     const xL = await page.evaluate(() => window.__space3d.shipX);
     assert('yaw=-10 → shipX ≈ -5', xL < -3, `shipX=${xL.toFixed(2)}`);
-    await setPose(0, -8); await page.waitForTimeout(900);   // D 通道抬头=负值
+    await setPose(0, 8); await page.waitForTimeout(900);   // 实机：gyroFeed 链路抬头=正值
     const yU = await page.evaluate(() => window.__space3d.shipY);
-    assert('pitch=-8（抬头）→ shipY ≈ +3（上升）', yU > 1.5, `shipY=${yU.toFixed(2)}`);
-    await setPose(0, 8); await page.waitForTimeout(900);
+    assert('pitch=+8（抬头）→ shipY ≈ +3（上升）', yU > 1.5, `shipY=${yU.toFixed(2)}`);
+    await setPose(0, -8); await page.waitForTimeout(900);
     const yD = await page.evaluate(() => window.__space3d.shipY);
-    assert('pitch=+8（低头）→ shipY ≈ -3（下降）', yD < -1.5, `shipY=${yD.toFixed(2)}`);
+    assert('pitch=-8（低头）→ shipY ≈ -3（下降）', yD < -1.5, `shipY=${yD.toFixed(2)}`);
     await setPose(1.0, 0); await page.waitForTimeout(900);   // 死区内（<2.4°）应回中
     const dzInfo = await page.evaluate(() => ({ x: Math.abs(window.__space3d.shipX), oy: +window.__space3d.input.offset.yaw.toFixed(2), ry: +window.__space3d.input.raw.yaw.toFixed(2) }));
     const xDz = dzInfo.x;
