@@ -49,7 +49,7 @@ export function buildShip(scene, { noRender = false } = {}) {
 
   // --- 跟船补光：专照舰体（距离衰减限定在船周，不照亮远处陨石）---
   // 强度克制：深海军蓝舰体提亮到能看清细节即可，过亮会在泛光下糊成白团
-  const lamp = new THREE.PointLight(0xbfd8ff, 2.2, 14, 1.4);
+  const lamp = new THREE.PointLight(0xbfd8ff, 1.6, 14, 1.4);   // 2.2 在真机偏曝，降到 1.6
   lamp.position.set(0, 2.6, 3.8);
   ship.add(lamp);
 
@@ -80,8 +80,9 @@ export function buildShip(scene, { noRender = false } = {}) {
           for (const m of ms) {
             if (m.color) m.color.copy(TINT);            // 染色（与贴图相乘）
             if (m.emissive && m.emissiveMap == null) {  // 无自发光贴图的才提亮
-              m.emissive.copy(TINT).multiplyScalar(0.12);
+              m.emissive.copy(TINT).multiplyScalar(0.08);
             }
+            if ('envMapIntensity' in m) m.envMapIntensity = 0.55;  // RoomEnvironment 满强度在真机偏曝
             // 舰体大多是掠射角视角，贴图不开各向异性会糊成一片
             for (const slot of ['map', 'normalMap', 'metalnessMap', 'roughnessMap']) {
               if (m[slot]) m[slot].anisotropy = 8;

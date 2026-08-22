@@ -109,8 +109,8 @@ export class SpaceSpawner {
       new THREE.MeshLambertMaterial({ color: 0xb0a294, flatShading: true }),   // 浅岩灰
     ];
     this.iceMats = [
-      new THREE.MeshLambertMaterial({ color: 0x9fd0ff, transparent: true, opacity: 0.72, emissive: 0x2a5a8a, emissiveIntensity: 0.55, flatShading: true }),
-      new THREE.MeshLambertMaterial({ color: 0xc2e2ff, transparent: true, opacity: 0.66, emissive: 0x3a6a9a, emissiveIntensity: 0.5, flatShading: true }),
+      new THREE.MeshLambertMaterial({ color: 0x9fd0ff, transparent: true, opacity: 0.72, emissive: 0x2a5a8a, emissiveIntensity: 0.38, flatShading: true }),
+      new THREE.MeshLambertMaterial({ color: 0xc2e2ff, transparent: true, opacity: 0.66, emissive: 0x3a6a9a, emissiveIntensity: 0.34, flatShading: true }),
     ];
     this.crystalGeo = new THREE.OctahedronGeometry(0.7);
     this.crystalMat = new THREE.MeshLambertMaterial({
@@ -170,11 +170,12 @@ export class SpaceSpawner {
       const wrap = new THREE.Group();
       wrap.add(tpl);
       wrap.scale.setScalar(3.5 / size.z);        // 等比放大到 ~3.5m 长
-      // 掠射角贴图清晰度：各向异性过滤
+      // 掠射角贴图清晰度：各向异性过滤；envMapIntensity 与玩家舰一致压到 0.55（防真机偏曝）
       tpl.traverse(n => {
         if (n.isMesh && n.material) {
           const ms = Array.isArray(n.material) ? n.material : [n.material];
           for (const m of ms) {
+            if ('envMapIntensity' in m) m.envMapIntensity = 0.55;
             for (const slot of ['map', 'normalMap', 'metalnessMap', 'roughnessMap']) {
               if (m[slot]) m[slot].anisotropy = 8;
             }
