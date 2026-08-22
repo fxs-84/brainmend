@@ -29,6 +29,21 @@ const loader = new GLTFLoader().setDRACOLoader(draco);
 const gltf = await loader.loadAsync('./' + file);
 const model = gltf.scene;
 scene.add(model);
+// 试色：?tint=99ccff&emis=0.12 —— color 染色 + 对无自发光材质按染色提 emissive（与 ship.js 同逻辑）
+const tint = params.get('tint');
+if (tint) {
+  const tc = new THREE.Color(parseInt(tint, 16));
+  const emis = parseFloat(params.get('emis') || '0.12');
+  model.traverse(n => {
+    if (n.isMesh && n.material) {
+      const ms = Array.isArray(n.material) ? n.material : [n.material];
+      for (const m of ms) {
+        if (m.color) m.color.copy(tc);
+        if (m.emissive) m.emissive.copy(tc).multiplyScalar(emis);
+      }
+    }
+  });
+}
 const box = new THREE.Box3().setFromObject(model);
 const size = box.getSize(new THREE.Vector3());
 const center = box.getCenter(new THREE.Vector3());

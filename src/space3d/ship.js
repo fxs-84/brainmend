@@ -71,13 +71,16 @@ export function buildShip(scene, { noRender = false } = {}) {
       const size = box.getSize(new THREE.Vector3());
       model.scale.setScalar(4.5 / size.z);       // 等比放大到 ~4.5m 长
       // 深色模型提亮：仅对 emissive 为黑的材质做颜色微提（已有自发光贴图的不动，避免失真）
+      // 舰体配色：?shiptint=rrggbb 覆盖（用户可自试）；默认暖金白（原贴图深海军蓝偏灰，用户嫌灰）
+      const TINT = new THREE.Color(parseInt(new URLSearchParams(location.search).get('shiptint') || 'ffd9a8', 16));
       const fadeMats = [];
       model.traverse(n => {
         if (n.isMesh && n.material) {
           const ms = Array.isArray(n.material) ? n.material : [n.material];
           for (const m of ms) {
-            if (m.emissive && m.emissive.getHex() === 0 && m.color) {
-              m.emissive.copy(m.color).multiplyScalar(0.06);
+            if (m.color) m.color.copy(TINT);            // 染色（与贴图相乘）
+            if (m.emissive && m.emissiveMap == null) {  // 无自发光贴图的才提亮
+              m.emissive.copy(TINT).multiplyScalar(0.12);
             }
             // 舰体大多是掠射角视角，贴图不开各向异性会糊成一片
             for (const slot of ['map', 'normalMap', 'metalnessMap', 'roughnessMap']) {
