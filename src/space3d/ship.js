@@ -79,6 +79,10 @@ export function buildShip(scene, { noRender = false } = {}) {
             if (m.emissive && m.emissive.getHex() === 0 && m.color) {
               m.emissive.copy(m.color).multiplyScalar(0.06);
             }
+            // 舰体大多是掠射角视角，贴图不开各向异性会糊成一片
+            for (const slot of ['map', 'normalMap', 'metalnessMap', 'roughnessMap']) {
+              if (m[slot]) m[slot].anisotropy = 8;
+            }
             m.transparent = true;                 // 加载完淡入
             m.opacity = 0;
             fadeMats.push(m);

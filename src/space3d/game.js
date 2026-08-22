@@ -9,6 +9,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { HeadPoseSource } from '../vor/input/HeadPoseSource.js';
 import { Metronome } from '../vor/core/Metronome.js';
 import { buildSpaceWorld } from './world.js';
@@ -62,16 +63,27 @@ export function bootSpace3D({
   let renderer = null, composer = null, bloomPass = null;
   let useComposer = qs.get('bloom') !== '0';
   if (!noRender) {
-    renderer = new THREE.WebGLRenderer({ antialias: false });   // 软渲染性能：pixelRatio 1、无 MSAA
+    // 清晰度：跟随设备像素比（封顶 1.5 保帧率）+ MSAA；1x 无抗锯齿在真机上会把舰体糊掉（用户实测反馈）
+    const pr = Math.min(devicePixelRatio || 1, 1.5);
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(pr);
     renderer.setSize(innerWidth, innerHeight);
-    renderer.setPixelRatio(1);
     mount.appendChild(renderer.domElement);
     // 泛光（照抄 src/vor/demo.js）：克制强度 + threshold 0.78；FPS<18 自动降级
-    composer = new EffectComposer(renderer);
+    // composer 的离屏 RT 默认无 MSAA → samples:4，否则走泛光链时反而比直渲更糊
+    const rt = new THREE.WebGLRenderTarget(innerWidth * pr, innerHeight * pr, { samples: 4 });
+    composer = new EffectComposer(renderer, rt);
+    composer.setPixelRatio(pr);
     composer.addPass(new RenderPass(scene, camera));
     bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.45, 0.78);
     composer.addPass(bloomPass);
     composer.addPass(new OutputPass());
+    // PBR 环境贴图：GLB 是高金属度 Standard 材质，没有 environment 时金属面无反射源→近黑，
+    // 这就是"舰体黑成剪影、看不清细节"的根因（灯光再强也照不亮纯金属）。
+    // RoomEnvironment 一次性 PMREM，只影响 Standard 材质（两艘舰），Lambert 陨石/星空不受影响。
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
   }
 
   const onResize = () => {

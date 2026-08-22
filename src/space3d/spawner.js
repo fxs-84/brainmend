@@ -170,6 +170,17 @@ export class SpaceSpawner {
       const wrap = new THREE.Group();
       wrap.add(tpl);
       wrap.scale.setScalar(3.5 / size.z);        // 等比放大到 ~3.5m 长
+      // 掠射角贴图清晰度：各向异性过滤
+      tpl.traverse(n => {
+        if (n.isMesh && n.material) {
+          const ms = Array.isArray(n.material) ? n.material : [n.material];
+          for (const m of ms) {
+            for (const slot of ['map', 'normalMap', 'metalnessMap', 'roughnessMap']) {
+              if (m[slot]) m[slot].anisotropy = 8;
+            }
+          }
+        }
+      });
       // 朝向实证（glb-preview front/side 视图）：该导出机头朝 +Z、引擎在 -Z——
       // 与玩家视线相对即"面向玩家"，无需旋转（用户备注的 -Z 与实物相反，以截图为准）
       this.enemyTpl = wrap;
