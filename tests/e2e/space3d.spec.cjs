@@ -72,24 +72,28 @@ function assert(name, cond, detail = '') {
       requestAnimationFrame(loop);
     });
     const setPose = (yaw, pitch) => page.evaluate(([y, p]) => { window.__drive.yaw = y; window.__drive.pitch = p; }, [yaw, pitch]);
+    // 等零点采样窗（20 帧均值）完成再驱动，消除通道启动延迟的竞态
+    await page.waitForFunction(() => window.__space3d.zeroed, null, { timeout: 10000 });
+    await setPose(0, 0); await page.waitForTimeout(300);
 
     // --- 头控跟随 ---
-    console.log('2) 头控映射（yaw ±35°→x ±10 / pitch ±22.5°→y ±6）');
-    await setPose(17.5, 0); await page.waitForTimeout(900);
+    console.log('2) 头控映射（yaw ±20°→x ±10 / pitch ±16°→y ±6，抬头=负值→上升）');
+    await setPose(10, 0); await page.waitForTimeout(900);
     const xR = await page.evaluate(() => window.__space3d.shipX);
-    assert('yaw=+17.5（半幅）→ shipX ≈ +5', xR > 3, `shipX=${xR.toFixed(2)}`);
-    await setPose(-17.5, 0); await page.waitForTimeout(900);
+    assert('yaw=+10（半幅）→ shipX ≈ +5', xR > 3, `shipX=${xR.toFixed(2)}`);
+    await setPose(-10, 0); await page.waitForTimeout(900);
     const xL = await page.evaluate(() => window.__space3d.shipX);
-    assert('yaw=-17.5 → shipX ≈ -5', xL < -3, `shipX=${xL.toFixed(2)}`);
-    await setPose(0, 11.25); await page.waitForTimeout(900);
+    assert('yaw=-10 → shipX ≈ -5', xL < -3, `shipX=${xL.toFixed(2)}`);
+    await setPose(0, -8); await page.waitForTimeout(900);   // D 通道抬头=负值
     const yU = await page.evaluate(() => window.__space3d.shipY);
-    assert('pitch=+11.25（抬头）→ shipY ≈ +3', yU > 1.5, `shipY=${yU.toFixed(2)}`);
-    await setPose(0, -11.25); await page.waitForTimeout(900);
+    assert('pitch=-8（抬头）→ shipY ≈ +3（上升）', yU > 1.5, `shipY=${yU.toFixed(2)}`);
+    await setPose(0, 8); await page.waitForTimeout(900);
     const yD = await page.evaluate(() => window.__space3d.shipY);
-    assert('pitch=-11.25 → shipY ≈ -3', yD < -1.5, `shipY=${yD.toFixed(2)}`);
+    assert('pitch=+8（低头）→ shipY ≈ -3（下降）', yD < -1.5, `shipY=${yD.toFixed(2)}`);
     await setPose(1.0, 0); await page.waitForTimeout(900);   // 死区内（<2.4°）应回中
-    const xDz = await page.evaluate(() => Math.abs(window.__space3d.shipX));
-    assert('死区 |yaw|<2.4° 回中（|shipX|<0.8）', xDz < 0.8, `|shipX|=${xDz.toFixed(2)}`);
+    const dzInfo = await page.evaluate(() => ({ x: Math.abs(window.__space3d.shipX), oy: +window.__space3d.input.offset.yaw.toFixed(2), ry: +window.__space3d.input.raw.yaw.toFixed(2) }));
+    const xDz = dzInfo.x;
+    assert('死区 |yaw|<2.4° 回中（|shipX|<0.8）', xDz < 0.8, `|shipX|=${xDz.toFixed(2)} offset=${dzInfo.oy} raw=${dzInfo.ry}`);
     await setPose(0, 0); await page.waitForTimeout(800);
 
     // --- 生成 / 回收 / 躲陨石 ---
