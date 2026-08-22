@@ -64,7 +64,8 @@ import { bootSpace3D } from './game.js';
     if (diffOverlay) return;
     diffOverlay = document.createElement('div');
     diffOverlay.id = 'space3d-diff-overlay';
-    diffOverlay.style.cssText = 'position:fixed;inset:0;z-index:1700;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;';
+    // z-index 必须压过 #game-select-panel(2000) 与 #page2(10000)，否则面板盖住难度浮层点不到
+    diffOverlay.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;';
     const card = document.createElement('div');
     card.style.cssText = 'background:#1E293B;border:1px solid #334155;border-radius:12px;padding:26px 30px;text-align:center;color:#fff;font-family:system-ui,"PingFang SC","Microsoft YaHei",sans-serif;';
     card.innerHTML = '<div style="font-size:18px;margin-bottom:6px;">🚀 太空3D飞行</div>' +
