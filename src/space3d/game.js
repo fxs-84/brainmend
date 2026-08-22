@@ -68,6 +68,9 @@ export function bootSpace3D({
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(pr);
     renderer.setSize(innerWidth, innerHeight);
+    // 高光滚降：NoToneMapping 下 行星/冰晶/舰体高光直接削顶过曝（用户实测反馈），ACES 压高光保中间调
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.85;
     mount.appendChild(renderer.domElement);
     // 泛光（照抄 src/vor/demo.js）：克制强度 + threshold 0.78；FPS<18 自动降级
     // composer 的离屏 RT 默认无 MSAA → samples:4，否则走泛光链时反而比直渲更糊

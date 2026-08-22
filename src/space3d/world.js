@@ -124,10 +124,10 @@ export function buildSpaceWorld(scene) {
   planet.position.set(-140, 30, -260);
   scene.add(planet);
   const planetGlow = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: makeStarTex(), color: 0xc8a878, transparent: true, opacity: 0.45,
+    map: makeStarTex(), color: 0xc8a878, transparent: true, opacity: 0.25,   // 0.45 会把行星洗白（过曝反馈）
     blending: THREE.AdditiveBlending, depthWrite: false,
   }));
-  planetGlow.scale.set(128, 128, 1);
+  planetGlow.scale.set(112, 112, 1);
   planetGlow.position.copy(planet.position);
   scene.add(planetGlow);
 
