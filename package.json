@@ -25,7 +25,8 @@
     "test:e2e:vor-ch2": "node tests/e2e/vor-ch2-demo.spec.cjs",
     "test:e2e:vor-ch2-drift": "node tests/e2e/vor-ch2-drift.spec.cjs",
     "test:e2e:vor-ch2-panel": "node tests/e2e/vor-ch2-panel.spec.cjs",
-    "test:e2e:runner": "node tests/e2e/runner.spec.cjs"
+    "test:e2e:runner": "node tests/e2e/runner.spec.cjs",
+    "test:e2e:space3d": "node tests/e2e/space3d.spec.cjs"
   },
   "devDependencies": {
     "@gltf-transform/cli": "^4.4.2",
