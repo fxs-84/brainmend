@@ -1,11 +1,12 @@
-// 协调性·垂直轨迹修复(VERT-FIX-v1) E2E 回归
+// 协调性·垂直轨迹修复(VERT-FIX-v4) E2E 回归
 // 真实页面全流程：选垂直轨迹 → 开始检测 → 注入陀螺仪（假时钟）
-//   yaw = 3.6°/min 漂移 + 0.5° 真实微摆；pitch = 跟踪正弦 + 一次单帧毛刺
+//   yaw = 3.6°/min 漂移 + 三段摆动(0.5°/3°/5°)；pitch = 跟踪正弦 + 一次单帧毛刺
 // 断言：
-//   1) 垂直检测中显示 dotX 恒锁车道中心（水平漂移对用户不可见）
-//   2) 原始通道 _rawDotX 仍如实记录摆动（测量没丢信息）
-//   3) 轨迹分不再被漂移打地板（>85；修复前钳制带+8px容差 → 恒 20）
-//   4) pitch 单帧毛刺被中值滤波吸收，dotY 不跳变
+//   1) 垂直检测中显示 dotX 恒锁车道中心
+//   2) 原始通道 _rawDotX 仍如实记录（数据不丢）
+//   3) 垂直族轨迹分只评垂直向：水平摆动再大也不影响(全程 >90)
+//   4) pitch 单帧毛刺被中值滤波吸收
+//   5) 变色提示已取消：_vertWarn 不再产生
 // 用法：node tests/e2e/coord-vertical.spec.cjs（自起静态服务器，端口 8794）
 const { spawn } = require('child_process');
 const path = require('path');
@@ -55,31 +56,28 @@ function assert(name, cond, detail = '') {
     await page.evaluate(() => document.getElementById('action-btn-coord').click());
     await page.waitForFunction(() => window.state.isRunning === true, null, { timeout: 5000 });
 
-    // 注入：20Hz × 24s；每批 20 帧(1s sim)让一次 rAF 驱动评分
-    // 摆动幅度分三段: 0-8s=0.5°(正常), 8-16s=3°(应橙), 16-24s=5°(应红)
+    // 注入：20Hz；每个 rAF tick 只推进 0.1s sim(喂2帧)，避免评分采样的时间错位
+    // 摆动幅度分三段: 0-8s=0.5°(正常), 8-16s=3°, 16-24s=5°
     const res = await page.evaluate(async () => {
       const st = window.state;
-      const dt = 0.05, T = 24;
-      let spikeDone = false, trailAtSpike = null, p1TrajMean = null;
+      let spikeDone = false, trailAtSpike = null, simSec = 0;
       const warnMax = [0, 0, 0];
-      for (let k = 0; k <= T / dt; k++) {
-        const t = k * dt;
-        window.__simT += dt;
-        const amp = t < 8 ? 0.5 : t < 16 ? 3 : 5;
-        // yaw: 漂移 3.6°/min + 真实微摆
-        const yaw = 0.06 * t + amp * Math.sin(2 * Math.PI * t / 3);
-        // pitch: 跟踪垂直正弦目标(±12°)，t≈10s 处插一帧 +15° 毛刺
-        let pitch = -12 * Math.sin(2 * Math.PI * t / 28.6);
-        if (!spikeDone && t >= 10) { pitch += 15; spikeDone = true; trailAtSpike = st.trail.length; }
-        window.updateFromGyroscope({ yaw, pitch, roll: 0 });
-        const phase = t < 8 ? 0 : t < 16 ? 1 : 2;
-        warnMax[phase] = Math.max(warnMax[phase], st._vertWarn || 0);
-        if (k % 20 === 0) await new Promise(r => requestAnimationFrame(r));
-        // 阶段1(0.5°微摆)结束时的轨迹分均值 —— 单独评这段，后两段大摆动理应降分
-        if (p1TrajMean === null && t >= 8 && st.coordScores?.trajectory?.length) {
-          const arr = st.coordScores.trajectory;
-          p1TrajMean = arr.reduce((a, b) => a + b, 0) / arr.length;
+      for (let k = 0; k <= 240; k++) {
+        for (let f = 0; f < 2; f++) {
+          simSec += 0.05;
+          window.__simT += 0.05;
+          const t = simSec;
+          const amp = t < 8 ? 0.5 : t < 16 ? 3 : 5;
+          // yaw: 漂移 3.6°/min + 真实微摆
+          const yaw = 0.06 * t + amp * Math.sin(2 * Math.PI * t / 3);
+          // pitch: 跟随靶(由 targetY 反解) + t≈10s 一帧 +15° 毛刺
+          let pitch = -(st.targetY || 0) * (st.pitchCoefficient || 0.05);
+          if (!spikeDone && t >= 10) { pitch += 15; spikeDone = true; trailAtSpike = st.trail.length; }
+          window.updateFromGyroscope({ yaw, pitch, roll: 0 });
+          const phase = t < 8 ? 0 : t < 16 ? 1 : 2;
+          warnMax[phase] = Math.max(warnMax[phase], st._vertWarn || 0);
         }
+        await new Promise(r => requestAnimationFrame(r));
       }
       const trail = st.trail.slice();
       const xs = trail.map(p => p.x);
@@ -98,7 +96,7 @@ function assert(name, cond, detail = '') {
         rawRange: st._rawDotX != null ? 1 : 0,
         rawVals: [st._rawDotX],
         spikeJump,
-        trajMean: p1TrajMean,
+        trajMean: traj.length ? traj.reduce((a, b) => a + b, 0) / traj.length : null,
         trajN: traj.length,
         yawEnd: st.yaw,
         warnMax,
@@ -112,10 +110,8 @@ function assert(name, cond, detail = '') {
     assert('原始通道 _rawDotX 仍在记录', res.rawRange === 1 && Number.isFinite(res.rawVals[0]), 'raw=' + res.rawVals[0]?.toFixed(2));
     assert('轨迹分不被漂移打地板 (>85)', res.trajMean !== null && res.trajMean > 85, res.trajMean?.toFixed(1));
     assert('pitch 单帧毛刺被吸收 (dotY 步进 <30px)', res.spikeJump < 30, res.spikeJump.toFixed(1) + 'px');
-    console.log('  变色档位(0.5°/3°/5°摆动):', res.warnMax.join(' / '));
-    assert('0.5°微摆不变色', res.warnMax[0] === 0, 'warnMax=' + res.warnMax[0]);
-    assert('3°偏斜触发橙色(1级)', res.warnMax[1] === 1, 'warnMax=' + res.warnMax[1]);
-    assert('5°偏斜触发红色(2级)', res.warnMax[2] === 2, 'warnMax=' + res.warnMax[2]);
+    assert('轨迹分只评垂直向, 水平摆动不影响(全程 >90)', res.trajMean !== null && res.trajMean > 90, res.trajMean?.toFixed(1));
+    assert('变色提示已取消(_vertWarn 不再产生)', res.warnMax.every(w => w === 0), 'warnMax=' + res.warnMax.join('/'));
     assert('无页面错误', errors.length === 0, errors.slice(0, 3).join(' | '));
   } catch (e) {
     failed++;

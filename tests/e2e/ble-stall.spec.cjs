@@ -23,7 +23,7 @@ function extractFn(startMark) {
 }
 
 const CP_TEXT = extractFn('function Cp(e){let t=e.maxStepDeg');
-const FE_TEXT = extractFn('function Fe(e){let t=Date.now()');
+const FE_TEXT = extractFn('function Fe(e){window.__gyroDiag');
 
 // 组帧：0x55 + type=0x3D，roll@2 / pitchRaw@4(显示=-值) / yawRaw@6(显示=-值)
 function mkFrame(yaw, pitch = 0, roll = 0) {
@@ -119,6 +119,24 @@ function assert(name, cond, detail = '') {
   const yaws = h.delivered.map(p => p.yaw);
   const ok = yaws.length === 4 && yaws[3] > yaws[0] && yaws[3] - yaws[0] < 3;
   assert('E ±180° 跨界连续(无回跳)', ok, yaws.map(v => v.toFixed(1)).join(' → '));
+}
+
+// ---------- F) 字节丢失导致失步：滑动重对齐，后续真帧正常 ----------
+{
+  const h = build();
+  for (let k = 0; k < 5; k++) feed(h, 10);
+  h.delivered.length = 0;
+  // 构造合并流: 完整帧(yaw=20) 去掉第1字节(0x55 帧头在链路上丢了) + 完整帧(yaw=30) + 完整帧(yaw=40)
+  const f20 = mkFrame(20).slice(1);            // 19 字节残缺帧
+  const f30 = mkFrame(30), f40 = mkFrame(40);
+  const chunk = new Uint8Array(f20.length + 40);
+  chunk.set(f20, 0); chunk.set(f30, f20.length); chunk.set(f40, f20.length + 20);
+  h.Fe({ target: { value: new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength) } });
+  const yaws = h.delivered.map(p => p.yaw);
+  const garbage = yaws.filter(y => ![20, 30, 40].some(v => Math.abs(y - v) < 5));
+  assert('F 失步后真帧重对齐送达', yaws.length >= 2 && Math.abs(yaws[yaws.length - 1] - 40) < 1,
+    '送达序列: ' + yaws.map(v => v.toFixed(1)).join(','));
+  assert('F 垃圾帧最多 1 帧', garbage.length <= 1, '垃圾帧 ' + garbage.length + ' 个: ' + garbage.map(v => v.toFixed(1)).join(','));
 }
 
 console.log(`\n结果: ${passed} 通过, ${failed} 失败`);
