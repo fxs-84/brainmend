@@ -1,10 +1,9 @@
-// 停顿追赶平滑(CATCHUP-FIX-v1) E2E 回归
+// 裸数据链路(RAW-DISPLAY-v1)E2E 回归 —— 停顿后无追赶
 // 场景：垂直检测中模拟 BLE 停顿 0.6s，停顿期间真实 pitch 从 -5° 变为 -13°
-// 断言：
-//   1) 帧恢复后第 1 帧不光跳：pitch 显示值仍在旧值附近(追赶刚开始)
-//   2) 0.5s 内追平到真值(误差 <0.5°)
-//   3) 遥测计数 catchUps >= 1
-//   4) 连续帧流(无停顿)时追赶不触发、跟随无滞后
+// 断言（语义与 CATCHUP-FIX 时代相反 —— 追赶逻辑已移除）：
+//   1) 连续帧流零滞后跟随
+//   2) 停顿恢复后第 1 帧立即等于真值(无追赶斜坡)
+//   3) 遥测 catchUps 恒 0(计数逻辑已随追赶移除)
 // 用法：node tests/e2e/coord-catchup.spec.cjs（自起静态服务器，端口 8798）
 const { spawn } = require('child_process');
 const path = require('path');
@@ -56,22 +55,19 @@ function assert(name, cond, detail = '') {
       window.__simT += 0.6;
       feed(-13);                                  // 恢复后第 1 帧
       const pitchFirstFrame = st.pitch;
-      for (let k = 0; k < 3; k++) feed(-13);      // 再 3 帧(0.15s)
-      const pitchMid = st.pitch;
-      for (let k = 0; k < 7; k++) feed(-13);      // 再 7 帧(累计 0.55s)
+      for (let k = 0; k < 10; k++) feed(-13);
       const pitchLate = st.pitch;
-      return { followErr, pitchFirstFrame, pitchMid, pitchLate, catchUps: window.__gyroDiag.catchUps };
+      return { followErr, pitchFirstFrame, pitchLate, catchUps: window.__gyroDiag.catchUps || 0 };
     });
 
     console.log('  连续跟随误差:', res.followErr.toFixed(2) + '°',
       ' 恢复后第1帧:', res.pitchFirstFrame.toFixed(2) + '°',
-      ' +0.15s:', res.pitchMid.toFixed(2) + '°',
-      ' +0.55s:', res.pitchLate.toFixed(2) + '°',
+      ' 后续帧:', res.pitchLate.toFixed(2) + '°',
       ' catchUps:', res.catchUps);
     assert('连续帧流跟随无滞后 (<0.5°)', res.followErr < 0.5, res.followErr.toFixed(2) + '°');
-    assert('停顿恢复首帧不硬跳 (未到真值的60%)', res.pitchFirstFrame > -5 - 8 * 0.6, res.pitchFirstFrame.toFixed(2) + '°');
-    assert('追赶在 0.55s 内收敛真值 (<0.5°)', Math.abs(res.pitchLate - (-13)) < 0.5, res.pitchLate.toFixed(2) + '°');
-    assert('遥测 catchUps 计数', res.catchUps >= 1, String(res.catchUps));
+    assert('停顿恢复首帧立即真值 (<0.2°)', Math.abs(res.pitchFirstFrame - (-13)) < 0.2, res.pitchFirstFrame.toFixed(2) + '° (无追赶斜坡)');
+    assert('后续帧保持真值 (<0.2°)', Math.abs(res.pitchLate - (-13)) < 0.2, res.pitchLate.toFixed(2) + '°');
+    assert('catchUps 恒 0(追赶已移除)', res.catchUps === 0, String(res.catchUps));
     assert('无页面错误', errors.length === 0, errors.slice(0, 3).join(' | '));
   } catch (e) {
     failed++;

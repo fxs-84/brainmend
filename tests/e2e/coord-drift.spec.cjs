@@ -1,7 +1,8 @@
-// 协调性模式 yaw 漂移补偿 E2E 回归（DRIFT-FIX-v4）
+// 裸数据链路(RAW-DISPLAY-v1)E2E 回归 —— 协调模式 yaw 通道
 // 场景：真实页面内注入带 3.6°/min 漂移的模拟陀螺仪数据（假时钟快进 130s）
-//   前 10s 静止（学习漂移速率）→ 后 120s 连续正弦跟靶 ±60°（模拟协调性检测）
-// 断言：运动中 |state.yaw - 真实头角| 峰值 < 2°（修复前约 7°+）
+// 断言（语义与 DRIFT-FIX 时代相反 —— 补偿器已移除）：
+//   1) 零滞后零补偿: state.yaw 与注入值(含漂移)一致, 峰值误差 < 0.2°
+//   2) 漂移原样呈现: state.yaw - 真实头角 ≈ 漂移量(不再被"补偿"压掉)
 // 用法：node tests/e2e/coord-drift.spec.cjs（自起静态服务器，端口 8793）
 const { spawn } = require('child_process');
 const path = require('path');
@@ -31,7 +32,6 @@ function assert(name, cond, detail = '') {
     await page.goto(URL, { waitUntil: 'load' });
     await page.waitForFunction(() => window.state && window.updateFromGyroscope, null, { timeout: 10000 });
 
-    // 切到协调性模式
     await page.evaluate(() => document.querySelector('.mode-btn[data-mode="coordination"]').click());
     await page.waitForTimeout(300);
     const mode = await page.evaluate(() => window.state.mode);
@@ -47,24 +47,23 @@ function assert(name, cond, detail = '') {
       const drift = 0.06;               // °/s = 3.6°/min
       const dt = 0.05;                  // 20Hz
       const user = t => t < 10 ? 0 : 60 * Math.sin(2 * Math.PI * (t - 10) / 28.6);
-      let maxErrStill = 0, maxErrMove = 0;
+      let maxErrRaw = 0;                // |state.yaw - 注入值| 应≈0 (零补偿零滞后)
       for (let k = 0; k <= 130 / dt; k++) {
         const t = k * dt;
         fakeT += dt;
-        window.updateFromGyroscope({ yaw: user(t) + drift * t, pitch: 0, roll: 0 });
-        const err = Math.abs(st.yaw - user(t));
-        if (t < 10) maxErrStill = Math.max(maxErrStill, err);
-        else maxErrMove = Math.max(maxErrMove, err);
+        const injected = user(t) + drift * t;
+        window.updateFromGyroscope({ yaw: injected, pitch: 0, roll: 0 });
+        maxErrRaw = Math.max(maxErrRaw, Math.abs(st.yaw - injected));
       }
       performance.now = realNow;
-      return { maxErrStill, maxErrMove, yawEnd: st.yaw, userEnd: user(130) };
+      return { maxErrRaw, yawEnd: st.yaw, userEnd: user(130), driftEnd: drift * 130 };
     });
 
-    console.log('  静止段峰值误差:', res.maxErrStill.toFixed(2) + '°',
-                ' 运动段峰值误差:', res.maxErrMove.toFixed(2) + '°',
-                ' 末帧: yaw=' + res.yawEnd.toFixed(2) + '° 真实=' + res.userEnd.toFixed(2) + '°');
-    assert('静止段漂移被压住 (<0.5°)', res.maxErrStill < 0.5, res.maxErrStill.toFixed(2) + '°');
-    assert('120s 连续运动漂移补偿有效 (<2°)', res.maxErrMove < 2, res.maxErrMove.toFixed(2) + '°');
+    console.log('  零补偿峰值误差:', res.maxErrRaw.toFixed(3) + '°',
+                ' 末帧: yaw=' + res.yawEnd.toFixed(2) + '° 真实=' + res.userEnd.toFixed(2) + '° 漂移=' + res.driftEnd.toFixed(2) + '°');
+    assert('零滞后零补偿: 显示=注入值 (<0.2°)', res.maxErrRaw < 0.2, res.maxErrRaw.toFixed(3) + '°');
+    const driftShown = res.yawEnd - res.userEnd;
+    assert('漂移原样呈现, 不再被补偿 (>5°)', driftShown > 5, driftShown.toFixed(2) + '° (理论≈' + res.driftEnd.toFixed(2) + '°)');
     assert('无页面错误', errors.length === 0, errors.slice(0, 3).join(' | '));
   } catch (e) {
     failed++;

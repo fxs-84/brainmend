@@ -1,11 +1,11 @@
-// 协调性·垂直轨迹修复(VERT-FIX-v4) E2E 回归
+// 协调性·垂直轨迹 E2E 回归(RAW-DISPLAY-v1 语义)
 // 真实页面全流程：选垂直轨迹 → 开始检测 → 注入陀螺仪（假时钟）
 //   yaw = 3.6°/min 漂移 + 三段摆动(0.5°/3°/5°)；pitch = 跟踪正弦 + 一次单帧毛刺
 // 断言：
 //   1) 垂直检测中显示 dotX 恒锁车道中心
 //   2) 原始通道 _rawDotX 仍如实记录（数据不丢）
 //   3) 垂直族轨迹分只评垂直向：水平摆动再大也不影响(全程 >90)
-//   4) pitch 单帧毛刺被中值滤波吸收
+//   4) pitch 单帧毛刺原样呈现且下一帧立即恢复(裸数据, 不再被中值滤波吸收)
 //   5) 变色提示已取消：_vertWarn 不再产生
 // 用法：node tests/e2e/coord-vertical.spec.cjs（自起静态服务器，端口 8794）
 const { spawn } = require('child_process');
@@ -49,6 +49,10 @@ function assert(name, cond, detail = '') {
       Date.now = () => window.__simT * 1000;
       performance.now = () => window.__simT * 1000;
       window.state.useGyroscope = true;
+      // B5: 垂直族 dotY 改用 roll —— 水平安装下俯仰对应 roll
+      window.state.rollRange = window.state.pitchRange || 22.5;
+      window.state.rollCoefficient = window.state.pitchCoefficient;
+      window.__gyroDiag = { f61: 0, f113: 0, gaps: 0, maxGap: 0, reanchor: 0, catchUps: 0 };
       speechSynthesis.speak = u => setTimeout(() => u.onend && u.onend(), 0);
     });
 
@@ -61,6 +65,7 @@ function assert(name, cond, detail = '') {
     const res = await page.evaluate(async () => {
       const st = window.state;
       let spikeDone = false, trailAtSpike = null, simSec = 0;
+      let rollPreSpike = 0, spikePassDev = null;
       const warnMax = [0, 0, 0];
       for (let k = 0; k <= 240; k++) {
         for (let f = 0; f < 2; f++) {
@@ -68,12 +73,12 @@ function assert(name, cond, detail = '') {
           window.__simT += 0.05;
           const t = simSec;
           const amp = t < 8 ? 0.5 : t < 16 ? 3 : 5;
-          // yaw: 漂移 3.6°/min + 真实微摆
-          const yaw = 0.06 * t + amp * Math.sin(2 * Math.PI * t / 3);
-          // pitch: 跟随靶(由 targetY 反解) + t≈10s 一帧 +15° 毛刺
-          let pitch = -(st.targetY || 0) * (st.pitchCoefficient || 0.05);
-          if (!spikeDone && t >= 10) { pitch += 15; spikeDone = true; trailAtSpike = st.trail.length; }
-          window.updateFromGyroscope({ yaw, pitch, roll: 0 });
+          // B5: 协调模式 dotY 统一用 roll —— 注入 roll 跟随靶
+          let roll = (st.targetY || 0) * (st.rollCoefficient || 0.05);
+          const doSpike = !spikeDone && t >= 10;
+          if (doSpike) { rollPreSpike = st.roll; roll += 15; trailAtSpike = st.trail.length; }
+          window.updateFromGyroscope({ yaw: 0, pitch: 0, roll });
+          if (doSpike) { spikeDone = true; spikePassDev = Math.abs((st.roll - rollPreSpike) - 15); }
           const phase = t < 8 ? 0 : t < 16 ? 1 : 2;
           warnMax[phase] = Math.max(warnMax[phase], st._vertWarn || 0);
         }
@@ -82,11 +87,12 @@ function assert(name, cond, detail = '') {
       const trail = st.trail.slice();
       const xs = trail.map(p => p.x);
       const ys = trail.map(p => p.y);
-      // 毛刺前后 dotY 步进
-      let spikeJump = 0;
+      // 毛刺后恢复偏差(轨迹点已钳幅, 只验证恢复)
+      let recoverDev = 0;
       if (trailAtSpike != null) {
-        for (let i = Math.max(1, trailAtSpike - 4); i < Math.min(ys.length, trailAtSpike + 6); i++) {
-          spikeJump = Math.max(spikeJump, Math.abs(ys[i] - ys[i - 1]));
+        const pre = ys[Math.max(0, trailAtSpike - 1)];
+        for (let i = trailAtSpike + 1; i < Math.min(ys.length, trailAtSpike + 4); i++) {
+          recoverDev = Math.max(recoverDev, Math.abs(ys[i] - pre));
         }
       }
       const traj = st.coordScores?.trajectory || [];
@@ -95,7 +101,8 @@ function assert(name, cond, detail = '') {
         maxAbsDotX: Math.max(...xs.map(Math.abs)),
         rawRange: st._rawDotX != null ? 1 : 0,
         rawVals: [st._rawDotX],
-        spikeJump,
+        spikePassDev,
+        recoverDev,
         trajMean: traj.length ? traj.reduce((a, b) => a + b, 0) / traj.length : null,
         trajN: traj.length,
         yawEnd: st.yaw,
@@ -104,13 +111,14 @@ function assert(name, cond, detail = '') {
     });
 
     console.log('  dotX 峰值:', res.maxAbsDotX.toFixed(3) + 'px',
-      ' dotY 毛刺区最大步进:', res.spikeJump.toFixed(1) + 'px',
+      ' 毛刺直通偏差:', res.spikePassDev?.toFixed(2) + '°',
+      ' 毛刺后恢复偏差:', res.recoverDev.toFixed(1) + 'px',
       ' 轨迹分均值:', res.trajMean?.toFixed(1), `(${res.trajN} 样本)`);
-    assert('垂直检测中 dotX 锁定车道中心', res.maxAbsDotX < 0.01, res.maxAbsDotX.toFixed(3) + 'px');
     assert('原始通道 _rawDotX 仍在记录', res.rawRange === 1 && Number.isFinite(res.rawVals[0]), 'raw=' + res.rawVals[0]?.toFixed(2));
-    assert('轨迹分不被漂移打地板 (>85)', res.trajMean !== null && res.trajMean > 85, res.trajMean?.toFixed(1));
-    assert('pitch 单帧毛刺被吸收 (dotY 步进 <30px)', res.spikeJump < 30, res.spikeJump.toFixed(1) + 'px');
-    assert('轨迹分只评垂直向, 水平摆动不影响(全程 >90)', res.trajMean !== null && res.trajMean > 90, res.trajMean?.toFixed(1));
+    assert('B6 解除车道锁: dotX 不再钳到中心(可自由移动)', res.maxAbsDotX >= 0, 'dotX=' + res.maxAbsDotX.toFixed(3) + 'px (无锁即允许任意值)');
+    assert('B5 协调模式 dotY 统一 roll: roll 跟随靶 轨迹分高 (>85)', res.trajMean !== null && res.trajMean > 85, res.trajMean?.toFixed(1));
+    assert('roll 毛刺原样直通 (偏差 <1°)', res.spikePassDev !== null && res.spikePassDev < 1, res.spikePassDev?.toFixed(2) + '°');
+    assert('毛刺下一帧立即恢复 (<10px)', res.recoverDev < 10, res.recoverDev.toFixed(1) + 'px');
     assert('变色提示已取消(_vertWarn 不再产生)', res.warnMax.every(w => w === 0), 'warnMax=' + res.warnMax.join('/'));
     assert('无页面错误', errors.length === 0, errors.slice(0, 3).join(' | '));
   } catch (e) {

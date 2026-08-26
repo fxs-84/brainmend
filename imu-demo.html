@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IMU 采集验证 Demo — 维特蓝牙陀螺仪</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #c9d1d9; font: 14px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 12px; }
+  h1 { font-size: 18px; color: #58a6ff; margin-bottom: 4px; }
+  .sub { color: #8b949e; font-size: 12px; margin-bottom: 12px; }
+  .sim-badge { display: none; background: #9e6a03; color: #fff; font-size: 12px; padding: 2px 8px; border-radius: 4px; margin-left: 8px; }
+  body.sim .sim-badge { display: inline-block; }
+  .panel { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+  .panel h2 { font-size: 13px; color: #8b949e; font-weight: 600; margin-bottom: 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+  button:hover { border-color: #58a6ff; }
+  button.primary { background: #238636; border-color: #238636; color: #fff; }
+  button.warn { background: #9e6a03; border-color: #9e6a03; color: #fff; }
+  button:disabled { opacity: .4; cursor: default; }
+  select, input[type="text"], input[type="number"] { background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; padding: 5px 8px; font-size: 13px; }
+  label { font-size: 12px; color: #8b949e; display: inline-flex; gap: 4px; align-items: center; }
+  .grid9 { display: grid; grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)); gap: 6px; }
+  .cell { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 6px 8px; text-align: center; }
+  .cell .k { font-size: 11px; color: #8b949e; }
+  .cell .v { font-size: 16px; font-family: "Cascadia Code", Consolas, monospace; color: #79c0ff; }
+  .angles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+  .angle-big { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 8px; text-align: center; }
+  .angle-big .k { font-size: 12px; color: #8b949e; }
+  .angle-big .v { font-size: 30px; font-family: "Cascadia Code", Consolas, monospace; color: #56d364; }
+  .angle-big .u { font-size: 12px; color: #8b949e; }
+  #diag { font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; color: #d29922; white-space: pre-wrap; }
+  #canvas-box { position: relative; width: 100%; height: 420px; background: #010409; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #log { height: 120px; overflow-y: auto; background: #010409; border: 1px solid #21262d; border-radius: 6px; padding: 6px 8px; font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; color: #8b949e; white-space: pre-wrap; }
+  .status { font-weight: 600; }
+  .status.on { color: #56d364; }
+  .status.off { color: #f85149; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>IMU 采集验证 Demo<span class="sim-badge">仿真模式 SIM</span></h1>
+  <div class="sub">官方推送流方式采集:订阅 FFE4 notify → 0x55 0x61 包(加速度+角速度+角度),零软件平滑。对照官方上位机验证数据质量。</div>
+
+  <div class="panel">
+    <h2>连接</h2>
+    <div class="row">
+      <button id="btn-connect" class="primary">扫描连接</button>
+      <button id="btn-connect-all">通用扫描</button>
+      <button id="btn-disconnect" disabled>断开</button>
+      <button id="btn-sim" style="display:none">暂停仿真</button>
+      <span>状态: <span id="st" class="status off">未连接</span></span>
+      <span id="battery"></span>
+      <label>回传速率
+        <select id="rate">
+          <option value="0x06">10 Hz</option>
+          <option value="0x07">20 Hz</option>
+          <option value="0x08" selected>50 Hz</option>
+          <option value="0x09">100 Hz</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>对位偏差(头角度 − 目标角度,0=对齐,静止模式下=绝对相对)</h2>
+    <div class="grid9">
+      <div class="cell"><div class="k">ax (g)</div><div class="v" id="v-ax">—</div></div>
+      <div class="cell"><div class="k">ay (g)</div><div class="v" id="v-ay">—</div></div>
+      <div class="cell"><div class="k">az (g)</div><div class="v" id="v-az">—</div></div>
+      <div class="cell"><div class="k">wx (°/s)</div><div class="v" id="v-wx">—</div></div>
+      <div class="cell"><div class="k">wy (°/s)</div><div class="v" id="v-wy">—</div></div>
+      <div class="cell"><div class="k">wz (°/s)</div><div class="v" id="v-wz">—</div></div>
+      <div class="cell"><div class="k">Hx (mG)</div><div class="v" id="v-hx">—</div></div>
+      <div class="cell"><div class="k">Hy (mG)</div><div class="v" id="v-hy">—</div></div>
+      <div class="cell"><div class="k">Hz (mG)</div><div class="v" id="v-hz">—</div></div>
+    </div>
+    <div class="angles">
+      <div class="angle-big"><div class="k">Roll(偏差)</div><div class="v" id="v-roll">0.00</div><div class="u">°</div></div>
+      <div class="angle-big"><div class="k">Pitch(偏差)</div><div class="v" id="v-pitch">0.00</div><div class="u">°</div></div>
+      <div class="angle-big"><div class="k">Yaw(偏差)</div><div class="v" id="v-yaw">0.00</div><div class="u">°</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>标靶追踪(光点 = 相对角度,红点 = 运动目标)</h2>
+    <div id="canvas-box"><canvas id="cv"></canvas></div>
+    <div class="row" style="margin-top:8px">
+      <label>目标运动
+        <select id="tgt-mode">
+          <option value="off" selected>静止</option>
+          <option value="h">水平正弦</option>
+          <option value="v">垂直正弦</option>
+          <option value="circle">圆形</option>
+          <option value="eight">8字</option>
+        </select>
+      </label>
+      <label>幅度 <input type="range" id="tgt-amp" min="5" max="30" step="1" value="15" style="width:70px"> <span id="tgt-amp-v">15</span>°</label>
+      <label>速度 <input type="range" id="tgt-freq" min="0.05" max="0.6" step="0.05" value="0.2" style="width:70px"> <span id="tgt-freq-v">0.20</span> Hz</label>
+      <span id="track-err" style="font-family:Consolas,monospace;color:#d29922;font-size:12px">误差 —</span>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label>X 轴来源
+        <select id="src-x"><option value="yaw" selected>Yaw</option><option value="pitch">Pitch</option><option value="roll">Roll</option></select>
+      </label>
+      <label>Y 轴来源
+        <select id="src-y"><option value="pitch" selected>Pitch</option><option value="roll">Roll</option><option value="yaw">Yaw</option></select>
+      </label>
+      <label>灵敏度 <input type="range" id="scale" min="2" max="20" step="1" value="8" style="width:90px"> <span id="scale-v">8</span> px/°</label>
+      <label><input type="checkbox" id="inv-x" checked> X 反向</label>
+      <label><input type="checkbox" id="inv-y"> Y 反向</label>
+      <label title="仅在检出"角度跳>3°且角速度<10°/s"的事件时介入一次: 冻结0.4s看是否自愈, 否则0.2~0.5s快滑; 其余帧全部原样直通"><input type="checkbox" id="gate-on"> 跳变抑制</label>
+      <span style="font-size:11px;color:#484f58">裸数据: 无任何滤波/补偿</span>
+      <button id="btn-zero" class="warn">软件归零</button>
+      <button id="btn-clear-trail">清除轨迹</button>
+      <span style="font-size:11px;color:#484f58">水平安装: yaw=左右转头→X, roll=点头俯仰→Y, pitch=侧屈(应≈0)</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>硬件指令</h2>
+    <div class="row">
+      <button class="hcmd" data-hex="FF AA 01 08 00">设角度参考</button>
+      <button class="hcmd" data-hex="FF AA 01 04 00" title="官方注明:需先切6轴算法才生效">Z轴角度归零</button>
+      <button class="hcmd" data-hex="FF AA 27 3A 00">读磁场</button>
+      <button class="hcmd" data-hex="FF AA 27 51 00">读四元数</button>
+      <button class="hcmd" data-hex="FF AA 27 64 00">读电量</button>
+      <button class="hcmd" data-hex="FF AA 27 23 00" title="回包 0x71 23 00 [val,...]: val=0 水平安装, 1 垂直安装">读安装方向</button>
+      <button class="hcmd" data-hex="FF AA 27 00 00" title="回包 0x71 00 00 [8个寄存器值, 0x00-0x07]">读0x00-0x07</button>
+      <button class="hcmd" data-hex="FF AA 27 08 00" title="回包 0x71 08 00 [8个寄存器值, 0x08-0x0F]">读0x08-0x0F</button>
+      <button class="hcmd" data-hex="FF AA 27 10 00" title="回包 0x71 10 00 [8个寄存器值, 0x10-0x17]">读0x10-0x17</button>
+      <button class="hcmd" data-hex="FF AA 27 18 00" title="回包 0x71 18 00 [8个寄存器值, 0x18-0x1F]">读0x18-0x1F</button>
+      <button class="hcmd" data-hex="FF AA 27 20 00" title="回包 0x71 20 00 [8个寄存器值, 0x20-0x27]">读0x20-0x27</button>
+      <button class="hcmd" data-hex="FF AA 27 28 00" title="回包 0x71 28 00 [8个寄存器值, 0x28-0x2F]">读0x28-0x2F</button>
+      <button class="hcmd" data-hex="FF AA 27 30 00" title="回包 0x71 30 00 [8个寄存器值, 0x30-0x37]">读0x30-0x37</button>
+      <button class="hcmd" data-hex="FF AA 23 00 00" title="设为水平安装(需再发保存配置)">设水平安装</button>
+      <button class="hcmd" data-hex="FF AA 00 01 00" title="恢复出厂默认配置并保存(配置搞乱时用, 速率回10Hz由demo重设)">恢复默认配置</button>
+      <button class="hcmd" data-hex="FF AA 69 88 B5 FF AA 24 01 00 FF AA 00 00 00" title="解锁+写0x24=1(6轴)+保存, 实测位映射">切6轴</button>
+      <button class="hcmd" data-hex="FF AA 69 88 B5 FF AA 24 00 00 FF AA 00 00 00" title="解锁+写0x24=0(9轴)+保存, 实测位映射">切9轴</button>
+      <button class="hcmd" data-hex="FF AA 00 00 00" title="把当前配置写入Flash">保存配置</button>
+      <button class="hcmd" data-hex="FF AA 27 24 00" title="回包 0x71 24 00 [val,...]: 第1字节 val 即 0x24 当前值, 1=6轴 0=9轴. 切轴前后对比这个值确认是否真的写入">读0x24当前(1=6轴)</button>
+      <button class="hcmd" data-hex="FF AA 6B 01 00" title="⚠ 猜测值: 写寄存器0x6B=1 备选复位候选. 同上观察">软复位(0x6B=1, 猜测)</button>
+      <button class="hcmd" data-hex="FF AA 01 00 00" title="⚠ 猜测值: 部分固件0x01=软复位候选. 同上观察">软复位(0x01=0, 猜测)</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <input type="text" id="custom-hex" placeholder="自定义指令 HEX, 软复位候选: FF AA 6A 01 00 / FF AA 6B 01 00 / FF AA 01 00 00 / FF AA 00 01 00" style="flex:1;min-width:220px">
+      <button id="btn-custom">发送</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>诊断</h2>
+    <div id="diag">—</div>
+    <div id="diag2" style="font-family:'Cascadia Code',Consolas,monospace;font-size:12px;color:#8b949e;white-space:pre-wrap;margin-top:4px">—</div>
+    <div class="row" style="margin-top:8px" id="sim-ctl" style="display:none">
+      <label><input type="checkbox" id="sim-drop"> 模拟丢字节(每秒丢1字节)</label>
+      <label>波形
+        <select id="sim-mode">
+          <option value="sine" selected>正弦(慢速追踪)</option>
+          <option value="rotate">匀速旋转(yaw 60°/s)</option>
+          <option value="drift">斜坡漂移(yaw 0.3°/s)</option>
+        </select>
+      </label>
+      <label>帧格式
+        <select id="sim-fmt">
+          <option value="20">0x61 / 20字节</option>
+          <option value="28">0x61 / 28字节(含时间戳)</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>日志</h2>
+    <div class="row" style="margin-bottom:6px"><button id="btn-copy-log">复制日志(发我分析)</button></div>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ================= 常量 ================= */
+const SVC = '0000ffe5-0000-1000-8000-00805f9a34fb';
+const CHR_NOTIFY = '0000ffe4-0000-1000-8000-00805f9a34fb';
+const CHR_WRITE  = '0000ffe9-0000-1000-8000-00805f9a34fb';
+const $ = id => document.getElementById(id);
+const qs = new URLSearchParams(location.search);
+const SIM = qs.get('sim') === '1';
+if (SIM) document.body.classList.add('sim');
+
+/* ================= 状态 ================= */
+const S = {
+  connected: false,
+  sample: null,                 // 最近一帧原始解算值
+  prevRaw: null,                // 上次原始角度(用于连续化)
+  cont: { roll: 0, pitch: 0, yaw: 0 },   // 连续化角度(无 ±180 跳变)
+  zero: { roll: 0, pitch: 0, yaw: 0 },   // 软件归零基线(连续空间)
+  rel: { roll: 0, pitch: 0, yaw: 0 },    // 相对角度(显示链路唯一来源): gate关时=cont-zero, gate开时=gcont-zero
+  gcont: { roll: 0, pitch: 0, yaw: 0 },   // gate开启时的显示端连续角, 用于冻结/滑行
+  holdFrames: 0, slew: false, gated: 0, heals: 0,   // 事件驱动跳变抑制的内部状态(按帧计时, 对蓝牙成批投递也稳)
+  jumps: 0, lastJumpT: 0, jumpLog: [],   // 角度跳变事件(帧间>3°, 仅遥测)
+  pp: { roll: { min: 1e9, max: -1e9 }, pitch: { min: 1e9, max: -1e9 }, yaw: { min: 1e9, max: -1e9 } }, // 归零后峰峰值
+  mag: null, quat: null,
+  packets61: 0, packets71: 0,
+  resyncBytes: 0, unknownFlags: 0,
+  lastArrival: 0, maxGap: 0, gaps: 0, lastDt: 0,
+  arrivals: [], rateHz: 0,
+  lastFrameLen: 0,
+  dot: { x: 0, y: 0 },
+};
+let device = null, writeChar = null;
+const trail = [];
+
+/* ================= 日志 ================= */
+function log(msg) {
+  const el = $('log');
+  const t = new Date();
+  const ts = t.toTimeString().slice(0, 8) + '.' + String(t.getMilliseconds()).padStart(3, '0');
+  el.textContent += `[${ts}] ${msg}\n`;
+  const lines = el.textContent.split('\n');
+  if (lines.length > 80) el.textContent = lines.slice(-80).join('\n');
+  el.scrollTop = el.scrollHeight;
+}
+const hex = b => Array.from(b).map(v => v.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+
+/* ================= 解析器(字节流,0x55 对齐,滑动重同步) ================= */
+const P = {
+  buf: new Uint8Array(8192), len: 0,
+  feed(chunk) {
+    if (this.len + chunk.length > this.buf.length) {
+      const nb = new Uint8Array((this.len + chunk.length) * 2);
+      nb.set(this.buf.subarray(0, this.len));
+      this.buf = nb;
+    }
+    this.buf.set(chunk, this.len);
+    this.len += chunk.length;
+    this.drain();
+  },
+  drain() {
+    let off = 0;
+    while (off < this.len) {
+      if (this.buf[off] !== 0x55) {           // 帧头错位 → 滑到下一个 0x55
+        let n = off + 1;
+        while (n < this.len && this.buf[n] !== 0x55) n++;
+        S.resyncBytes += n - off;
+        off = n;
+        continue;
+      }
+      if (this.len - off < 2) break;          // 等标志位
+      const flag = this.buf[off + 1];
+      let frameLen;
+      if (flag === 0x61) {
+        frameLen = this.len61(off);
+        if (frameLen === 0) break;            // 数据不够,等下次
+      } else if (flag === 0x71) {
+        frameLen = 20;
+      } else {                                // 未知帧型 → 丢这字节重对齐
+        S.unknownFlags++;
+        S.resyncBytes++;
+        off += 1;
+        continue;
+      }
+      if (this.len - off < frameLen) break;   // 半帧,等下次
+      this.frame(this.buf.subarray(off, off + frameLen), flag, frameLen);
+      off += frameLen;
+    }
+    if (off > 0) { this.buf.copyWithin(0, off, this.len); this.len -= off; }
+  },
+  len61(off) {                                // 0x61 帧: 20字节 或 28字节(含时间戳)
+    const avail = this.len - off;
+    if (avail < 20) return 0;
+    if (avail === 20) return 20;
+    if (this.buf[off + 20] === 0x55) return 20;   // 下一帧帧头 → 20字节帧
+    if (avail >= 26) {                            // 校验时间戳字段 YY MM DD HH MN SS
+      const b = this.buf, t = off + 20;
+      const ok = b[t] <= 99 && b[t + 1] >= 1 && b[t + 1] <= 12 && b[t + 2] >= 1 && b[t + 2] <= 31 &&
+                 b[t + 3] <= 23 && b[t + 4] <= 59 && b[t + 5] <= 59;
+      if (ok) return avail >= 28 ? 28 : 0;
+      return 20;
+    }
+    return 0;                                     // 21~25 字节,等更多数据
+  },
+  frame(b, flag, frameLen) {
+    if (flag === 0x61) {
+      S.packets61++;
+      S.lastFrameLen = frameLen;
+      const s16 = o => { const v = b[o + 1] << 8 | b[o]; return v >= 0x8000 ? v - 0x10000 : v; };
+      const smp = {
+        ax: s16(2) / 32768 * 16, ay: s16(4) / 32768 * 16, az: s16(6) / 32768 * 16,
+        wx: s16(8) / 32768 * 2000, wy: s16(10) / 32768 * 2000, wz: s16(12) / 32768 * 2000,
+        roll: s16(14) / 32768 * 180, pitch: s16(16) / 32768 * 180, yaw: s16(18) / 32768 * 180,
+      };
+      onSample(smp);
+    } else {                                      // 0x71 寄存器回包: 起始寄存器 + 8个寄存器(int16 LE)
+      S.packets71++;
+      const reg = b[2] | b[3] << 8;
+      const s16 = o => { const v = b[o + 1] << 8 | b[o]; return v >= 0x8000 ? v - 0x10000 : v; };
+      const regs = [];
+      for (let i = 0; i < 8; i++) regs.push(s16(4 + i * 2));
+      onRegister(reg, regs, b);
+    }
+  },
+};
+function onRegister(reg, regs, raw) {
+  log(`寄存器回包 0x${reg.toString(16).toUpperCase()}: [${regs.join(', ')}]`);
+  if (reg === 0x3A) { S.mag = { hx: regs[0], hy: regs[1], hz: regs[2] }; }
+  else if (reg === 0x51) { S.quat = regs.slice(0, 4).map(v => v / 32768); log(`四元数: ${S.quat.map(v => v.toFixed(4)).join(', ')}`); }
+  else if (reg === 0x64) {
+    const v = regs[0];
+    const pct = v > 396 ? 100 : v > 393 ? 90 : v > 387 ? 75 : v > 382 ? 60 : v > 379 ? 50 : v > 377 ? 40 :
+                v > 373 ? 30 : v > 370 ? 20 : v > 368 ? 15 : v > 350 ? 10 : v > 340 ? 5 : 0;
+    $('battery').textContent = `电量 ~${pct}% (raw ${v})`;
+  }
+}
+
+/* ================= 采样处理 ================= */
+function onSample(smp) {
+  const now = performance.now();
+  let dt = 0;
+  if (S.lastArrival) {
+    const gap = now - S.lastArrival;
+    dt = gap / 1000;
+    if (gap > S.maxGap) S.maxGap = gap;
+    if (gap > 100) S.gaps++;
+  }
+  S.lastDt = dt;
+  S.lastArrival = now;
+  S.arrivals.push(now);
+  if (S.arrivals.length > 100) S.arrivals.shift();
+  if (S.arrivals.length >= 2) {
+    const span = (S.arrivals[S.arrivals.length - 1] - S.arrivals[0]) / 1000;
+    S.rateHz = span > 0 ? (S.arrivals.length - 1) / span : 0;
+  }
+  S.sample = smp;
+  if (!S.prevRaw) {
+    S.cont = { roll: smp.roll, pitch: smp.pitch, yaw: smp.yaw };
+    S.gcont = { ...S.cont };
+  } else {
+    const dR = wrapDelta(smp.roll - S.prevRaw.roll);
+    const dP = wrapDelta(smp.pitch - S.prevRaw.pitch);
+    const dY = wrapDelta(smp.yaw - S.prevRaw.yaw);
+    // 跳变鉴别(遥测): 帧间>3°; 同帧角速度<10°/s 说明不是真运动 → 融合层台阶
+    if (Math.abs(dY) > 3 || Math.abs(dP) > 3 || Math.abs(dR) > 3) {
+      const wMax = Math.max(Math.abs(smp.wx), Math.abs(smp.wy), Math.abs(smp.wz));
+      const ratio = Math.max(Math.abs(dY), Math.abs(dP), Math.abs(dR)) / (wMax * 0.02 + 0.1);
+      const verdict = wMax < 10 ? '★角速度不支持(融合层假象)' : '角速度吻合(真实运动)';
+      S.jumps++;
+      S.lastJumpT = now;
+      const msg = `跳变#${S.jumps} Δyaw=${dY.toFixed(1)}° Δpitch=${dP.toFixed(1)}° Δroll=${dR.toFixed(1)}° |w|max=${wMax.toFixed(0)}°/s 支持度=${ratio.toFixed(1)} → ${verdict}`;
+      log(msg);
+      S.jumpLog.push(msg);
+      if (S.jumpLog.length > 50) S.jumpLog.shift();
+    }
+    S.cont = {
+      roll:  S.cont.roll  + dR,
+      pitch: S.cont.pitch + dP,
+      yaw:   S.cont.yaw   + dY,
+    };
+    // 事件驱动跳变抑制(默认关): 仅在"角度跳>3°且角速度<10°/s"时介入一次。
+    // 其余帧直通行(gcont=cont)。事件处理: 冻结20帧(≈400ms),期间若cont回到<0.8°→反转愈合(无扰动);
+    // 否则超时后1°/帧滑向新电平,把瞬跳变成0.2~0.5s快滑。按帧计数: 对蓝牙成批投递也稳
+    const gateOn = $('gate-on') && $('gate-on').checked;
+    if (gateOn) {
+      const wMax2 = Math.max(Math.abs(smp.wx), Math.abs(smp.wy), Math.abs(smp.wz));
+      if (S.holdFrames > 0) {
+        const back = Math.abs(S.cont.yaw - S.gcont.yaw) < 0.8 &&
+                     Math.abs(S.cont.pitch - S.gcont.pitch) < 0.8 &&
+                     Math.abs(S.cont.roll - S.gcont.roll) < 0.8;
+        if (back) { S.holdFrames = 0; S.gcont = { ...S.cont }; S.heals++;
+          log(`跳变抑制#${S.gated}: 反转愈合 (愈合#${S.heals})`); }
+        else { S.holdFrames--; }
+        // 保持中或刚愈合: 本帧不更新 gcont
+      } else if (S.slew) {
+        const eY = S.cont.yaw - S.gcont.yaw, eP = S.cont.pitch - S.gcont.pitch, eR = S.cont.roll - S.gcont.roll;
+        const m = Math.max(Math.abs(eY), Math.abs(eP), Math.abs(eR));
+        if (m <= 1.0) { S.gcont = { ...S.cont }; S.slew = false; }
+        else {
+          S.gcont.yaw   += Math.max(-1, Math.min(1, eY));
+          S.gcont.pitch += Math.max(-1, Math.min(1, eP));
+          S.gcont.roll  += Math.max(-1, Math.min(1, eR));
+        }
+      } else {
+        const maxD = Math.max(Math.abs(dY), Math.abs(dP), Math.abs(dR));
+        if (maxD > 3 && wMax2 < 10) {
+          S.holdFrames = 20;
+          S.gated++;
+          log(`跳变抑制#${S.gated}: Δyaw=${dY.toFixed(1)}° Δpitch=${dP.toFixed(1)}° Δroll=${dR.toFixed(1)}° (|w|max=${wMax2.toFixed(0)}°/s) 冻结20帧`);
+        } else {
+          S.gcont = { ...S.cont };
+        }
+      }
+    } else {
+      S.gcont = { ...S.cont };
+      S.holdFrames = 0; S.slew = false;
+    }
+  }
+  S.prevRaw = { roll: smp.roll, pitch: smp.pitch, yaw: smp.yaw };
+  const src = $('gate-on') && $('gate-on').checked ? S.gcont : S.cont;
+  S.rel = { roll: src.roll - S.zero.roll, pitch: src.pitch - S.zero.pitch, yaw: src.yaw - S.zero.yaw };
+  // 峰峰值统计(归零后, 反映设备真实漂移)
+  for (const k of ['roll', 'pitch', 'yaw']) {
+    if (S.rel[k] < S.pp[k].min) S.pp[k].min = S.rel[k];
+    if (S.rel[k] > S.pp[k].max) S.pp[k].max = S.rel[k];
+  }
+  // 轨迹
+  computeDot();
+  trail.push({ x: S.dot.x, y: S.dot.y });
+  if (trail.length > 250) trail.shift();
+}
+function wrapDelta(d) { if (d > 180) return d - 360; if (d < -180) return d + 360; return d; }
+function wrap180(v) { v = (v % 360 + 360) % 360; if (v > 180) v -= 360; return v; }
+
+/* ================= 标靶渲染 ================= */
+const cv = $('cv'), ctx = cv.getContext('2d');
+function usedAngles() { return S.rel; }   // 裸数据, 无处理分支
+function computeDot() {
+  const box = $('canvas-box');
+  const cx = box.clientWidth / 2, cy = box.clientHeight / 2;
+  const pxPerDeg = +$('scale').value;
+  const a = usedAngles();
+  const sx = $('src-x').value, sy = $('src-y').value;
+  const ix = $('inv-x').checked ? -1 : 1, iy = $('inv-y').checked ? -1 : 1;
+  S.dot.x = cx + a[sx] * pxPerDeg * ix;
+  S.dot.y = cy - a[sy] * pxPerDeg * iy;
+}
+
+/* ---- 运动目标 ---- */
+const tgt = { mode: 'off', t0: performance.now(), deg: { x: 0, y: 0 }, px: { x: 0, y: 0 }, errBuf: [] };
+function targetDeg() {
+  const t = (performance.now() - tgt.t0) / 1000;
+  const A = +$('tgt-amp').value, f = +$('tgt-freq').value, w = 2 * Math.PI * f * t;
+  switch (tgt.mode) {
+    case 'h':      return { x: A * Math.sin(w), y: 0 };
+    case 'v':      return { x: 0, y: A * Math.sin(w) };
+    case 'circle': return { x: A * Math.cos(w), y: A * Math.sin(w) };
+    case 'eight':  return { x: A * Math.sin(w), y: A * 0.6 * Math.sin(2 * w) };
+    default:       return { x: 0, y: 0 };
+  }
+}
+function trackError() {                         // 瞬时误差 + 5s RMS (单位°, 与显示端偏差一致: 光点与目标重合时=0)
+  if (tgt.mode === 'off') { $('track-err').textContent = '误差 —'; tgt.errBuf.length = 0; return; }
+  const a = usedAngles();
+  const signX = $('inv-x').checked ? -1 : 1, signY = $('inv-y').checked ? -1 : 1;
+  const ex = a[$('src-x').value] * signX - tgt.deg.x, ey = a[$('src-y').value] * signY - tgt.deg.y;
+  const err = Math.hypot(ex, ey);
+  const now = performance.now();
+  tgt.errBuf.push({ t: now, e: err });
+  while (tgt.errBuf.length && now - tgt.errBuf[0].t > 5000) tgt.errBuf.shift();
+  const rms = Math.sqrt(tgt.errBuf.reduce((s, p) => s + p.e * p.e, 0) / tgt.errBuf.length);
+  $('track-err').textContent = `误差 ${err.toFixed(2)}° (5s RMS ${rms.toFixed(2)}°)`;
+}
+$('tgt-mode').onchange = () => { tgt.mode = $('tgt-mode').value; tgt.t0 = performance.now(); tgt.errBuf.length = 0; };
+
+function render() {
+  requestAnimationFrame(render);
+  const box = $('canvas-box');
+  const w = box.clientWidth, h = box.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2;
+  const pxPerDeg = +$('scale').value;
+  computeDot();
+  // 同心圆(每5°)
+  ctx.strokeStyle = '#21262d'; ctx.fillStyle = '#484f58'; ctx.font = '10px Consolas';
+  for (let deg = 5; deg * pxPerDeg < Math.max(w, h) / 2; deg += 5) {
+    ctx.beginPath(); ctx.arc(cx, cy, deg * pxPerDeg, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillText(deg + '°', cx + deg * pxPerDeg + 3, cy - 3);
+  }
+  // 十字线
+  ctx.strokeStyle = '#30363d';
+  ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
+  // 轨迹
+  if (trail.length > 1) {
+    for (let i = 1; i < trail.length; i++) {
+      ctx.strokeStyle = `rgba(88,166,255,${(i / trail.length) * 0.6})`;
+      ctx.beginPath(); ctx.moveTo(trail[i - 1].x, trail[i - 1].y); ctx.lineTo(trail[i].x, trail[i].y); ctx.stroke();
+    }
+  }
+  // 目标(运动红点, 静止时在中心)
+  tgt.deg = targetDeg();
+  tgt.px.x = cx + tgt.deg.x * pxPerDeg;
+  tgt.px.y = cy - tgt.deg.y * pxPerDeg;
+  ctx.fillStyle = '#f85149';
+  ctx.beginPath(); ctx.arc(tgt.px.x, tgt.px.y, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#f85149';
+  ctx.beginPath(); ctx.arc(tgt.px.x, tgt.px.y, 12, 0, Math.PI * 2); ctx.stroke();
+  // 中心参考点
+  ctx.fillStyle = '#484f58';
+  ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill();
+  trackError();
+  // 光点
+  ctx.fillStyle = '#56d364';
+  ctx.beginPath(); ctx.arc(S.dot.x, S.dot.y, 8, 0, Math.PI * 2); ctx.fill();
+  // 跳变瞬间红圈提示(300ms)
+  if (performance.now() - S.lastJumpT < 300) {
+    ctx.strokeStyle = '#f85149'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(S.dot.x, S.dot.y, 16, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+  // 数字刷新
+  refreshNumbers();
+}
+let lastNumT = 0;
+function refreshNumbers() {
+  const now = performance.now();
+  if (now - lastNumT < 100) return;
+  lastNumT = now;
+  const s = S.sample;
+  if (s) {
+    $('v-ax').textContent = s.ax.toFixed(3); $('v-ay').textContent = s.ay.toFixed(3); $('v-az').textContent = s.az.toFixed(3);
+    $('v-wx').textContent = s.wx.toFixed(1); $('v-wy').textContent = s.wy.toFixed(1); $('v-wz').textContent = s.wz.toFixed(1);
+  }
+  if (S.mag) { $('v-hx').textContent = S.mag.hx; $('v-hy').textContent = S.mag.hy; $('v-hz').textContent = S.mag.hz; }
+  const a = usedAngles();
+  // 把屏幕 tgt.deg.x/y 映射回物理轴: 头角度乘以 inv 符号后等于 tgt.deg 时, 光点与目标视觉重合(误差=0)
+  const sx = $('src-x').value, sy = $('src-y').value;
+  const signX = $('inv-x').checked ? -1 : 1, signY = $('inv-y').checked ? -1 : 1;
+  const tgtAxis = { roll: 0, pitch: 0, yaw: 0 };
+  if (sx === 'yaw') tgtAxis.yaw = tgt.deg.x * signX;
+  else if (sx === 'pitch') tgtAxis.pitch = tgt.deg.x * signX;
+  else if (sx === 'roll') tgtAxis.roll = tgt.deg.x * signX;
+  if (sy === 'yaw') tgtAxis.yaw = tgt.deg.y * signY;
+  else if (sy === 'pitch') tgtAxis.pitch = tgt.deg.y * signY;
+  else if (sy === 'roll') tgtAxis.roll = tgt.deg.y * signY;
+  $('v-roll').textContent  = (a.roll  - tgtAxis.roll ).toFixed(2);
+  $('v-pitch').textContent = (a.pitch - tgtAxis.pitch).toFixed(2);
+  $('v-yaw').textContent   = (a.yaw   - tgtAxis.yaw  ).toFixed(2);
+  $('diag').textContent =
+    `0x61包 ${S.packets61} | 0x71包 ${S.packets71} | 实测 ${S.rateHz.toFixed(1)} Hz | ` +
+    `最大间隔 ${S.maxGap.toFixed(0)} ms | 停顿>100ms ${S.gaps} 次 | ` +
+    `重同步 ${S.resyncBytes} 字节 | 未知帧 ${S.unknownFlags} | 末帧长 ${S.lastFrameLen}B | 跳变>3° ${S.jumps} 次` + ($('gate-on').checked ? ` | 抑制 ${S.gated} 次 (愈合 ${S.heals})` : '');
+  const pp = k => { const p = S.pp[k]; return p.min > p.max ? '—' : (p.max - p.min).toFixed(2) + '°'; };
+  $('diag2').textContent =
+    `漂移峰峰值(归零后, 原始值): yaw ${pp('yaw')} pitch ${pp('pitch')} roll ${pp('roll')}` +
+    (S.mag ? ` | 磁场|H| ${Math.hypot(S.mag.hx, S.mag.hy, S.mag.hz).toFixed(0)} mG` : '');
+  $('scale-v').textContent = $('scale').value;
+  $('tgt-amp-v').textContent = $('tgt-amp').value;
+  $('tgt-freq-v').textContent = (+$('tgt-freq').value).toFixed(2);
+}
+
+/* ================= BLE ================= */
+async function bleConnect(acceptAll) {
+  if (!navigator.bluetooth) { log('错误: 当前浏览器不支持 Web Bluetooth'); return; }
+  try {
+    log('扫描设备...');
+    const opts = acceptAll
+      ? { acceptAllDevices: true, optionalServices: [SVC] }
+      : { filters: [{ namePrefix: 'WT' }, { namePrefix: 'Wit' }, { namePrefix: 'BWT' }], optionalServices: [SVC] };
+    device = await navigator.bluetooth.requestDevice(opts);
+    log(`选中设备: ${device.name || '(无名)'} [${device.id}]`);
+    device.addEventListener('gattserverdisconnected', () => { setConn(false); log('设备已断开'); });
+    const server = await device.gatt.connect();
+    log('GATT 已连接');
+    const svc = await server.getPrimaryService(SVC);
+    const chars = await svc.getCharacteristics();
+    log(`特征值: ${chars.map(c => c.uuid.slice(4, 8)).join(', ')}`);
+    const notifyChar = await svc.getCharacteristic(CHR_NOTIFY);
+    try { writeChar = await svc.getCharacteristic(CHR_WRITE); } catch { writeChar = null; }
+    await notifyChar.startNotifications();
+    notifyChar.addEventListener('characteristicvaluechanged', e => {
+      P.feed(new Uint8Array(e.target.value.buffer, e.target.value.byteOffset, e.target.value.byteLength));
+    });
+    setConn(true);
+    log('已订阅 FFE4 推送流');
+    log('提示: 连接后建议静戴 30~60 秒再开始训练(融合收敛期, 此间 yaw 可能有台阶修正)');
+    await sendHex('FF AA 03 ' + $('rate').value.slice(2) + ' 00');   // 设回传速率
+    await sendHex('FF AA 27 64 00');                                  // 读电量
+  } catch (e) {
+    log('连接失败: ' + e.message);
+  }
+}
+function setConn(on) {
+  S.connected = on;
+  $('st').textContent = on ? '已连接' : '未连接';
+  $('st').className = 'status ' + (on ? 'on' : 'off');
+  $('btn-disconnect').disabled = !on;
+  $('btn-connect').disabled = on;
+  $('btn-connect-all').disabled = on;
+}
+async function sendHex(str) {
+  const bytes = parseHex(str);
+  if (!bytes) { log('指令格式错误: ' + str); return false; }
+  if (SIM) { log('[SIM] 模拟发送: ' + hex(bytes)); return true; }
+  if (!writeChar) { log('未连接设备,无法发送'); return false; }
+  try {
+    if (writeChar.properties.writeWithoutResponse) await writeChar.writeValueWithoutResponse(bytes);
+    else await writeChar.writeValue(bytes);
+    log('已发送: ' + hex(bytes));
+    return true;
+  } catch (e) { log('发送失败: ' + e.message); return false; }
+}
+function parseHex(str) {
+  const parts = str.trim().split(/[\s,]+/).filter(Boolean);
+  if (!parts.length) return null;
+  const out = [];
+  for (const p of parts) {
+    const v = parseInt(p, 16);
+    if (isNaN(v) || v < 0 || v > 255) return null;
+    out.push(v);
+  }
+  return new Uint8Array(out);
+}
+
+/* ================= 仿真模式 ================= */
+const sim = { timer: null, t0: 0, frame: 0 };
+function simStart() {
+  sim.t0 = performance.now() - (sim.pausedT || 0) * 1000;   // 从暂停处继续相位
+  sim.timer = setInterval(simTick, 20);       // 50 Hz
+  $('btn-sim').textContent = '暂停仿真';
+  log('仿真启动: 50Hz 合成 0x61 数据流');
+}
+function simStop() { sim.pausedT = (performance.now() - sim.t0) / 1000; clearInterval(sim.timer); sim.timer = null; $('btn-sim').textContent = '继续仿真'; }
+function simTick() {
+  const t = (performance.now() - sim.t0) / 1000;
+  const mode = $('sim-mode').value;
+  let roll, pitch, yaw, wx, wy, wz;
+  if (mode === 'rotate') {
+    yaw = wrap180(60 * t); pitch = 10 * Math.sin(2 * Math.PI * 0.2 * t); roll = 3 * Math.sin(2 * Math.PI * 0.1 * t);
+    wz = 60; wy = 10 * 2 * Math.PI * 0.2 * Math.cos(2 * Math.PI * 0.2 * t); wx = 0;
+  } else if (mode === 'drift') {
+    yaw = wrap180(0.3 * t); pitch = 0; roll = 0;          // 斜坡漂移 0.3°/s
+    wz = 0.3; wy = 0; wx = 0;
+  } else {
+    yaw = 30 * Math.sin(2 * Math.PI * 0.25 * t);
+    pitch = 15 * Math.sin(2 * Math.PI * 0.2 * t + 1);
+    roll = 5 * Math.sin(2 * Math.PI * 0.1 * t);
+    wz = 30 * 2 * Math.PI * 0.25 * Math.cos(2 * Math.PI * 0.25 * t);
+    wy = 15 * 2 * Math.PI * 0.2 * Math.cos(2 * Math.PI * 0.2 * t + 1);
+    wx = 5 * 2 * Math.PI * 0.1 * Math.cos(2 * Math.PI * 0.1 * t);
+  }
+  const pr = pitch * Math.PI / 180, rr = roll * Math.PI / 180;
+  const ax = -Math.sin(pr), ay = Math.sin(rr) * Math.cos(pr), az = Math.cos(rr) * Math.cos(pr);
+  const frame = buildSimFrame({ ax, ay, az, wx, wy, wz, roll, pitch, yaw }, +$('sim-fmt').value);
+  sim.frame++;
+  let chunk = frame;
+  if ($('sim-drop').checked && sim.frame % 50 === 25) {
+    chunk = new Uint8Array(frame.length - 1);  // 永久丢掉第 8 字节(模拟链路丢字节)
+    chunk.set(frame.subarray(0, 7), 0);
+    chunk.set(frame.subarray(8), 7);
+  }
+  P.feed(chunk);
+}
+function buildSimFrame(v, fmt) {
+  const n = fmt === 28 ? 28 : 20;
+  const b = new Uint8Array(n);
+  b[0] = 0x55; b[1] = 0x61;
+  const put = (o, val, scale) => {
+    let q = Math.round(val / scale * 32768);
+    q = Math.max(-32768, Math.min(32767, q));
+    if (q < 0) q += 65536;
+    b[o] = q & 0xFF; b[o + 1] = q >> 8 & 0xFF;
+  };
+  put(2, v.ax, 16); put(4, v.ay, 16); put(6, v.az, 16);
+  put(8, v.wx, 2000); put(10, v.wy, 2000); put(12, v.wz, 2000);
+  put(14, v.roll, 180); put(16, v.pitch, 180); put(18, v.yaw, 180);
+  if (n === 28) {
+    const d = new Date();
+    b[20] = d.getFullYear() - 2000; b[21] = d.getMonth() + 1; b[22] = d.getDate();
+    b[23] = d.getHours(); b[24] = d.getMinutes(); b[25] = d.getSeconds();
+    const ms = d.getMilliseconds();
+    b[26] = ms & 0xFF; b[27] = ms >> 8 & 0xFF;
+  }
+  return b;
+}
+
+/* ================= UI 事件 ================= */
+$('btn-connect').onclick = () => bleConnect(false);
+$('btn-connect-all').onclick = () => bleConnect(true);
+$('btn-disconnect').onclick = () => { if (device && device.gatt.connected) device.gatt.disconnect(); };
+$('btn-zero').onclick = () => {
+  const src = $('gate-on') && $('gate-on').checked ? S.gcont : S.cont;
+  S.zero = { ...src };
+  S.rel = { roll: 0, pitch: 0, yaw: 0 };      // 暂停中也立即生效
+  for (const k of ['roll', 'pitch', 'yaw']) { S.pp[k].min = 1e9; S.pp[k].max = -1e9; }
+  trail.length = 0;
+  log(`软件归零 @ roll ${src.roll.toFixed(2)} pitch ${src.pitch.toFixed(2)} yaw ${src.yaw.toFixed(2)}`);
+};
+$('btn-clear-trail').onclick = () => { trail.length = 0; };
+$('rate').onchange = () => sendHex('FF AA 03 ' + $('rate').value.slice(2) + ' 00');
+document.querySelectorAll('.hcmd').forEach(b => b.onclick = () => sendHex(b.dataset.hex));
+$('btn-custom').onclick = () => sendHex($('custom-hex').value);
+$('custom-hex').addEventListener('keydown', e => { if (e.key === 'Enter') sendHex($('custom-hex').value); });
+$('btn-sim').onclick = () => { sim.timer ? simStop() : simStart(); };
+$('btn-copy-log').onclick = async () => {
+  const txt = $('diag').textContent + '\n' + $('diag2').textContent + '\n' + $('log').textContent;
+  try { await navigator.clipboard.writeText(txt); log('日志已复制到剪贴板'); }
+  catch { log('复制失败(权限), 请手动全选日志复制'); }
+};
+
+/* ---- 配置持久化(刷新不丢) ---- */
+const CFG_KEYS = ['src-x', 'src-y', 'scale', 'inv-x', 'inv-y', 'gate-on', 'rate', 'tgt-mode', 'tgt-amp', 'tgt-freq'];
+function saveCfg() {
+  const c = {};
+  for (const id of CFG_KEYS) { const el = $(id); c[id] = el.type === 'checkbox' ? el.checked : el.value; }
+  try { localStorage.setItem('imu-demo-cfg', JSON.stringify(c)); } catch {}
+}
+function loadCfg() {
+  let c = {};
+  try { c = JSON.parse(localStorage.getItem('imu-demo-cfg') || '{}'); } catch {}
+  for (const id of CFG_KEYS) {
+    if (!(id in c)) continue;
+    const el = $(id);
+    if (el.type === 'checkbox') el.checked = !!c[id]; else el.value = c[id];
+  }
+  tgt.mode = $('tgt-mode').value;
+}
+CFG_KEYS.forEach(id => $(id).addEventListener('change', saveCfg));
+loadCfg();
+if (qs.get('gate') === '1') $('gate-on').checked = true;   // URL参数优先覆盖
+
+/* ================= 启动 ================= */
+if (SIM) {
+  $('sim-ctl').style.display = 'flex';
+  $('btn-sim').style.display = '';
+  if (qs.get('simfmt')) $('sim-fmt').value = qs.get('simfmt');
+  if (qs.get('simmode')) $('sim-mode').value = qs.get('simmode');
+  setConn(true);
+  $('st').textContent = '仿真中';
+  simStart();
+  log('仿真模式: 无真实 BLE,数据由本地合成');
+} else {
+  log('就绪。请用 Chrome/Edge (安卓或桌面) 连接, iOS 请用 Bluefy 浏览器。');
+}
+window.__demo = { S, P, sim, trail, tgt };
+render();
+</script>
+</body>
+</html>

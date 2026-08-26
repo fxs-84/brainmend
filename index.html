@@ -785,6 +785,16 @@
                     <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">常用: 180D(心率) 180F(电池) 181A(环境) 自定义陀螺仪请填入对应UUID</div>
                 </div>
 
+                <!-- 算法切换 (连接后可用): 6轴 roll/pitch 重力锁定 yaw 慢漂; 9轴 yaw 磁力计锁定但磁干扰时可能跳 -->
+                <div style="margin-bottom: 15px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="font-size: 11px; color: var(--text-muted); flex: 1;">算法切换 (连接后可改)<br><span id="gyro-alg-status" style="color: var(--primary); font-size: 10px;">未连接</span></div>
+                        <button id="gyro-alg-6" style="flex: 1; padding: 8px; background: rgba(0,0,0,0.3); color: var(--text); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;" disabled>切6轴</button>
+                        <button id="gyro-alg-9" style="flex: 1; padding: 8px; background: rgba(0,0,0,0.3); color: var(--text); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;" disabled>切9轴</button>
+                    </div>
+                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">运行时切换, 不写入 Flash (断电恢复设备保存值)。对比两种算法的 yaw 漂移/台阶表现</div>
+                </div>
+
                 <!-- 操作按钮 -->
                 <div style="display: flex; gap: 10px;">
                     <button id="gyro-scan-btn" style="flex: 1; padding: 10px; background: var(--primary); color: var(--bg-dark); border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">扫描设备</button>
@@ -2362,6 +2372,56 @@
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', _boot);
     } else { _boot(); }
+  })();
+</script>
+<script>
+  // ===== 6/9 轴算法切换(写入 Flash, 断电重启后生效) ——
+  // 0x24=1 → 6轴(roll/pitch 重力锁定, yaw 慢漂); 0x24=0 → 9轴(yaw 磁力计锁定, 磁干扰时偶发台阶)
+  // FF AA 24 01 00 = 6轴, FF AA 24 00 00 = 9轴
+  (function _initAlgoSwitch(){
+    const setStatus = (txt, color) => {
+      const el = document.getElementById('gyro-alg-status');
+      if (el) { el.textContent = txt; el.style.color = color || '#f97316'; }
+    };
+    const setBtn = (connected) => {
+      const b6 = document.getElementById('gyro-alg-6');
+      const b9 = document.getElementById('gyro-alg-9');
+      if (b6) b6.disabled = !connected;
+      if (b9) b9.disabled = !connected;
+    };
+    const send = async (alg) => {
+      if (typeof window._gyroCmd !== 'function') {
+        setStatus('未连接设备', '#ef4444'); return;
+      }
+      try {
+        // 位映射(实测): 6轴=0x24=1, 9轴=0x24=0
+        // 序列分 3 次发(部分设备 BLE 解析器对同包多命令不友好): 解锁 → 写 → 保存, 间隔 200ms
+        const byte = alg === '6' ? 1 : 0;
+        const wait = (ms) => new Promise(r => setTimeout(r, ms));
+        await window._gyroCmd([255, 170, 105, 136, 181]);
+        await wait(200);
+        await window._gyroCmd([255, 170, 36, byte, 0]);
+        await wait(200);
+        await window._gyroCmd([255, 170, 0, 0, 0]);
+        setStatus(`当前: ${alg}轴 (已保存, 断电重启后生效)`, '#22c55e');
+      } catch (e) { setStatus('切换失败: ' + e.message, '#ef4444'); }
+    };
+    const _observe = () => {
+      const txt = document.getElementById('gyro-status-text');
+      if (!txt) return;
+      const obs = new MutationObserver(() => {
+        const connected = /已连接|连接成功|已订阅/.test(txt.textContent);
+        setBtn(connected);
+        if (connected) setStatus('已连接 — 切 6/9 轴需断电重启后生效', '#22c55e');
+        else setStatus('未连接', '');
+      });
+      obs.observe(txt, { childList: true, subtree: true, characterData: true });
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', _observe);
+    } else { _observe(); }
+    document.getElementById('gyro-alg-6')?.addEventListener('click', () => send('6'));
+    document.getElementById('gyro-alg-9')?.addEventListener('click', () => send('9'));
   })();
 </script>
 </body>
