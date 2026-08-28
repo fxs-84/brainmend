@@ -1,0 +1,1912 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>节拍打地鼠</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background: #0d1117;
+    color: #e6edf3;
+    font: 14px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    user-select: none;
+  }
+  #game-root { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+  canvas#game { display: block; width: 100%; height: 100%; }
+
+  /* HUD 层 */
+  .hud {
+    position: absolute;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .hud-tl { top: 16px; left: 18px; }
+  .hud-tr { top: 16px; right: 18px; text-align: right; }
+  .hud-bc { bottom: 14px; left: 50%; transform: translateX(-50%); pointer-events: auto; }
+
+  .hud-box {
+    background: rgba(10, 20, 30, 0.55);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    padding: 10px 16px;
+    min-width: 110px;
+  }
+  .hud-label {
+    font-size: 11px;
+    color: rgba(255,255,255,0.6);
+    letter-spacing: 0.08em;
+    margin-bottom: 2px;
+  }
+  .hud-value {
+    font-size: 30px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 0 12px rgba(80, 220, 120, 0.35);
+    line-height: 1.1;
+  }
+  .hud-value.orange { color: #ffd54f; text-shadow: 0 0 12px rgba(255,213,79,0.35); }
+
+  /* BPM 控制 */
+  .bpm-ctl { display: flex; align-items: center; gap: 10px; }
+  .bpm-ctl input[type="range"] {
+    width: 150px;
+    accent-color: #4caf50;
+    cursor: pointer;
+  }
+  .bpm-num {
+    font-size: 20px;
+    font-weight: 700;
+    color: #b9f6ca;
+    font-variant-numeric: tabular-nums;
+    min-width: 40px;
+    text-align: center;
+  }
+
+  /* 热身提示 */
+  #warmup-tip {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 20;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(4px);
+    color: #ffe082;
+    font-size: 18px;
+    font-weight: 600;
+    padding: 10px 22px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,224,130,0.35);
+    letter-spacing: 0.05em;
+    pointer-events: none;
+    transition: opacity .6s;
+  }
+  #warmup-tip.hide { opacity: 0; }
+
+  /* 中央提示 (打歪/热身结束) */
+  #flash-msg {
+    position: absolute;
+    top: 18%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 15;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-align: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .25s;
+    text-shadow: 0 0 16px rgba(0,0,0,0.6);
+  }
+  #flash-msg.show { opacity: 1; }
+  #flash-msg.good { color: #b9f6ca; }
+  #flash-msg.bad  { color: #ff8a80; }
+  #flash-msg.warn { color: #ffe082; }
+
+  /* BPM 预选覆盖层 */
+  #bpm-picker {
+    position: absolute;
+    inset: 0;
+    z-index: 100;
+    background: rgba(5, 10, 18, 0.88);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity .4s;
+  }
+  #bpm-picker.hide { opacity: 0; pointer-events: none; }
+  .picker-card {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 24px;
+    padding: 32px 36px;
+    text-align: center;
+    min-width: 320px;
+  }
+  .picker-title { font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 22px; letter-spacing: 0.04em; }
+  .picker-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+  .picker-btn {
+    background: rgba(255,255,255,0.08);
+    border: 2px solid rgba(255,255,255,0.14);
+    color: #fff;
+    border-radius: 14px;
+    padding: 18px 8px;
+    font-size: 30px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all .15s;
+    line-height: 1;
+  }
+  .picker-btn .picker-sub { display: block; font-size: 12px; font-weight: 400; color: rgba(255,255,255,0.55); margin-top: 4px; }
+  .picker-btn:hover { background: rgba(255,255,255,0.14); transform: translateY(-2px); }
+  .picker-btn.active { background: #4caf50; border-color: #4caf50; box-shadow: 0 0 24px rgba(76,175,80,0.4); }
+  .picker-custom { margin-bottom: 22px; font-size: 13px; color: rgba(255,255,255,0.7); }
+  .picker-custom input[type="range"] { width: 180px; accent-color: #4caf50; vertical-align: middle; }
+  .picker-custom span { color: #b9f6ca; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .picker-go {
+    width: 100%;
+    background: linear-gradient(135deg, #4caf50, #2e7d32);
+    border: none;
+    color: #fff;
+    font-size: 22px;
+    font-weight: 700;
+    padding: 16px;
+    border-radius: 14px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+    transition: all .15s;
+  }
+  .picker-go:hover { transform: scale(1.02); box-shadow: 0 8px 32px rgba(76,175,80,0.45); }
+</style>
+</head>
+<body>
+<div id="game-root">
+  <canvas id="game"></canvas>
+
+  <!-- HUD: 左上 命中率 -->
+  <div class="hud hud-tl">
+    <div class="hud-box">
+      <div class="hud-label">命中率</div>
+      <div class="hud-value" id="s-rate">—</div>
+    </div>
+  </div>
+
+  <!-- HUD: 右上 连击 -->
+  <div class="hud hud-tr">
+    <div class="hud-box">
+      <div class="hud-label">连击</div>
+      <div class="hud-value orange" id="combo">0</div>
+    </div>
+  </div>
+
+  <!-- 底部: BPM 控制 (唯一可调参数) -->
+  <div class="hud hud-bc">
+    <div class="hud-box bpm-ctl">
+      <span class="hud-label">节拍</span>
+      <input type="range" id="bpm" min="40" max="160" step="1" value="80">
+      <span class="bpm-num" id="bpm-v">80</span>
+      <span class="hud-label">BPM</span>
+    </div>
+  </div>
+
+  <!-- 热身提示 -->
+  <div id="warmup-tip">热身中 · 前 5 拍不计分</div>
+  <!-- 中央反馈文字 -->
+  <div id="flash-msg"></div>
+
+  <!-- BPM 预选覆盖层 (启动后先选, 选完点开始才进入游戏) -->
+  <div id="bpm-picker">
+    <div class="picker-card">
+      <div class="picker-title">选择节拍速度</div>
+      <div class="picker-grid">
+        <button class="picker-btn" data-bpm="54">54<span class="picker-sub">慢</span></button>
+        <button class="picker-btn active" data-bpm="80">80<span class="picker-sub">中</span></button>
+        <button class="picker-btn" data-bpm="100">100<span class="picker-sub">快</span></button>
+        <button class="picker-btn" data-bpm="120">120<span class="picker-sub">极快</span></button>
+      </div>
+      <div class="picker-custom">
+        <label>自定义 <input type="range" id="bpm-custom" min="40" max="160" step="1" value="80"> <span id="bpm-custom-v">80</span> BPM</label>
+      </div>
+      <button id="btn-go" class="picker-go">开始</button>
+    </div>
+  </div>
+</div>
+
+<!-- 占位元素: 脚本引用但 UI 不展示的 id, 避免 null 错误 -->
+<div style="display:none">
+  <select id="voice"><option value="">自动</option></select>
+  <select id="move-type"><option value="clap">clap</option></select>
+  <select id="wear-pos"><option value="arm-h">arm-h</option></select>
+  <input type="range" id="sim-amp" value="200">
+  <input type="range" id="vth" value="60">
+  <input type="range" id="sdur" value="120">
+  <input type="range" id="vdrop" value="100">
+  <input type="range" id="vwin" value="240">
+  <input type="range" id="vol" value="0.7">
+  <input type="range" id="rate" value="1.0">
+  <select id="meter"><option value="4">4</option></select>
+  <select id="tts-mode"><option value="off">off</option></select>
+  <select id="axis-mode"><option value="auto">auto</option></select>
+  <select id="src-axis"><option value="valley">valley</option></select>
+  <input type="checkbox" id="use-accel" checked>
+  <button id="btn-test-tts"></button>
+  <button id="btn-copy-log"></button>
+  <button id="btn-reset"></button>
+  <button id="btn-auto-th"></button>
+  <span id="bpm-live"></span>
+  <span id="vth-display"></span>
+  <span id="vth-u"></span>
+  <span id="axis-display"></span>
+  <span id="cur-signal-name"></span>
+  <span id="cur-state"></span>
+  <span id="rate-hz"></span>
+  <span id="v-w"></span>
+  <span id="v-a"></span>
+  <span id="v-j"></span>
+  <span id="v-peak"></span>
+  <span id="v-noise"></span>
+  <span id="v-dbeat"></span>
+  <span id="v-dstop"></span>
+  <span id="s-beats"></span>
+  <span id="s-stops"></span>
+  <span id="s-hits"></span>
+  <span id="s-miss"></span>
+  <span id="s-skip"></span>
+  <span id="s-rate"></span>
+  <span id="s-avg"></span>
+  <span id="s-std"></span>
+  <span id="s-max"></span>
+  <span id="s-min"></span>
+  <span id="bpm-v"></span>
+  <span id="tol-v"></span>
+  <span id="vth-v"></span>
+  <span id="vdrop-v"></span>
+  <span id="vwin-v"></span>
+  <span id="vol-v"></span>
+  <span id="rate-v"></span>
+  <span id="sim-amp-v">200</span>
+  <div id="valley-params"></div>
+  <div id="valley-params2"></div>
+  <div id="cv"></div>
+  <div id="event-list"></div>
+  <div id="log"></div>
+</div>
+
+<script>
+'use strict';
+
+
+// 兼容: 在某些环境下 ctx.ellipse 报 "6 arguments required". 用 arc+transform 重写.
+// (放最前面, 因为 MoleGame.drawMole 立即开始 draw, ellipse 在第一帧就被调用)
+(function() {
+  if (typeof CanvasRenderingContext2D === 'undefined') return;
+  CanvasRenderingContext2D.prototype.ellipse = function(x, y, rx, ry, rotation, startAngle, endAngle, anticlockwise) {
+    this.save();
+    this.translate(x, y);
+    if (rotation) this.rotate(rotation);
+    if (rx !== ry) this.scale(rx / ry, 1);
+    this.beginPath();
+    this.arc(0, 0, ry, startAngle || 0, endAngle === undefined ? Math.PI * 2 : endAngle, !!anticlockwise);
+    this.restore();
+  };
+})();
+
+// ================= 常量与状态 =================
+const $ = id => document.getElementById(id);
+const PI2 = Math.PI * 2;
+const COL = { w: '#79c0ff', a: '#a371f7', th: '#f85149', beat: '#d29922', hit: '#56d364', miss: '#f85149', grid: '#21262d', axis: '#30363d' };
+
+// 信号单位
+const UNIT = { w: '°/s', a: 'g', jerk: 'g/s' };
+const SIGNAL_RANGE = { w: 400, a: 1.0, jerk: 20 };   // 图 y 轴上限
+
+const S = {
+  src: 'off',                // off | sim | motion | ble
+  bpm: 80,
+  beatInterval: 60/80,
+  meter: 4,
+  simStillMs: 150,         // 模拟器静止段绝对毫秒 (BPM 不变)
+  vol: 0.7, rate: 1.0, voice: '',
+  ttsMode: 'count',
+
+  vth: 60,                   // 当前信号的阈值
+  sdur: 0.12,
+  tol: 0.15,
+  srcAxis: 'valley',         // valley | w | a | jerk | w-a
+  axis: 'auto',              // auto | x | y | z | mag
+  activeAxis: 'mag',         // 当前生效的轴 (auto 模式下动态更新)
+  vdrop: 100,                // 谷底最小下降幅度 °/s (动作峰值 - 谷底值)
+  vwinMs: 240,               // 谷底扫描窗口 ms (覆盖 30% 拍, 含谷底+回升段)
+  lastValleyT: null,
+  recordedBeats: new Set(),  // 已为该 beat 记录过停止事件, 防止重复
+  // 状态机字段保留兼容, 但谷底检测主流程改为"按节拍点逐拍找谷底"
+  valleyDir: 'idle',
+  valleyLastW: 0,
+  valleyT: null,
+  useAccel: true,
+
+  beats: [],
+  stops: [],
+  running: false,
+
+  // 实时
+  wBuf: [],                  // { t, w, a, j }
+  lastBeatT: null,
+  lastStopT: null,
+  stillStart: null,
+  wasStill: false,
+  accelBase: null,
+  lastAccelVec: null,        // 用于计算 jerk
+
+  // 数据源内部
+  simTimer: null,
+  motionHandler: null,
+  ble: null,
+  bleParser: null,
+  lastSimW: null,
+
+  // TTS
+  ttsUtter: null,
+
+  // 渲染
+  raf: null,
+  lastSampleT: 0,
+  hz: 0, hzBuf: [],
+};
+
+// ================= 日志 =================
+function log(msg) {
+  const el = $('log');
+  const t = new Date();
+  const ts = t.toTimeString().slice(0, 8) + '.' + String(t.getMilliseconds()).padStart(3, '0');
+  el.textContent += `[${ts}] ${msg}\n`;
+  const lines = el.textContent.split('\n');
+  if (lines.length > 60) el.textContent = lines.slice(-60).join('\n');
+  el.scrollTop = el.scrollHeight;
+}
+
+// ================= 音频 (节拍 beep) =================
+let audioCtx = null;
+let clockOffset = 0;          // performance.now()/1000 - audioCtx.currentTime
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  clockOffset = performance.now() / 1000 - audioCtx.currentTime;
+  return audioCtx;
+}
+function beep(t, accent) {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = 'sine';
+  o.frequency.value = accent ? 1568 : 1040;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.18 * S.vol, t + 0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(t); o.stop(t + 0.1);
+}
+
+// ================= TTS =================
+function ttsSpeak(text, tPerfSec) {
+  if (S.ttsMode === 'off' || !('speechSynthesis' in window)) return;
+  const delayMs = (tPerfSec - performance.now() / 1000) * 1000;
+  setTimeout(() => {
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.volume = S.vol;
+      u.rate = S.rate;
+      u.pitch = 1.0;
+      u.lang = 'zh-CN';
+      if (S.voice) {
+        const v = speechSynthesis.getVoices().find(x => x.name === S.voice);
+        if (v) u.voice = v;
+      }
+      speechSynthesis.speak(u);
+    } catch (e) { log('TTS 失败: ' + e.message); }
+  }, Math.max(0, delayMs - 80));
+}
+function fillVoices() {
+  const sel = $('voice');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">自动</option>';
+  if (!('speechSynthesis' in window)) return;
+  const voices = speechSynthesis.getVoices().filter(v => /zh|cmn/i.test(v.lang));
+  voices.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.name; opt.textContent = `${v.name} (${v.lang})`;
+    sel.appendChild(opt);
+  });
+  if (cur) sel.value = cur;
+}
+if ('speechSynthesis' in window) {
+  speechSynthesis.onvoiceschanged = fillVoices;
+  try { fillVoices(); } catch (e) { /* voice select 缺失时静默忽略 */ }
+}
+
+// ================= 节拍调度 =================
+let schedTimer = null;
+let schedNext = 0;
+let beatIdxInMeasure = 0;
+let tAudio0 = 0;             // 节拍器启动时 audioCtx.currentTime
+function startMetronome() {
+  if (S.running) return;
+  S.running = true;
+  ensureAudio();
+  speechSynthesis && speechSynthesis.cancel();
+  S.lastBeatT = null;
+  beatIdxInMeasure = 0;
+  S.beats = [];
+  S.recordedBeats = new Set();  // 重置已记录列表, 新一轮节拍重新开始
+  // vwinMs 自适应: BPM 越快窗口越小 (按 30% 拍算, 保证覆盖谷底+回升段)
+  S.vwinMs = Math.max(120, Math.round(S.beatInterval * 300));
+  $('vwin').value = S.vwinMs;
+  $('vwin-v').textContent = S.vwinMs;
+  tAudio0 = audioCtx.currentTime;
+  schedNext = tAudio0 + 0.2;
+  if (schedTimer) clearInterval(schedTimer);
+  schedTimer = setInterval(schedTick, 20);
+  schedTick();
+  log(`节拍器启动: BPM=${S.bpm} vwinMs=${S.vwinMs}`);
+}
+function stopMetronome() {
+  if (!S.running) return;
+  S.running = false;
+  if (schedTimer) { clearInterval(schedTimer); schedTimer = null; }
+  speechSynthesis && speechSynthesis.cancel();
+  log('节拍器停止');
+}
+function schedTick() {
+  if (!S.running || !audioCtx) return;
+  const interval = S.beatInterval;
+  // clockOffset 在入口固定一次: performance.now()时基 - audioCtx时基 = 固定常量
+  clockOffset = performance.now() / 1000 - audioCtx.currentTime;
+  // 关键: 只对 audioCtx.currentTime 已越过 (音频实际响过的) beat push 到 S.beats
+  //   防止把未来拍都推到数组里, 让 sim 跟着错位的时间基准走
+  while (schedNext <= audioCtx.currentTime) {
+    const isAccent = (beatIdxInMeasure % S.meter) === 0;
+    beep(schedNext, isAccent);
+    const tPerf = schedNext + clockOffset;   // 这个 beat 已响, 映射到 performance.now 时基
+    S.beats.push({ t: tPerf, idx: S.beats.length, isAccent });
+    // 同步 sim 相位基准: 节拍点 (刚响) = sim 的 p=0
+    S.simPhaseBase = tPerf;
+    // 游戏钩子: 节拍点 → MoleScheduler
+    if (window.MOLE_GAME) window.MOLE_GAME.onBeat({ t: tPerf, idx: S.beats.length, isAccent });
+
+    if (S.ttsMode !== 'off') {
+      let txt;
+      if (S.ttsMode === 'count') {
+        const n = (beatIdxInMeasure % S.meter) + 1;
+        txt = String(n);
+      } else {
+        txt = '哒';
+      }
+      ttsSpeak(txt, tPerf);
+    }
+    scheduleBeatHighlight(tPerf);
+
+    beatIdxInMeasure++;
+    schedNext += interval;
+  }
+}
+
+function scheduleBeatHighlight(tPerf) {
+  const delayMs = (tPerf - performance.now() / 1000) * 1000;
+  setTimeout(() => {
+    const el = $('bpm-live');
+    el.classList.remove('stop', 'beat');
+    void el.offsetWidth;
+    el.classList.add('beat');
+    setTimeout(() => el.classList.remove('beat'), 120);
+    S.lastBeatT = tPerf;
+  }, Math.max(0, delayMs));
+}
+
+// ================= 信号计算 =================
+// 检测轴选择: auto = 自动挑最近 1 秒方差最大的轴 (适用任意佩戴方向, 用户不用关心)
+//   x/y/z = 用单轴 |w| (适合已知肢体运动方向)
+//   mag   = 三轴模长 (老逻辑, 通用但可能因为轴抵消信号弱)
+function pickAxisAuto() {
+  const win = S.wBuf.slice(-200);  // 最近 ~1 秒 (200 帧 @ 200Hz 抽样)
+  if (win.length < 30) return 'mag';
+  const axisVals = { x: [], y: [], z: [] };
+  for (const s of win) {
+    axisVals.x.push(s.wx); axisVals.y.push(s.wy); axisVals.z.push(s.wz);
+  }
+  const std = (a) => { const m = a.reduce((s, x) => s + x, 0) / a.length;
+    return Math.sqrt(a.reduce((s, x) => s + (x - m) ** 2, 0) / a.length); };
+  const sx = std(axisVals.x), sy = std(axisVals.y), sz = std(axisVals.z);
+  let best = 'x', bestStd = sx;
+  if (sy > bestStd) { best = 'y'; bestStd = sy; }
+  if (sz > bestStd) { best = 'z'; bestStd = sz; }
+  return best;
+}
+
+function computeSignal(o) {
+  // o: { t, ax,ay,az, wx,wy,wz }
+  const t = o.t;
+  // 决定用哪个轴: auto 模式每 1 秒重选一次 (基于 wBuf 已有数据), 其他模式固定
+  if (S.axis === 'auto') {
+    if (!S._lastAxisPick || t - S._lastAxisPick > 1.0) {
+      S.activeAxis = pickAxisAuto();
+      S._lastAxisPick = t;
+      $('axis-display').textContent = `${S.activeAxis.toUpperCase()} 轴 (方差最大)`;
+    }
+  } else {
+    S.activeAxis = S.axis;
+    $('axis-display').textContent = S.axis === 'mag' ? '三轴模长' : `${S.axis.toUpperCase()} 轴`;
+  }
+  let w;
+  if (S.activeAxis === 'mag') w = Math.hypot(o.wx || 0, o.wy || 0, o.wz || 0);
+  else if (S.activeAxis === 'x') w = Math.abs(o.wx || 0);
+  else if (S.activeAxis === 'y') w = Math.abs(o.wy || 0);
+  else w = Math.abs(o.wz || 0);   // 'z'
+
+  let aLin = 0, j = 0;
+
+  if (S.useAccel) {
+    if (!S.accelBase) {
+      S.accelBase = { ax: o.ax, ay: o.ay, az: o.az };
+      S.lastAccelVec = { ...S.accelBase };
+      aLin = 0; j = 0;
+    } else {
+      // 慢速滑动更新重力基线 (运动停止时基线会收敛, 运动时基线缓慢跟)
+      const k = 0.001;
+      S.accelBase.ax += (o.ax - S.accelBase.ax) * k;
+      S.accelBase.ay += (o.ay - S.accelBase.ay) * k;
+      S.accelBase.az += (o.az - S.accelBase.az) * k;
+      const lax = o.ax - S.accelBase.ax;
+      const lay = o.ay - S.accelBase.ay;
+      const laz = o.az - S.accelBase.az;
+      aLin = Math.hypot(lax, lay, laz);
+      // jerk = 加速度变化率 (m/s³) - 用相邻帧差分
+      if (S.lastAccelVec && S.lastSampleT) {
+        const dt = Math.max(0.001, t - S.lastSampleT);
+        const djx = (lax - (S.lastAccelVec.lax || 0)) / dt;
+        const djy = (lay - (S.lastAccelVec.lay || 0)) / dt;
+        const djz = (laz - (S.lastAccelVec.laz || 0)) / dt;
+        // g/s 换算: 1g = 9.8 m/s², 所以 m/s³ / 9.8 = g/s
+        j = Math.hypot(djx, djy, djz) / 9.8;
+      }
+      S.lastAccelVec = { lax, lay, laz };
+    }
+  }
+  return { w, a: aLin, j };
+}
+
+// ================= 谷底检测 (按节拍点逐拍找, 鲁棒) =================
+// 算法: 每个新 beat 触发一次扫描. 在 beat.t 前后 halfWin 区间内找 |ω| 最小点, 看是否满足谷底条件:
+//   - 信号振幅够大: max(leftPeak, rightPeak) ≥ vdrop (排除全程静止/小幅动作)
+//   - 左右峰值都存在, 谷底相对峰值下降 ≥ vdrop
+// 状态机版本对噪声敏感 (动作段抖动会让状态机在 falling/rising 之间反复切, 永远凑不够回升量),
+// 按拍扫描独立判断, 噪声只影响当拍, 不污染后续.
+function scanValleysAroundBeats() {
+  if (!S.running || S.beats.length === 0) return;
+  // 限制每秒最多扫几次 (节拍器每秒推 1 个 beat, 5Hz 扫描足够)
+  const now = performance.now() / 1000;
+  if (S._lastValleyScan && now - S._lastValleyScan < 0.1) return;
+  S._lastValleyScan = now;
+
+  // 处理所有尚未扫描的 beats
+  for (const beat of S.beats) {
+    if (S.recordedBeats.has(beat.t)) continue;
+    // 找 beat 前后 halfWin 区间内的样本
+    const halfWin = Math.max(S.vwinMs / 1000 / 2, 0.05);
+    const win = [];
+    for (const s of S.wBuf) {
+      if (s.t > beat.t - halfWin && s.t < beat.t + halfWin) win.push(s);
+    }
+    if (win.length < 3) continue;   // 数据太少, 等下帧再来
+
+    // 找窗口内 |ω| 最小点
+    let minPt = win[0];
+    for (const x of win) if (x.w < minPt.w) minPt = x;
+    // 左右峰值 (最小点之前 / 之后)
+    let leftPeak = 0, rightPeak = 0;
+    for (const x of win) {
+      if (x.t < minPt.t && x.w > leftPeak) leftPeak = x.w;
+      if (x.t > minPt.t && x.w > rightPeak) rightPeak = x.w;
+    }
+    const peak = Math.max(leftPeak, rightPeak);
+    if (peak < 30) { S.recordedBeats.add(beat.t); continue; }   // 信号太小, 跳过但标记为已处理
+    const drop = peak - minPt.w;
+    if (drop < S.vdrop) { S.recordedBeats.add(beat.t); continue; }   // 下降不够, 跳过
+
+    // 满足条件: 触发停止事件 (节拍点 ± tol 内)
+    recordStop(minPt.t, minPt.w);
+    S.lastStopT = minPt.t;
+    S.recordedBeats.add(beat.t);
+
+    // 视觉闪烁
+    const el = $('bpm-live');
+    el.classList.remove('stop', 'beat');
+    void el.offsetWidth;
+    el.classList.add('stop');
+    setTimeout(() => el.classList.remove('stop'), 200);
+  }
+}
+
+function updateStopDetect(t, sig) {
+  if (S.srcAxis === 'valley') {
+    scanValleysAroundBeats();
+    return;
+  }
+  // 阈值模式 (原逻辑)
+  let isStill;
+  const wOk = sig.w < S.vth;
+  const aOk = sig.a < S.vth;
+  const jOk = sig.j < S.vth;
+  if (S.srcAxis === 'w') isStill = wOk;
+  else if (S.srcAxis === 'a') isStill = aOk;
+  else if (S.srcAxis === 'jerk') isStill = jOk;
+  else isStill = wOk && aOk;
+
+  if (isStill) {
+    if (S.stillStart === null) {
+      S.stillStart = t;
+      S.wMinInRun = sig.w;
+    } else {
+      if (sig.w < S.wMinInRun) S.wMinInRun = sig.w;
+    }
+    const dur = t - S.stillStart;
+    if (!S.wasStill && dur >= S.sdur) {
+      const stopT = t;
+      recordStop(stopT, S.wMinInRun);
+      S.wasStill = true;
+      S.lastStopT = stopT;
+      const el = $('bpm-live');
+      el.classList.remove('stop', 'beat');
+      void el.offsetWidth;
+      el.classList.add('stop');
+      setTimeout(() => el.classList.remove('stop'), 200);
+    }
+  } else {
+    S.stillStart = null;
+    S.wMinInRun = Infinity;
+    S.wasStill = false;
+  }
+}
+
+function recordStop(t, wMin) {
+  try {
+    $('v-noise').textContent = wMin.toFixed(1);
+    if (S.beats.length === 0) {
+      S.stops.push({ t, devMs: null, hit: null, wMin });
+      appendEventRows();
+      refreshStats();
+      return;
+    }
+    let lo = 0, hi = S.beats.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (S.beats[mid].t < t) lo = mid + 1; else hi = mid;
+    }
+    let bestBeat = S.beats[lo];
+    if (lo > 0) {
+      const prev = S.beats[lo - 1];
+      if (Math.abs(t - prev.t) < Math.abs(t - bestBeat.t)) bestBeat = prev;
+    }
+    const devMs = (t - bestBeat.t) * 1000;
+    const hit = Math.abs(devMs) <= S.tol * 1000;
+    S.stops.push({ t, devMs, hit, wMin });
+    appendEventRows();
+    refreshStats();
+    // 直接强制调用 onPlayerHit
+    try {
+      window.MOLE_GAME.onPlayerHit({ t, devMs, hit, wMin, bestBeatT: bestBeat.t });
+      window.__moleHitOk = (window.__moleHitOk || 0) + 1;
+      if (!window.__moleHitOkList) window.__moleHitOkList = [];
+      if (window.__moleHitOkList.length < 3) window.__moleHitOkList.push({ rec: window.__moleRecCount, beatT: +bestBeat.t.toFixed(3), devMs: +devMs.toFixed(0) });
+    } catch (e) {
+      window.__moleHitErr = (window.__moleHitErr || 0) + 1;
+      window.__moleLastErr = e.message + ' | ' + e.stack;
+    }
+  } catch (outerErr) {
+    window.__moleErr = (window.__moleErr || 0) + 1;
+    window.__moleLastErr = outerErr.message + ' | ' + outerErr.stack;
+  }
+}
+
+function refreshStats() {
+  const total = S.beats.length;
+  const stops = S.stops.filter(s => s.devMs != null);
+  const hits = stops.filter(s => s.hit);
+  const devs = stops.map(s => Math.abs(s.devMs));
+  $('s-beats').textContent = total;
+  $('s-stops').textContent = S.stops.length;
+  $('s-hits').textContent = hits.length;
+  $('s-rate').textContent = total > 0 ? ((hits.length / total) * 100).toFixed(0) + '%' : '—';
+  if (devs.length === 0) {
+    $('s-avg').textContent = '—';
+    $('s-std').textContent = '—';
+    $('s-max').textContent = '—';
+    $('s-min').textContent = '—';
+    return;
+  }
+  const avg = devs.reduce((a, b) => a + b, 0) / devs.length;
+  const std = Math.sqrt(devs.reduce((s, d) => s + (d - avg) ** 2, 0) / devs.length);
+  const max = Math.max(...devs);
+  const min = Math.min(...devs);
+  $('s-avg').textContent = avg.toFixed(0) + ' ms';
+  $('s-std').textContent = std.toFixed(0) + ' ms';
+  $('s-max').textContent = max.toFixed(0) + ' ms';
+  $('s-min').textContent = min.toFixed(0) + ' ms';
+}
+
+function appendEventRows() {
+  const recent = S.stops.slice(-30).reverse();
+  let html = `<table><thead><tr><th>时间</th><th>偏差</th><th>状态</th><th>min|ω|</th></tr></thead><tbody>`;
+  for (const s of recent) {
+    const ts = new Date(performance.timeOrigin + s.t * 1000).toTimeString().slice(0, 8) + '.' + String(Math.round((s.t % 1) * 1000)).padStart(3, '0');
+    const dev = s.devMs == null ? '—' : (s.devMs > 0 ? '+' : '') + s.devMs.toFixed(0) + ' ms';
+    const status = s.hit == null ? '无节拍' : (s.hit ? '<span class="h">✓ 命中</span>' : '<span class="m">✗ 漏</span>');
+    const w = s.wMin.toFixed(1);
+    html += `<tr><td>${ts}</td><td>${dev}</td><td>${status}</td><td>${w} °/s</td></tr>`;
+  }
+  html += '</tbody></table>';
+  $('event-list').innerHTML = html;
+}
+
+// ================= 样本接收 =================
+function onSample(o) {
+  const t = o.t != null ? o.t : performance.now() / 1000;
+  const sig = computeSignal(o);
+  S.wBuf.push({ t, w: sig.w, a: sig.a, j: sig.j, wx: o.wx || 0, wy: o.wy || 0, wz: o.wz || 0 });
+  if (S.wBuf.length > 1500) S.wBuf.shift();
+
+  if (S.lastSampleT) {
+    const dt = (t - S.lastSampleT);
+    if (dt > 0.001 && dt < 0.5) {
+      S.hzBuf.push(1 / dt);
+      if (S.hzBuf.length > 50) S.hzBuf.shift();
+      const avgHz = S.hzBuf.reduce((s, x) => s + x, 0) / S.hzBuf.length;
+      $('rate-hz').textContent = avgHz.toFixed(0) + ' Hz';
+    }
+  }
+  S.lastSampleT = t;
+
+  // 当前 |ω|: 大数字 + 颜色反馈
+  const curVal = sig.w;
+  $('v-w').textContent = curVal.toFixed(1);
+  const inThreshold = curVal < S.vth;
+  $('v-w').style.color = inThreshold ? '#56d364' : '#f85149';
+  $('cur-state').textContent = inThreshold ? '✓ 静 (在阈值内)' : '→ 动 (超阈值)';
+  $('cur-state').style.color = inThreshold ? '#56d364' : '#f85149';
+  $('v-a').textContent = sig.a.toFixed(3);
+  $('v-j').textContent = sig.j.toFixed(2);
+  $('vth-display').textContent = S.vth;
+
+  // 滑动峰值窗口 (最近 5 秒)
+  const peakWin = [];
+  for (let i = S.wBuf.length - 1; i >= 0; i--) {
+    if (t - S.wBuf[i].t < 5) peakWin.push(S.wBuf[i].w); else break;
+  }
+  if (peakWin.length > 5) {
+    $('v-peak').textContent = Math.max(...peakWin).toFixed(0);
+  }
+
+  if (S.lastBeatT != null) {
+    const dBeat = (t - S.lastBeatT) * 1000;
+    $('v-dbeat').textContent = (dBeat >= 0 ? '+' : '') + dBeat.toFixed(0) + ' ms';
+  }
+  if (S.lastStopT != null) {
+    const dStop = (t - S.lastStopT) * 1000;
+    $('v-dstop').textContent = (dStop >= 0 ? '+' : '') + dStop.toFixed(0) + ' ms';
+  }
+  updateStopDetect(t, sig);
+}
+
+// ================= 模拟源 =================
+function startSim() {
+  stopAll();
+  S.src = 'sim';
+  S.accelBase = null;
+  S.lastSimW = null;
+  setBadge('sim', '模拟脉冲');
+  setStatus(true, '仿真中');
+  var _bd=$('btn-disconnect'); if(_bd) _bd.disabled=false;
+  const moveType = 'clap';            // 固定: 环转击掌 (节拍点=谷底)
+  const wearPos = 'arm-v';            // 固定: 上肢垂直
+  const amp = 200;                    // 固定幅度
+  S.beatInterval = 60 / S.bpm;
+  S.simT0 = performance.now() / 1000;
+  S.simPhaseBase = null;   // 等节拍器启动后第一个 beat 时间戳, 用来同步 sim 相位
+  if (S.simTimer) clearInterval(S.simTimer);
+  S.simTimer = setInterval(() => simTick(moveType, amp, wearPos), 5);
+  log(`模拟启动: 环转击掌 BPM=${S.bpm}`);
+}
+
+function stopSim() {
+  if (S.simTimer) { clearInterval(S.simTimer); S.simTimer = null; }
+}
+
+// 在一个节拍周期内的相位 p ∈ [0, 1), 返回 {wx, wy, wz, ax, ay, az}
+//   clap (环转击掌): 节拍点 p=0 = 击掌谷底 (|ω|=0.15×amp) → 环转加速 → 匀速 → 击掌前减速
+//   gait (步态交叉摆动): 同上模型但峰值 = 0.6×amp (用户: 步态数值低一半以上)
+//   square (方波动作): 节拍点后 [0, stillPhase) 静, 之后钟形动作 (阈值检测用)
+//   pulse (短促爆发): 节拍点后 [0, stillPhase) 静, 拍尾短促脉冲
+function simSignal(p, moveType, amp, wearPos) {
+  const peak = (moveType === 'gait') ? amp * 0.6 : amp;
+  const valleyVal = peak * 0.15;
+  const stillSec = Math.min(S.simStillMs / 1000, S.beatInterval * 0.5);
+  const stillPhase = stillSec / S.beatInterval;
+
+  let omegaMag;
+  if (moveType === 'clap' || moveType === 'gait') {
+    // 击掌/换向模型: 谷底极短 (p ∈ [0.97, 1)∪[0, 0.03)), 之后立刻反弹加速
+    //   valleyVal 持续约 3% 拍 ≈ 23ms @ 80BPM (真实击掌瞬间就是几十 ms)
+    //   之后用 sin 形快速升到 peak
+    if (p < 0.03 || p >= 0.97) omegaMag = valleyVal;
+    else if (p < 0.50) omegaMag = valleyVal + (peak - valleyVal) * Math.sin((p - 0.03) / 0.47 * Math.PI / 2);
+    else if (p < 0.85) omegaMag = peak - (peak - valleyVal) * Math.sin((p - 0.50) / 0.35 * Math.PI / 2);
+    else omegaMag = peak - (peak - valleyVal) * (p - 0.85) / 0.12;   // 击掌前减速
+  } else if (moveType === 'square') {
+    if (p < stillPhase) omegaMag = 0;
+    else if (p < 0.5) omegaMag = amp * (p - stillPhase) / (0.5 - stillPhase);
+    else omegaMag = amp * (1 - p) / 0.5;
+  } else { // pulse
+    if (p < stillPhase) omegaMag = 0;
+    else if (p >= 0.85) { const q = (p - 0.85) / 0.15; omegaMag = amp * Math.sin(q * Math.PI); }
+    else omegaMag = 0;
+  }
+  // 加速度 (扣重力): 由 dω/dt 估算
+  const dphasePerSample = 0.005 / S.beatInterval;
+  const omegaNext = (() => {
+    const p2 = (p + dphasePerSample) % 1;
+    const peak2 = (moveType === 'gait') ? amp * 0.6 : amp;
+    const vv = peak2 * 0.15;
+    if (moveType === 'clap' || moveType === 'gait') {
+      if (p2 < 0.03 || p2 >= 0.97) return vv;
+      else if (p2 < 0.50) return vv + (peak2 - vv) * Math.sin((p2 - 0.03) / 0.47 * Math.PI / 2);
+      else if (p2 < 0.85) return peak2 - (peak2 - vv) * Math.sin((p2 - 0.50) / 0.35 * Math.PI / 2);
+      else return peak2 - (peak2 - vv) * (p2 - 0.85) / 0.12;
+    } else if (moveType === 'square') {
+      if (p2 < stillPhase) return 0;
+      else if (p2 < 0.5) return amp * (p2 - stillPhase) / (0.5 - stillPhase);
+      else return amp * (1 - p2) / 0.5;
+    } else {
+      if (p2 < stillPhase) return 0;
+      else if (p2 >= 0.85) { const q = (p2 - 0.85) / 0.15; return amp * Math.sin(q * Math.PI); }
+      else return 0;
+    }
+  })();
+  // dω/dt 单位: °/s²; 1g ≈ 9.8 m/s² 对应 1g 量级加速度
+  // 这里把 dω/dt 当作轴向加速度信号 (归一化到 ±0.5g 量级): α / 1800 ~ 1g 经验值
+  const dwdt = (omegaNext - omegaMag) / 0.005;   // °/s²
+  const aNorm = Math.max(-0.5, Math.min(0.5, dwdt / 1800));
+
+  // 不同佩戴位置 → 不同方向 (统一用 wx/wy/wz 字段名)
+  // arm-h: 水平摆 (主要绕垂直轴) → wx 主轴, ay 是线加速度切向
+  // arm-v: 垂直抬 (绕水平轴) → wy 主轴, ax/az 是线加速度
+  // leg-h: 水平摆腿 → wx, ay
+  // leg-v: 抬腿 → wz, az
+  // torso: 步态节奏 → 多轴混合
+  let ax, ay, az, wx, wy, wz;
+  if (wearPos === 'arm-h' || wearPos === 'leg-h') {
+    wx = omegaMag; wy = 0; wz = 0;
+    ax = 0; ay = aNorm * (wearPos === 'arm-h' ? 1 : -1); az = -1 + aNorm * 0.1;
+  } else if (wearPos === 'arm-v') {
+    wx = 0; wy = omegaMag; wz = 0;
+    ax = aNorm; az = -1 + aNorm * 0.1; ay = 0;
+  } else if (wearPos === 'leg-v') {
+    wx = 0; wy = 0; wz = omegaMag;
+    az = aNorm; ax = aNorm * 0.1; ay = 0;
+  } else { // torso
+    wx = omegaMag * 0.7; wy = omegaMag * 0.5; wz = omegaMag * 0.3;
+    ax = aNorm * 0.5; ay = aNorm * 0.3; az = -1 + aNorm * 0.2;
+  }
+  return { ax, ay, az, wx, wy, wz };
+}
+
+function simTick(moveType, amp, wearPos) {
+  const t = performance.now() / 1000;
+  // 相位基准: 跟随最近一个节拍点, 让 sim 的 p=0 与节拍器对齐.
+  const tBase = S.simPhaseBase || S.simT0;
+  const elapsed = t - tBase;
+  let p;
+  if (elapsed < 0) p = 0;
+  else p = (elapsed % S.beatInterval) / S.beatInterval;
+  const sig = simSignal(p, moveType, amp, wearPos);
+  onSample({ t, ...sig });
+}
+
+// ================= 手机 DeviceMotion =================
+async function startMotion() {
+  stopAll();
+  if (typeof DeviceMotionEvent === 'undefined') { log('当前浏览器不支持 DeviceMotionEvent'); return; }
+  if (typeof DeviceMotionEvent.requestPermission === 'function') {
+    try {
+      const r = await DeviceMotionEvent.requestPermission();
+      if (r !== 'granted') { log('DeviceMotion 权限被拒绝'); return; }
+    } catch (e) { log('请求权限失败: ' + e.message); return; }
+  }
+  S.src = 'motion';
+  S.accelBase = null;
+  S.motionHandler = (e) => {
+    const t = performance.now() / 1000;
+    const acc = e.accelerationIncludingGravity || e.acceleration;
+    const rot = e.rotationRate || {};
+    if (!acc) return;
+    const wx = rot.alpha || 0, wy = rot.beta || 0, wz = rot.gamma || 0;
+    onSample({ t, ax: acc.x || 0, ay: acc.y || 0, az: acc.z || 0, wx, wy, wz });
+  };
+  window.addEventListener('devicemotion', S.motionHandler);
+  setBadge('mot', 'DeviceMotion');
+  setStatus(true, '已订阅 devicemotion');
+  var _bd=$('btn-disconnect'); if(_bd) _bd.disabled=false;
+  log('手机 DeviceMotion 已订阅');
+}
+function stopMotion() {
+  if (S.motionHandler) {
+    window.removeEventListener('devicemotion', S.motionHandler);
+    S.motionHandler = null;
+  }
+}
+
+// ================= BLE 陀螺仪 =================
+const BLE_SERVICES = ['0000ffe5-0000-1000-8000-00805f9a34fb', '0000ffe0-0000-1000-8000-00805f9a34fb'];
+const UNLOCK_CMD = new Uint8Array([0xFF, 0xAA, 0x69, 0x88, 0xB5]);
+function createParser(onPose) {
+  let buf = new Uint8Array(0);
+  return {
+    feed(chunk) {
+      const merged = new Uint8Array(buf.length + chunk.length);
+      merged.set(buf); merged.set(chunk, buf.length);
+      buf = merged;
+      let i = 0;
+      while (i < buf.length) {
+        if (buf[i] !== 0x55) { i++; continue; }
+        if (i + 20 > buf.length) break;
+        const type = buf[i + 1];
+        const dv = new DataView(buf.buffer, buf.byteOffset + i);
+        if (type === 97) {
+          const ax = dv.getInt16(2, true) / 32768 * 16;
+          const ay = dv.getInt16(4, true) / 32768 * 16;
+          const az = dv.getInt16(6, true) / 32768 * 16;
+          const wx = dv.getInt16(8, true) / 32768 * 2000;
+          const wy = dv.getInt16(10, true) / 32768 * 2000;
+          const wz = dv.getInt16(12, true) / 32768 * 2000;
+          const t = performance.now() / 1000;
+          onPose({ t, ax, ay, az, wx, wy, wz });
+        }
+        i += 20;
+      }
+      buf = buf.slice(i);
+    },
+    reset() { buf = new Uint8Array(0); },
+  };
+}
+async function startBle() {
+  stopAll();
+  if (!navigator.bluetooth) { log('当前浏览器不支持 Web Bluetooth'); return; }
+  try {
+    const device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: BLE_SERVICES,
+    });
+    device.addEventListener('gattserverdisconnected', () => {
+      log('BLE 设备断开');
+      setStatus(false, '已断开');
+      S.src = 'off';
+      S.ble = null;
+      setBadge('off', '未启动');
+      var _bd2=$('btn-disconnect'); if(_bd2) _bd2.disabled=true;
+    });
+    const server = await device.gatt.connect();
+    let notify = null, writeCh = null;
+    for (const suuid of BLE_SERVICES) {
+      try {
+        const svc = await server.getPrimaryService(suuid);
+        const cs = await svc.getCharacteristics();
+        for (const c of cs) {
+          if (!notify && c.properties.notify) notify = c;
+          if (!writeCh && (c.properties.write || c.properties.writeWithoutResponse)) writeCh = c;
+        }
+        if (notify) break;
+      } catch {}
+    }
+    if (!notify) throw new Error('未找到 IMU 数据通知特征');
+    await notify.startNotifications();
+    S.bleParser = createParser((pose) => onSample(pose));
+    notify.addEventListener('characteristicvaluechanged', (e) => {
+      S.bleParser.feed(new Uint8Array(e.target.value.buffer, e.target.value.byteOffset, e.target.value.byteLength));
+    });
+    if (writeCh) await writeCh.writeValue(UNLOCK_CMD).catch(() => {});
+    S.src = 'ble';
+    S.accelBase = null;
+    S.ble = device;
+    setBadge('ble', 'BLE');
+    setStatus(true, `已连接: ${device.name || '未知'}`);
+    var _bd=$('btn-disconnect'); if(_bd) _bd.disabled=false;
+    log(`BLE 已连接: ${device.name || '未知设备'}`);
+  } catch (e) {
+    log('BLE 连接失败: ' + e.message);
+  }
+}
+function stopBle() {
+  if (S.ble && S.ble.gatt && S.ble.gatt.connected) {
+    try { S.ble.gatt.disconnect(); } catch {}
+  }
+  S.ble = null;
+}
+
+// ================= 主机数据源 (hook 主 bundle 的 updateFromGyroscope) =================
+// 主 bundle 里陀螺仪数据通过 window.updateFromGyroscope({yaw,pitch,roll}) 推给局部变量 D.
+// 我们 hook 这个函数, 拦截每次更新, 差分得角速度推给谷底检测.
+// 这样打地鼠不用自己连 BLE —— 复用主页面已连好的陀螺仪通道.
+function startHost() {
+  stopAll();
+  const orig = window.updateFromGyroscope;
+  if (typeof orig !== 'function') {
+    log('未找到 window.updateFromGyroscope, 用模拟数据');
+    startSim();
+    return;
+  }
+  S.src = 'host';
+  S.accelBase = null;
+  setBadge('mot', '主机');
+  setStatus(true, '主机陀螺仪');
+  var _bd=$('btn-disconnect'); if(_bd) _bd.disabled=false;
+  log('主机数据源: hook updateFromGyroscope');
+  S._hostOrig = orig;
+  S._hostLast = null;
+  // hook: 每次陀螺仪更新时, 差分得角速度推 onSample
+  window.updateFromGyroscope = function(o) {
+    try { orig(o); } catch (e) {}
+    const t = performance.now() / 1000;
+    const yaw = o.yaw || 0, pitch = o.pitch || 0, roll = o.roll || 0;
+    if (S._hostLast) {
+      const dt = Math.max(0.001, t - S._hostLast.t);
+      let dyaw = yaw - S._hostLast.yaw;
+      if (dyaw > 180) dyaw -= 360;
+      if (dyaw < -180) dyaw += 360;
+      const dpitch = pitch - S._hostLast.pitch;
+      const droll = roll - S._hostLast.roll;
+      const wx = dyaw / dt, wy = dpitch / dt, wz = droll / dt;
+      onSample({ t, ax: 0, ay: 0, az: 0, wx, wy, wz });
+    }
+    S._hostLast = { t, yaw, pitch, roll };
+  };
+}
+function stopHost() {
+  if (S._hostOrig) {
+    try { window.updateFromGyroscope = S._hostOrig; } catch (e) {}
+    S._hostOrig = null;
+  }
+  S._hostLast = null;
+}
+
+function stopAll() {
+  stopSim(); stopMotion(); stopBle(); stopHost();
+  S.src = 'off';
+  S.accelBase = null;
+  S.lastSampleT = 0;
+  S.lastSimW = null;
+  $('rate-hz').textContent = '— Hz';
+  setBadge('off', '未启动');
+  setStatus(false, '未连接');
+  var _bd2=$('btn-disconnect'); if(_bd2) _bd2.disabled=true;
+}
+
+function setBadge(cls, text) {
+  const b = $('src-badge');
+  if (b) { b.className = 'badge ' + cls; b.textContent = text; }
+}
+function setStatus(on, text) {
+  const el = $('st');
+  if (el) { el.textContent = text; el.className = 'status ' + (on ? 'on' : 'off'); }
+}
+
+// ================= 渲染: 滚动 10s 对齐视图 =================
+function renderLoop() {
+  S.raf = requestAnimationFrame(renderLoop);
+  const cv = $('cv');
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  const now = performance.now() / 1000;
+  const winSec = 10;
+  const t0 = now - winSec;
+
+  // 根据当前检测信号选 y 轴范围与阈值线
+  const sigRange = SIGNAL_RANGE[S.srcAxis === 'w-a' ? 'w' : S.srcAxis] || SIGNAL_RANGE.w;
+  const yScale = h / sigRange;
+
+  // 网格
+  ctx.strokeStyle = COL.grid;
+  ctx.lineWidth = 1;
+  for (let s = 0; s <= winSec; s++) {
+    const x = (s / winSec) * w;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+  ctx.fillStyle = '#484f58';
+  ctx.font = '10px Consolas';
+  for (let s = 0; s <= winSec; s += 2) {
+    const x = (s / winSec) * w;
+    ctx.fillText(`-${winSec - s}s`, x + 2, 12);
+  }
+
+  // 阈值线 (基于当前信号)
+  const yTh = h - S.vth * yScale;
+  if (yTh > 0 && yTh < h) {
+    ctx.strokeStyle = COL.th;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(0, yTh); ctx.lineTo(w, yTh); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = COL.th;
+    ctx.fillText(`阈值 ${S.vth}${UNIT[S.srcAxis === 'w-a' ? 'w' : S.srcAxis] || ''}`, 4, yTh - 2);
+  }
+
+  // 样本折线: |ω| 蓝线, |a-g| 紫线
+  if (S.wBuf.length > 1) {
+    // |ω|
+    ctx.strokeStyle = COL.w;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    let started = false;
+    for (const s of S.wBuf) {
+      if (s.t < t0) continue;
+      const x = ((s.t - t0) / winSec) * w;
+      const y = h - Math.min(sigRange, s.w) * yScale;
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    // |a-g| 紫线 (用自身量程)
+    if (S.useAccel) {
+      const aScale = h / SIGNAL_RANGE.a;
+      ctx.strokeStyle = COL.a;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      started = false;
+      for (const s of S.wBuf) {
+        if (s.t < t0) continue;
+        const x = ((s.t - t0) / winSec) * w;
+        const y = h - Math.min(SIGNAL_RANGE.a, s.a) * aScale;
+        if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    // 当前点
+    const last = S.wBuf[S.wBuf.length - 1];
+    if (last.t >= t0) {
+      const x = ((last.t - t0) / winSec) * w;
+      const y = h - Math.min(sigRange, last.w) * yScale;
+      ctx.fillStyle = COL.w;
+      ctx.beginPath(); ctx.arc(x, y, 3, 0, PI2); ctx.fill();
+    }
+  }
+
+  // 节拍竖线
+  ctx.strokeStyle = COL.beat;
+  ctx.lineWidth = 1;
+  for (const b of S.beats) {
+    if (b.t < t0 || b.t > now) continue;
+    const x = ((b.t - t0) / winSec) * w;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+  if (S.running) {
+    const interval = S.beatInterval;
+    const lastBeatT = S.beats.length ? S.beats[S.beats.length - 1].t : now;
+    for (let k = 1; k <= 3; k++) {
+      const t = lastBeatT + k * interval;
+      if (t > now && t < now + winSec) {
+        const x = ((t - t0) / winSec) * w;
+        ctx.strokeStyle = COL.beat;
+        ctx.setLineDash([2, 3]);
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+  }
+
+  // 停止事件点 (谷底模式画在波形最小值位置, 阈值模式画在阈值线上)
+  for (const s of S.stops) {
+    if (s.t < t0 || s.t > now) continue;
+    const x = ((s.t - t0) / winSec) * w;
+    let y;
+    if (S.srcAxis === 'valley') {
+      // 谷底模式: 画在波形最小值处 (用 sigRange 标尺)
+      const sigRange = SIGNAL_RANGE[S.srcAxis === 'w-a' ? 'w' : S.srcAxis] || SIGNAL_RANGE.w;
+      y = h - Math.min(sigRange, s.wMin) * (h / sigRange);
+    } else {
+      y = (yTh > 0 && yTh < h) ? yTh : h - 8;
+    }
+    if (s.hit == null) {
+      ctx.fillStyle = '#6e7681';
+    } else if (s.hit) {
+      ctx.fillStyle = COL.hit;
+    } else {
+      ctx.fillStyle = COL.miss;
+    }
+    ctx.beginPath(); ctx.arc(x, y, 6, 0, PI2); ctx.fill();
+    // 谷底模式额外画 V 形下标线, 一眼看到识别到的谷底
+    if (S.srcAxis === 'valley') {
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x, y); ctx.lineTo(x, y - 14);
+      ctx.stroke();
+    }
+  }
+}
+
+// ================= 重置 =================
+function resetStats() {
+  S.beats = []; S.stops = []; S.wBuf = []; S.lastBeatT = null; S.lastStopT = null;
+  S.accelBase = null; S.lastAccelVec = null;
+  refreshStats();
+  $('event-list').innerHTML = '';
+  $('v-noise').textContent = '—';
+  log('统计已重置');
+}
+
+// ================= 自动定阈值 / 谷底参数 =================
+// 阈值模式: 用"最近 5 秒 |ω| 分布"找中位数与高分位的合理切分点
+//   阈值 = max(30, m + max(3σ, 1.5·IQR)), 下限保护
+//   sdur = max(60ms, beatInterval * 150ms)
+// 谷底模式: 用同样分布算谷底下降幅度 = (P75 - P25) 的 0.5, vwin = beatInterval * 0.3
+function autoSetThreshold() {
+  if (S.wBuf.length < 30) {
+    log('自动定参数: 数据太少, 多动几下再来');
+    return;
+  }
+  const now = performance.now() / 1000;
+  const win = S.wBuf.filter(x => now - x.t < 5).map(x => x.w).sort((a, b) => a - b);
+  if (win.length < 30) { log('自动定参数: 最近 5 秒样本不足'); return; }
+  const m = win[Math.floor(win.length / 2)];
+  const mean = win.reduce((s, x) => s + x, 0) / win.length;
+  const sigma = Math.sqrt(win.reduce((s, x) => s + (x - mean) ** 2, 0) / win.length);
+  const q1 = win[Math.floor(win.length * 0.25)];
+  const q3 = win[Math.floor(win.length * 0.75)];
+  const iqr = q3 - q1;
+
+  if (S.srcAxis === 'valley') {
+    // 谷底下降幅度: 节律动作的"波谷比峰值低多少"? 看 P25-P75 跨度的一半
+    const drop = Math.max(40, Math.round(iqr * 0.5));
+    const winMs = Math.round(Math.max(80, S.beatInterval * 200));
+    S.vdrop = drop;
+    S.vwinMs = winMs;
+    $('vdrop').value = drop;   $('vdrop-v').textContent = drop;
+    $('vwin').value = winMs;   $('vwin-v').textContent = winMs;
+    log(`自动定谷底: P25=${q1.toFixed(0)} P75=${q3.toFixed(0)} → 下降幅度=${drop}°/s 窗口=${winMs}ms`);
+    $('th-suggest').textContent = `谷底下降=${drop}°/s 窗口=${winMs}ms (基于最近 5s IQR)`;
+  } else {
+    const noise = Math.max(m, q1);
+    const sugTh = Math.max(30, Math.min(300, Math.round(noise + Math.max(3 * sigma, 1.5 * iqr))));
+    const sugDur = Math.round(Math.max(60, S.beatInterval * 150));
+    S.vth = sugTh;
+    S.sdur = sugDur / 1000;
+    $('vth').value = sugTh;       $('vth-v').textContent = sugTh;
+    $('sdur').value = sugDur;     $('sdur-v').textContent = sugDur;
+    $('vth-display').textContent = sugTh;
+    log(`自动定阈值: 中位数=${m.toFixed(1)} σ=${sigma.toFixed(1)} → 阈值=${sugTh}°/s sdur=${sugDur}ms`);
+    $('th-suggest').textContent = `建议 ${sugTh}°/s · sdur ${sugDur}ms (基于最近 5s 数据)`;
+  }
+}
+
+// ================= UI 绑定 (极简: 只有 BPM 可调) =================
+// 固定配置: 陀螺仪 host (window.D) / auto 选轴 / 谷底检测 / TTS 只 beep 不喊数
+S.axis = 'auto';
+S.srcAxis = 'valley';
+S.ttsMode = 'off';
+S.vol = 0.7;
+
+// BPM 滑块 (唯一可调参数)
+$('bpm').addEventListener('input', () => {
+  const v = +$('bpm').value;
+  S.bpm = v;
+  S.beatInterval = 60 / v;
+  $('bpm-v').textContent = v;
+  if (S.running) { stopMetronome(); startMetronome(); }
+});
+
+// ================= 打地鼠游戏 =================
+// 复用 demo 已验证的节拍器 (audioCtx + TTS) + 谷底检测 (|ω| V 形谷底) + auto 选轴.
+// 游戏层只负责: 地鼠调度 + 玩家击打判定 + 视觉/粒子反馈.
+// 节拍点 = 玩家必须做击打动作; 地鼠在拍后 0.4 拍探头; 击打正好对得上探头中地鼠 = 命中.
+
+const N_HOLES = 6;
+const MOLE_OUT_MS = 500;          // 探头持续时间
+const WARMUP_BEATS = 5;           // 前 5 拍热身, 不计入命中率统计
+const MOLE_BEAT_OFFSET = 0;        // 地鼠探头相对节拍点的相位 (0 = 节拍点探头, 玩家击打正好打中)
+const HOLE_HIT_TOL = 0.3;         // 节拍点 ±0.3 拍 = 探头时间窗 (可被打中)
+
+class MoleScheduler {
+  constructor(game) {
+    this.game = game;
+    this.beatIdx = 0;
+    this.molePerBeat = 1;   // 每拍出几个, 由 UI 控制
+    this.lastHole = -1;
+    this.scheduled = new Map();   // beatT → { holeIdx, emergeAt, hit }
+  }
+  setDensity(n) { this.molePerBeat = Math.max(1, Math.min(3, n | 0)); }
+  // 收到新节拍点: 调度地鼠在 beat + offset 时刻探头
+  onBeat(beat) {
+    this.beatIdx = beat.idx;
+    // 选洞: 轮转 + 不同洞, 避免相邻重复
+    const choices = [];
+    for (let i = 0; i < N_HOLES; i++) {
+      if (i !== this.lastHole) choices.push(i);
+    }
+    // 每拍出多个 (density)
+    const picks = [];
+    for (let k = 0; k < this.molePerBeat && choices.length; k++) {
+      const idx = Math.floor(Math.random() * choices.length);
+      picks.push(choices.splice(idx, 1)[0]);
+    }
+    const emergeAt = beat.t + S.beatInterval * MOLE_BEAT_OFFSET;
+    for (const hole of picks) {
+      this.lastHole = hole;
+      this.game.scheduleMole(hole, emergeAt, beat.t);
+    }
+  }
+  reset() { this.beatIdx = 0; this.lastHole = -1; this.scheduled.clear(); }
+}
+
+class ParticleSystem {
+  constructor() { this.parts = []; }
+  emit(x, y, n = 8, color = '#8b6f47') {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * PI2;
+      const v = 80 + Math.random() * 120;
+      this.parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, g: 240, life: 0.6 + Math.random() * 0.3, age: 0, color, size: 3 + Math.random() * 3 });
+    }
+  }
+  emitFloater(x, y, text, color = '#ffeb3b') {
+    this.parts.push({ x, y, vx: 0, vy: -80, g: 0, life: 1.0, age: 0, text, color, size: 32, kind: 'text' });
+  }
+  emitConfetti() {
+    const colors = ['#ff5252', '#ffeb3b', '#4caf50', '#2196f3', '#ff9800', '#e91e63'];
+    for (let i = 0; i < 60; i++) {
+      const a = Math.random() * PI2;
+      const v = 200 + Math.random() * 300;
+      this.parts.push({ x: this.game.cx, y: this.game.cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 200, g: 350, life: 1.5 + Math.random(), age: 0, color: colors[(Math.random() * colors.length) | 0], size: 4 + Math.random() * 4 });
+    }
+  }
+  update(dt) {
+    for (const p of this.parts) {
+      p.age += dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += p.g * dt;
+    }
+    this.parts = this.parts.filter(p => p.age < p.life);
+  }
+  draw(ctx) {
+    for (const p of this.parts) {
+      const a = 1 - p.age / p.life;
+      if (p.kind === 'text') {
+        ctx.font = `700 ${p.size}px sans-serif`;
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = a;
+        ctx.textAlign = 'center';
+        ctx.fillText(p.text, p.x, p.y);
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.globalAlpha = a;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+class MoleGame {
+  constructor() {
+    this.canvas = $('game');
+    this.ctx = this.canvas.getContext('2d');
+    this.scheduler = new MoleScheduler(this);
+    this.particles = new ParticleSystem();
+    this.particles.game = this;
+    this.holes = [];             // 每洞 { state, emergeAt, sinkAt, beatT, hit, sway }
+    for (let i = 0; i < N_HOLES; i++) this.holes.push({ state: 'hidden', emergeAt: 0, sinkAt: 0, beatT: 0, hit: false, sway: 0 });
+    this.score = 0;
+    this.combo = 0;
+    this.playedBeats = 0;         // 已处理的节拍数 (热身计数)
+    this.lastBeatT = null;        // 最近一个节拍点 (用于判定漏拍)
+    this.lastBeatT_wasHit = null; // 上一个节拍是否被打中
+    this.beatRoundIdx = 0;        // 16 拍一轮, 触发彩带
+    this.flashComboAt = null;     // 显示 COMBO 文字
+    this.missedBeats = new Set(); // 已计入"漏拍"的 beat
+    this.responded = new Set();   // 已响应的节拍 (避免重复)
+    this.fx = { hitScale: {}, missFlash: {} };
+    // 锤子状态: idle 静止 / swing 挥向目标 / hit 命中回弹
+    this.hammer = { state: 'idle', x: 0, y: 0, tx: 0, ty: 0, t0: 0, angle: 0.6 };
+    this.lastFrame = performance.now() / 1000;
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+    this.loop = this.loop.bind(this);
+    requestAnimationFrame(this.loop);
+  }
+  resize() {
+    const r = this.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    this.canvas.width = r.width * dpr;
+    this.canvas.height = r.height * dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.w = r.width; this.h = r.height;
+    this.cx = this.w / 2; this.cy = this.h / 2;
+    this.groundY = this.h * 0.78;
+    this.holeW = Math.min(80, this.w / (N_HOLES + 1.5));
+    this.holeSpacing = this.w / (N_HOLES + 1);
+    // 锤子初始位置: 屏幕右侧中间 (玩家手的位置), 朝向左下的洞
+    this.hammer.homeX = this.w * 0.85;
+    this.hammer.homeY = this.groundY - this.holeW * 1.1;
+    if (this.hammer.state === 'idle') { this.hammer.x = this.hammer.homeX; this.hammer.y = this.hammer.homeY; }
+  }
+  // 节拍点调度地鼠
+  scheduleMole(holeIdx, emergeAt, beatT) {
+    const h = this.holes[holeIdx];
+    h.state = 'pre';           // 准备 (节拍前提示)
+    h.emergeAt = emergeAt;
+    h.sinkAt = emergeAt + MOLE_OUT_MS / 1000;
+    h.beatT = beatT;
+    h.hit = false;
+    h.sway = 0;
+  }
+  // 玩家击打事件: 谷底检测到 |ω| 谷底, 触发到这里
+  onPlayerHit(ev) {
+    if (!S.running) return;
+    const now = ev.t;
+    // 找最近节拍点
+    const beatT = ev.bestBeatT;
+    if (this.responded.has(beatT)) return;     // 同一节拍点只响应一次
+    this.responded.add(beatT);
+    this.lastBeatT_wasHit = { beatT, hit: ev.hit };
+    const withinTol = Math.abs(ev.devMs) <= S.tol * 1000;
+    // 在节拍点 ±HOLE_HIT_TOL 拍 时间窗里找"探头中"的地鼠
+    let hitMole = null;
+    for (const h of this.holes) {
+      if (h.state === 'pre' || h.state === 'out') {
+        // 检查地鼠探头时间窗是否覆盖节拍点
+        if (h.emergeAt <= beatT + S.tol && h.sinkAt >= beatT - S.tol) {
+          // 还看玩家击打时间 vs 探头时间: 玩家击打 t 必须在 (emergeAt - 100ms) 到 (sinkAt) 之内
+          if (now >= h.emergeAt - 0.1 && now <= h.sinkAt + 0.1) {
+            hitMole = h;
+            break;
+          }
+        }
+      }
+    }
+    if (withinTol && hitMole) {
+      this.onHit(hitMole, ev);
+    } else if (withinTol) {
+      this.onWhiff(ev);    // 容差内但没地鼠
+    } else {
+      this.onMiss(ev);     // 容差外 (抢拍/延后)
+    }
+    this.beatRoundIdx++;
+    if (this.beatRoundIdx >= 16) {
+      this.beatRoundIdx = 0;
+      this.particles.emitConfetti();
+    }
+  }
+  // 节拍点
+  onBeat(beat) {
+    if (!S.running) return;
+    this.lastBeatT = beat.t;
+    // 热身计数: 前 WARMUP_BEATS 拍不计入统计
+    this.playedBeats++;
+    if (this.playedBeats === WARMUP_BEATS + 1) {
+      // 热身结束, 提示
+      this.flashMsg('热身结束 · 开始计分！', 'warn');
+      const tip = $('warmup-tip');
+      if (tip) { tip.classList.add('hide'); setTimeout(() => tip.remove(), 800); }
+    }
+    this.scheduler.onBeat(beat);
+    // 漏拍检查: 300ms 后如果这个节拍点还没响应, 视为漏拍 (热身期不计)
+    setTimeout(() => {
+      if (!this.responded.has(beat.t)) {
+        this.responded.add(beat.t);
+        if (this.playedBeats > WARMUP_BEATS) this.recordMiss();
+      }
+    }, 300);
+  }
+  onHit(mole, ev) {
+    const isWarmup = this.playedBeats <= WARMUP_BEATS;
+    if (!isWarmup) {
+      this.score++;
+      this.combo++;
+    }
+    mole.hit = true;
+    mole.state = 'sinking';
+    mole.sinkAt = performance.now() / 1000 + 0.25;   // 0.25s 缩回动画
+    const idx = this.holes.indexOf(mole);
+    const x = this.holeX(idx);
+    this.particles.emit(x, this.groundY, 14, '#8b6f47');
+    this.particles.emitFloater(x, this.groundY - 50, isWarmup ? '热身' : '+1', isWarmup ? '#ffe082' : '#ffeb3b');
+    this.beepHit();
+    // 锤子砸向命中的地鼠
+    this.swingHammer(x, this.groundY, true);
+    if (!isWarmup && this.combo >= 5) {
+      this.flashComboAt = performance.now() / 1000;
+      this.flashCombo = 'COMBO × ' + this.combo + '!';
+    }
+    this.updateStatsUI();
+  }
+  onWhiff(ev) {
+    // 容差内有动作但没地鼠: "打早了/晚了" 提示, 不断连击 (不扣分)
+    this.combo = 0;
+    if (this.playedBeats > WARMUP_BEATS) this.flashMsg('打歪了', 'bad');
+    // 锤子砸向最近的洞 (空砸)
+    this.swingHammer(this.hammer.homeX - this.holeSpacing * 2, this.groundY + 10, false);
+    this.recordStat('whiff');
+  }
+  onMiss(ev) {
+    this.combo = 0;
+    // 锤子砸空 (砸在地上)
+    this.swingHammer(this.hammer.homeX - this.holeSpacing * 1.5, this.groundY + 15, false);
+    this.recordStat('miss');
+  }
+  // 锤子挥动: 从 home 位置挥向 (tx, ty)
+  swingHammer(tx, ty, hit) {
+    const hm = this.hammer;
+    hm.state = 'swing';
+    hm.tx = tx; hm.ty = ty;
+    hm.t0 = performance.now() / 1000;
+    hm.hit = hit;
+  }
+  // 画锤子 (idle 静止 / swing 挥向目标 / hit 命中回弹)
+  drawHammer(ctx, now) {
+    const hm = this.hammer;
+    const durSwing = 0.15, durHit = 0.08, durBack = 0.2;
+    let x = hm.x, y = hm.y, ang = hm.angle;
+    if (hm.state === 'swing') {
+      const t = (now - hm.t0);
+      if (t < durSwing) {
+        const k = t / durSwing;
+        const ease = k * k * (3 - 2 * k);
+        x = hm.x + (hm.tx - hm.x) * ease;
+        y = hm.y + (hm.ty - hm.y) * ease;
+        ang = hm.angle - 0.5 * ease;
+      } else {
+        hm.state = 'hit';
+        hm.t0 = now;
+      }
+    } else if (hm.state === 'hit') {
+      const t = (now - hm.t0);
+      if (t < durHit) {
+        x = hm.tx; y = hm.ty;
+        ang = hm.angle - 0.5;
+      } else {
+        hm.state = 'back';
+        hm.t0 = now;
+      }
+    } else if (hm.state === 'back') {
+      const t = (now - hm.t0);
+      if (t < durBack) {
+        const k = t / durBack;
+        const ease = 1 - (1 - k) * (1 - k);
+        x = hm.tx + (hm.homeX - hm.tx) * ease;
+        y = hm.ty + (hm.homeY - hm.ty) * ease;
+        ang = hm.angle - 0.5 + 0.5 * ease;
+      } else {
+        hm.state = 'idle';
+        hm.x = hm.homeX; hm.y = hm.homeY;
+      }
+    } else {
+      x = hm.x; y = hm.y;
+    }
+    hm.x = x; hm.y = y;
+    hm.angle = ang;
+    // 画锤子: 圆形锤头 + 木柄
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-ang);
+    const headR = Math.min(this.holeW * 0.55, 34);
+    const handleLen = headR * 2.6;
+    // 木柄
+    ctx.fillStyle = '#8d6e63';
+    ctx.fillRect(-handleLen * 0.18, 0, handleLen * 0.36, handleLen);
+    // 锤头 (圆头)
+    ctx.fillStyle = '#5d4037';
+    ctx.beginPath();
+    ctx.arc(0, 0, headR, 0, PI2);
+    ctx.fill();
+    // 锤头金属环
+    ctx.strokeStyle = '#bdbdbd';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, headR - 2, 0, PI2);
+    ctx.stroke();
+    // 锤头高光
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.beginPath();
+    ctx.arc(-headR * 0.3, -headR * 0.3, headR * 0.4, 0, PI2);
+    ctx.fill();
+    ctx.restore();
+  }
+  recordMiss() {
+    this.combo = 0;
+    this.recordStat('skip');
+  }
+  recordStat(kind) {
+    if (!this.stats) this.stats = { whiff: 0, miss: 0, skip: 0 };
+    this.stats[kind] = (this.stats[kind] || 0) + 1;
+    this.updateStatsUI();
+  }
+  // 中央闪字 (打歪/热身结束提示)
+  flashMsg(text, kind) {
+    let el = $('flash-msg');
+    if (!el) {
+      // 占位兜底: 找不到就创建 (集成时 view 注入偶尔延迟)
+      el = document.createElement('div');
+      el.id = 'flash-msg';
+      document.body.appendChild(el);
+    }
+    el.textContent = text;
+    el.className = 'show ' + (kind || 'warn');
+    clearTimeout(this._flashTimer);
+    this._flashTimer = setTimeout(() => { el.className = ''; }, 900);
+  }
+  updateStatsUI() {
+    // 只显示 命中率 + 连击
+    $('combo').textContent = this.combo;
+    const scored = Math.max(0, this.playedBeats - WARMUP_BEATS);
+    if (scored > 0) {
+      const rate = Math.round(this.score / scored * 100);
+      $('s-rate').textContent = rate + '%';
+    } else {
+      $('s-rate').textContent = '—';
+    }
+  }
+  holeX(i) { return this.holeSpacing * (i + 1); }
+  reset() {
+    this.score = 0; this.combo = 0;
+    this.scheduler.reset();
+    this.stats = { whiff: 0, miss: 0, skip: 0 };
+    this.responded.clear();
+    this.missedBeats.clear();
+    for (const h of this.holes) { h.state = 'hidden'; h.hit = false; }
+    this.updateStatsUI();
+  }
+  beepHit() {
+    try {
+      if (!audioCtx) return;
+      const t = audioCtx.currentTime;
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'sine'; o.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.25 * S.vol, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+      o.connect(g).connect(audioCtx.destination);
+      o.start(t); o.stop(t + 0.15);
+    } catch {}
+  }
+  // 主循环
+  loop() {
+    requestAnimationFrame(this.loop);
+    // 自动检测 canvas 尺寸变化 (集成时 view 可能初次为 0×0, 需等显示后 resize)
+    const _r = this.canvas.getBoundingClientRect();
+    if (_r.width > 0 && (this.canvas.width !== _r.width * (window.devicePixelRatio || 1))) {
+      this.resize();
+    }
+    const now = performance.now() / 1000;
+    const dt = Math.min(0.05, now - this.lastFrame);
+    this.lastFrame = now;
+
+    // 推进地鼠状态
+    for (let i = 0; i < this.holes.length; i++) {
+      const h = this.holes[i];
+      if (h.state === 'pre') {
+        // 节拍前 0.2s 起出现提示
+        if (now >= h.emergeAt - 0.2) h.state = 'out';
+      } else if (h.state === 'out') {
+        h.sway = Math.sin((now - h.emergeAt) * 8) * 0.05;
+        if (now > h.sinkAt) h.state = 'sinking';
+      } else if (h.state === 'sinking') {
+        if (now > h.sinkAt) h.state = 'hidden';
+      }
+    }
+
+    this.particles.update(dt);
+    this.draw(now);
+  }
+  draw(now) {
+    const ctx = this.ctx;
+    const w = this.w, h = this.h;
+    ctx.clearRect(0, 0, w, h);
+
+    // 远景云朵 (静态)
+    this.drawClouds(ctx);
+
+    // 山
+    ctx.fillStyle = '#4a7d3a';
+    ctx.beginPath();
+    ctx.moveTo(0, h * 0.55);
+    for (let x = 0; x <= w; x += 60) {
+      const y = h * 0.55 - Math.abs(Math.sin(x * 0.013)) * h * 0.07;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(w, h * 0.78);
+    ctx.lineTo(0, h * 0.78);
+    ctx.closePath();
+    ctx.fill();
+
+    // 草地
+    ctx.fillStyle = '#6fb04a';
+    ctx.fillRect(0, h * 0.78, w, h * 0.22);
+
+    // 洞 + 地鼠
+    for (let i = 0; i < this.holes.length; i++) {
+      this.drawHole(ctx, i, now);
+    }
+
+    // 锤子 (画在地鼠之上, 但粒子之下)
+    this.drawHammer(ctx, now);
+
+    // 粒子
+    this.particles.draw(ctx);
+
+    // COMBO 飘字
+    if (this.flashComboAt && now - this.flashComboAt < 1.2) {
+      const a = 1 - (now - this.flashComboAt) / 1.2;
+      ctx.font = `900 ${44 + (1 - a) * 8}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = `rgba(255,235,59,${a})`;
+      ctx.strokeStyle = `rgba(0,0,0,${a * 0.5})`;
+      ctx.lineWidth = 3;
+      ctx.strokeText(this.flashCombo || 'COMBO!', w / 2, h * 0.4);
+      ctx.fillText(this.flashCombo || 'COMBO!', w / 2, h * 0.4);
+    }
+  }
+  drawClouds(ctx) {
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    const w = this.w, h = this.h;
+    for (const c of [{ x: w * 0.15, y: h * 0.12, r: 22 }, { x: w * 0.45, y: h * 0.08, r: 28 }, { x: w * 0.78, y: h * 0.14, r: 20 }]) {
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, c.r, 0, PI2);
+      ctx.arc(c.x + c.r * 0.7, c.y + 4, c.r * 0.8, 0, PI2);
+      ctx.arc(c.x - c.r * 0.7, c.y + 4, c.r * 0.8, 0, PI2);
+      ctx.fill();
+    }
+  }
+  drawHole(ctx, i, now) {
+    const x = this.holeX(i);
+    const y = this.groundY;
+    const h = this.holes[i];
+    const w = this.holeW, hh = w * 0.45;
+    // 洞口阴影 (椭圆)
+    ctx.fillStyle = '#3d2a14';
+    ctx.beginPath();
+    ctx.ellipse(x, y, w / 2, hh / 2, 0, 0, PI2);
+    ctx.fill();
+    // 洞口土边
+    ctx.fillStyle = '#5d4424';
+    ctx.beginPath();
+    ctx.ellipse(x, y - 3, w / 2 + 4, hh / 2 + 3, 0, 0, PI2);
+    ctx.fill();
+    // 节拍前提示圆圈 (pre 状态)
+    if (h.state === 'pre' && h.emergeAt - now < 0.3) {
+      const remain = h.emergeAt - now;
+      const alpha = 0.4 + 0.6 * Math.abs(Math.sin(remain * 30));
+      ctx.strokeStyle = `rgba(255,200,0,${alpha})`;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.ellipse(x, y - 10, w / 2 + 8, hh / 2 + 8, 0, 0, PI2);
+      ctx.stroke();
+    }
+    // 地鼠
+    if (h.state === 'out' || h.state === 'sinking') {
+      let emergeProg;
+      if (h.state === 'out') emergeProg = Math.min(1, (now - h.emergeAt) / 0.15);
+      else emergeProg = 1 - Math.min(1, (now - h.sinkAt + 0.25) / 0.25);
+      if (emergeProg < 0) emergeProg = 0;
+      if (emergeProg > 1) emergeProg = 1;
+      this.drawMole(ctx, x, y, w, emergeProg, h, now);
+    }
+  }
+  drawMole(ctx, x, y, w, prog, h, now) {
+    const h2 = w * 0.7 * prog;
+    const sway = h.sway || 0;
+    // 身体 (椭圆, 从洞里冒出)
+    ctx.save();
+    ctx.translate(x + sway * w, y);
+    // 身体
+    ctx.fillStyle = '#7a5230';
+    ctx.beginPath();
+    ctx.ellipse(0, -h2 * 0.5, w * 0.35, h2 * 0.6, 0, 0, PI2);
+    ctx.fill();
+    // 肚子
+    ctx.fillStyle = '#c9a47a';
+    ctx.beginPath();
+    ctx.ellipse(0, -h2 * 0.4, w * 0.25, h2 * 0.4, 0, 0, PI2);
+    ctx.fill();
+    // 眼睛
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(-w * 0.1, -h2 * 0.7, 2.5, 0, PI2);
+    ctx.arc(w * 0.1, -h2 * 0.7, 2.5, 0, PI2);
+    ctx.fill();
+    // 鼻子
+    ctx.fillStyle = '#ff8a80';
+    ctx.beginPath();
+    ctx.arc(0, -h2 * 0.6, 3, 0, PI2);
+    ctx.fill();
+    // 牙齿
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-3, -h2 * 0.55, 2.5, 4);
+    ctx.fillRect(0.5, -h2 * 0.55, 2.5, 4);
+    // 耳朵
+    ctx.fillStyle = '#5d3a1a';
+    ctx.beginPath();
+    ctx.ellipse(-w * 0.22, -h2 * 0.75, 4, 5, 0, 0, PI2);
+    ctx.ellipse(w * 0.22, -h2 * 0.75, 4, 5, 0, PI2);
+    ctx.fill();
+    // 击中时: 头有星星圈
+    if (h.hit && h.state === 'sinking') {
+      ctx.fillStyle = '#ffeb3b';
+      for (let k = 0; k < 6; k++) {
+        const a = k * PI2 / 6 + now * 4;
+        const r = 18;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * r, -h2 * 0.5 + Math.sin(a) * r - 4, 3, 0, PI2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+}
+
+// 实例化游戏 (try 包裹, 单个错误不阻止整体加载)
+try {
+
+  const _mg = new MoleGame();
+
+  window.MOLE_GAME = _mg;
+
+  // 启动流程: 先显示 BPM 选择, 选完点开始才启动 (数据源 + 节拍器)
+  const picker = $('bpm-picker');
+  const btns = picker.querySelectorAll('.picker-btn');
+  btns.forEach(b => b.addEventListener('click', () => {
+    btns.forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    const v = +b.dataset.bpm;
+    $('bpm-custom').value = v; $('bpm-custom-v').textContent = v;
+    $('bpm').value = v; $('bpm-v').textContent = v;
+  }));
+  $('bpm-custom').addEventListener('input', () => {
+    const v = +$('bpm-custom').value;
+    $('bpm-custom-v').textContent = v;
+    $('bpm').value = v; $('bpm-v').textContent = v;
+    btns.forEach(x => x.classList.toggle('active', +x.dataset.bpm === v));
+  });
+  $('btn-go').addEventListener('click', () => {
+    const v = +$('bpm-custom').value;
+    S.bpm = v; S.beatInterval = 60 / v;
+    picker.classList.add('hide');
+    setTimeout(() => picker.remove(), 450);
+    // 启动数据源: 优先 hook 主 bundle 的 updateFromGyroscope (真实陀螺仪), 否则模拟
+    if (typeof window.updateFromGyroscope === 'function') {
+      log('检测到主页面陀螺仪通道, 用主机数据源');
+      startHost();
+    } else {
+      log('用模拟数据');
+      startSim();
+    }
+    // 启动节拍器
+    setTimeout(() => { try { startMetronome(); } catch (e) { console.warn('[mole] startMetronome:', e.message); } }, 120);
+  });
+
+} catch (e) {
+  console.error('[mole] MoleGame init FAILED:', e.message, '\n' + e.stack);
+  window.MOLE_GAME = null;
+}
+
+// ================= 启动 =================
+log('打地鼠游戏就绪. 1) 选数据源 (先点"模拟"即可), 2) 点"开始游戏"');
+window.__demo = S;
+</script>
+</body>
+</html>
