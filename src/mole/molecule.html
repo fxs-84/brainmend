@@ -311,7 +311,7 @@ const S = {
   beatInterval: 60/80,
   meter: 4,
   simStillMs: 150,         // 模拟器静止段绝对毫秒 (BPM 不变)
-  vol: 0.7, rate: 1.0, voice: '',
+  vol: 0.9, rate: 1.0, voice: '',
   ttsMode: 'count',
 
   vth: 60,                   // 当前信号的阈值
@@ -384,12 +384,12 @@ function beep(t, accent) {
   if (audioCtx.state === 'suspended') audioCtx.resume();
   const o = audioCtx.createOscillator(), g = audioCtx.createGain();
   o.type = 'sine';
-  o.frequency.value = accent ? 1568 : 1040;
+  o.frequency.value = accent ? 1760 : 988;
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(0.18 * S.vol, t + 0.005);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+  g.gain.exponentialRampToValueAtTime(0.85 * S.vol, t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
   o.connect(g).connect(audioCtx.destination);
-  o.start(t); o.stop(t + 0.1);
+  o.start(t); o.stop(t + 0.12);
 }
 
 // ================= TTS =================
@@ -1675,13 +1675,30 @@ class MoleGame {
     try {
       if (!audioCtx) return;
       const t = audioCtx.currentTime;
-      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-      o.type = 'sine'; o.frequency.value = 880;
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.25 * S.vol, t + 0.005);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
-      o.connect(g).connect(audioCtx.destination);
-      o.start(t); o.stop(t + 0.15);
+      // 三层叠加: 中频主音 + 高频清脆 + 低频冲击感
+      const o1 = audioCtx.createOscillator(), g1 = audioCtx.createGain();
+      o1.type = 'sine'; o1.frequency.value = 1047;
+      g1.gain.setValueAtTime(0.0001, t);
+      g1.gain.exponentialRampToValueAtTime(0.7 * S.vol, t + 0.003);
+      g1.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+      o1.connect(g1).connect(audioCtx.destination);
+      o1.start(t); o1.stop(t + 0.16);
+
+      const o2 = audioCtx.createOscillator(), g2 = audioCtx.createGain();
+      o2.type = 'triangle'; o2.frequency.value = 1760;
+      g2.gain.setValueAtTime(0.0001, t);
+      g2.gain.exponentialRampToValueAtTime(0.4 * S.vol, t + 0.002);
+      g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.10);
+      o2.connect(g2).connect(audioCtx.destination);
+      o2.start(t); o2.stop(t + 0.12);
+
+      const o3 = audioCtx.createOscillator(), g3 = audioCtx.createGain();
+      o3.type = 'sine'; o3.frequency.value = 220;
+      g3.gain.setValueAtTime(0.0001, t);
+      g3.gain.exponentialRampToValueAtTime(0.5 * S.vol, t + 0.005);
+      g3.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      o3.connect(g3).connect(audioCtx.destination);
+      o3.start(t); o3.stop(t + 0.20);
     } catch {}
   }
   // 主循环
