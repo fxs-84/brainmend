@@ -2174,9 +2174,17 @@
             });
             // 免责
             html += '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:12px 16px;font-size:12px;color:#92400e;line-height:1.7;">⚠️ 本评估用于一般健康教育，结果属于评估提示，不等同于医学诊断。如结果异常或症状持续，请到正规医疗机构进一步评估。</div>';
+            // 做题详情 (含所有 100 题 + 患者作答) — 渲染进报告 DOM, PDF 截图自动包含
+            // (患者端 _renderInlineReport 一直在做这件事; 治疗师端 / index.html 这条入口之前缺失,
+            //  导致治疗师在数据库中查看报告再导出 PDF 时, 只有评估结果没有具体做题情况)
+            // 数据模块可能尚未就绪, 填占位后由 __qnrFillQuestionsSection 轮询替换
+            html += '<div id="qnr-questions-section"><div style="padding:14px 16px;background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;color:#92400e;font-size:13px;">⏳ 题目加载中…</div></div>';
             // 注: 导出按钮已在 footer 的 cog-report-export-btn (智能路由 _exportCurrentReport) 处理
             // 这里不再重复按钮, 避免两处「📄 导出 PDF」
             body.innerHTML = html;
+            if (typeof window.__qnrFillQuestionsSection === 'function') {
+                window.__qnrFillQuestionsSection(rec);
+            }
             overlay.scrollTop = 0;
         }
 
