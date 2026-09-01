@@ -8,3 +8,6 @@ tools/*.bak-vor3d
 
 # GLB 原始未压缩素材（153MB，不入库）
 tools/glb/raw/
+
+# vite 构建产物（GitHub Pages workflow 部署用）
+dist/
