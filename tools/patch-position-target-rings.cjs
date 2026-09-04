@@ -38,7 +38,9 @@ const fs = require('fs');
 const path = require('path');
 
 const FILE = path.join(__dirname, '..', 'assets', 'index-Cc2Ik-Ku.js');
-const MARK = '/*POSITION-RINGS-v6*/';
+const MARK = '/*POSITION-RINGS-v8*/';
+const MARK_V7 = '/*POSITION-RINGS-v7*/';
+const MARK_V6 = '/*POSITION-RINGS-v6*/';
 const MARK_V5 = '/*POSITION-RINGS-v5*/';
 const MARK_V4 = '/*POSITION-RINGS-v4*/';
 const MARK_V3 = '/*POSITION-RINGS-v3*/';
@@ -158,11 +160,10 @@ const NN_V4_OLD_LABELS =
   '}' +
   'let n=D.mode===`coordination`||D.mode===`integrated`||D.mode===`coordChecker`,r=n?D.trajectoryType===`horizontal`:!0,i=n?D.trajectoryType===`vertical`||D.trajectoryType===`vertical_left`||D.trajectoryType===`vertical_right`:!0;if(r){let n=e-Wn/2+15,r=e+Wn/2-15;J.beginPath(),J.moveTo(n,t),J.lineTo(r,t),J.strokeStyle=jn().CROSSHAIR,J.globalAlpha=1,J.lineWidth=26,J.stroke()}if(i){let n=Gn*.85;J.beginPath(),J.moveTo(e,t-n),J.lineTo(e,t+n),J.strokeStyle=jn().CROSSHAIR,J.globalAlpha=1,J.lineWidth=26,J.stroke()}J.globalAlpha=1}';
 
-const NN_V6 =
-  'function Nn(){' + MARK +
+// v6 旧版 (图例标签, 但还没填色) — 用于升级路径
+const NN_V6_LEGEND_NO_FILL =
+  'function Nn(){' + MARK_V6 +
   'let e=Hn+D.crosshairOffsetX,t=Un+D.crosshairOffsetY;' +
-  // 位置觉: 同心圆标靶 (与报告 JPS 同款 5 环 + 分级配色, 像素按真实角度映射)
-  // 半径公式与协调性检测一致: tier * (Wn/2-15) / yawRange = tier° 对应的像素
   'if(D.mode===`position`){' +
     'let s=Wn/2-15,yawRange=D.yawRange||80,' +
     'tiers=[{r:2,c:`#22c55e`,label:`优秀 <2°`},' +
@@ -174,11 +175,87 @@ const NN_V6 =
       'let rr=tr.r*s/yawRange;' +
       'J.beginPath(),J.arc(e,t,rr,0,Math.PI*2),J.strokeStyle=tr.c,J.lineWidth=1.5,J.stroke()' +
     '});' +
+    'J.strokeStyle=`#94a3b8`,J.lineWidth=1.5,' +
+    'J.beginPath(),J.moveTo(e-8,t),J.lineTo(e+8,t),J.moveTo(e,t-8),J.lineTo(e,t+8),J.stroke();' +
+    'let legendX=e+9*s/yawRange+12,legendY=t-4*7;' +
+    'tiers.forEach((tr,idx)=>{' +
+      'let ly=legendY+idx*14;' +
+      'J.fillStyle=tr.c,J.beginPath(),J.arc(legendX,ly-3,4,0,Math.PI*2),J.fill(),' +
+      'J.fillStyle=tr.c,J.font=`10px Arial`,J.textAlign=`left`,J.textBaseline=`middle`,' +
+      'J.fillText(tr.label,legendX+8,ly)' +
+    '});' +
+    'return' +
+  '}' +
+  'let n=D.mode===`coordination`||D.mode===`integrated`||D.mode===`coordChecker`,r=n?D.trajectoryType===`horizontal`:!0,i=n?D.trajectoryType===`vertical`||D.trajectoryType===`vertical_left`||D.trajectoryType===`vertical_right`:!0;if(r){let n=e-Wn/2+15,r=e+Wn/2-15;J.beginPath(),J.moveTo(n,t),J.lineTo(r,t),J.strokeStyle=jn().CROSSHAIR,J.globalAlpha=1,J.lineWidth=26,J.stroke()}if(i){let n=Gn*.85;J.beginPath(),J.moveTo(e,t-n),J.lineTo(e,t+n),J.strokeStyle=jn().CROSSHAIR,J.globalAlpha=1,J.lineWidth=26,J.stroke()}J.globalAlpha=1}';
+
+// v7 旧版 (图例标签 + 环带填色, 但语法错: for(...)`{...});` 多余 ')') — 用于升级路径
+const NN_V7_SYNTAX_BUG =
+  'function Nn(){' + MARK_V7 +
+  'let e=Hn+D.crosshairOffsetX,t=Un+D.crosshairOffsetY;' +
+  'if(D.mode===`position`){' +
+    'let s=Wn/2-15,yawRange=D.yawRange||80,' +
+    'tiers=[{r:2,c:`#22c55e`,label:`优秀 <2°`},' +
+           '{r:3,c:`#84cc16`,label:`良好 2-3°`},' +
+           '{r:4.5,c:`#06b6d4`,label:`正常 3-4.5°`},' +
+           '{r:6,c:`#eab308`,label:`轻度 4.5-6°`},' +
+           '{r:9,c:`#f97316`,label:`中度 6-9°`}];' +
+    'for(let i=0;i<tiers.length;i++){' +
+      'let tr=tiers[i],innerR=i>0?tiers[i-1].r*s/yawRange:0;' +
+      'J.globalAlpha=0.12,J.fillStyle=tr.c,J.beginPath(),' +
+      'J.arc(e,t,tr.r*s/yawRange,0,Math.PI*2,!0),' +
+      'innerR>0&&J.arc(e,t,innerR,0,Math.PI*2,!0),' +
+      'J.fill(`evenodd`)' +
+    '};' +
+    'J.globalAlpha=1;' +
+    'tiers.forEach(tr=>{' +
+      'let rr=tr.r*s/yawRange;' +
+      'J.beginPath(),J.arc(e,t,rr,0,Math.PI*2),J.strokeStyle=tr.c,J.lineWidth=1.5,J.stroke()' +
+    '});' +
+    'J.strokeStyle=`#94a3b8`,J.lineWidth=1.5,' +
+    'J.beginPath(),J.moveTo(e-8,t),J.lineTo(e+8,t),J.moveTo(e,t-8),J.lineTo(e,t+8),J.stroke();' +
+    'let legendX=e+9*s/yawRange+12,legendY=t-4*7;' +
+    'tiers.forEach((tr,idx)=>{' +
+      'let ly=legendY+idx*14;' +
+      'J.fillStyle=tr.c,J.beginPath(),J.arc(legendX,ly-3,4,0,Math.PI*2),J.fill(),' +
+      'J.fillStyle=tr.c,J.font=`10px Arial`,J.textAlign=`left`,J.textBaseline=`middle`,' +
+      'J.fillText(tr.label,legendX+8,ly)' +
+    '});' +
+    'return' +
+  '}' +
+  'let n=D.mode===`coordination`||D.mode===`integrated`||D.mode===`coordChecker`,r=n?D.trajectoryType===`horizontal`:!0,i=n?D.trajectoryType===`vertical`||D.trajectoryType===`vertical_left`||D.trajectoryType===`vertical_right`:!0;if(r){let n=e-Wn/2+15,r=e+Wn/2-15;J.beginPath(),J.moveTo(n,t),J.lineTo(r,t),J.strokeStyle=jn().CROSSHAIR,J.globalAlpha=1,J.lineWidth=26,J.stroke()}if(i){let n=Gn*.85;J.beginPath(),J.moveTo(e,t-n),J.lineTo(e,t+n),J.strokeStyle=jn().CROSSHAIR,J.globalAlpha=1,J.lineWidth=26,J.stroke()}J.globalAlpha=1}';
+
+const NN_V8 =
+  'function Nn(){' + MARK +
+  'let e=Hn+D.crosshairOffsetX,t=Un+D.crosshairOffsetY;' +
+  // 位置觉: 同心圆标靶 (与报告 JPS 同款 5 环 + 分级配色 + 真实角度 + 环带填色)
+  // 半径公式与协调性检测一致: tier * (Wn/2-15) / yawRange = tier° 对应的像素
+  'if(D.mode===`position`){' +
+    'let s=Wn/2-15,yawRange=D.yawRange||80,' +
+    'tiers=[{r:2,c:`#22c55e`,label:`优秀 <2°`},' +
+           '{r:3,c:`#84cc16`,label:`良好 2-3°`},' +
+           '{r:4.5,c:`#06b6d4`,label:`正常 3-4.5°`},' +
+           '{r:6,c:`#eab308`,label:`轻度 4.5-6°`},' +
+           '{r:9,c:`#f97316`,label:`中度 6-9°`}];' +
+    // 环带填色: each tier fills annulus [prevR, thisR] (最内圈填中心圆)
+    // 用 fill(\'evenodd\') 实现环带 (两同向 arc + evenodd parity)
+    // globalAlpha=0.12 让填色不抢 stroke 主视觉
+    'for(let i=0;i<tiers.length;i++){' +
+      'let tr=tiers[i],innerR=i>0?tiers[i-1].r*s/yawRange:0;' +
+      'J.globalAlpha=0.12,J.fillStyle=tr.c,J.beginPath(),' +
+      'J.arc(e,t,tr.r*s/yawRange,0,Math.PI*2,!0),' +
+      'innerR>0&&J.arc(e,t,innerR,0,Math.PI*2,!0),' +
+      'J.fill(`evenodd`)' +
+    '};' +
+    'J.globalAlpha=1;' +
+    // 描边环线 (主视觉, 颜色鲜亮)
+    'tiers.forEach(tr=>{' +
+      'let rr=tr.r*s/yawRange;' +
+      'J.beginPath(),J.arc(e,t,rr,0,Math.PI*2),J.strokeStyle=tr.c,J.lineWidth=1.5,J.stroke()' +
+    '});' +
     // 中心小十字 (报告同款, 保留作精准定位)
     'J.strokeStyle=`#94a3b8`,J.lineWidth=1.5,' +
     'J.beginPath(),J.moveTo(e-8,t),J.lineTo(e+8,t),J.moveTo(e,t-8),J.lineTo(e,t+8),J.stroke();' +
     // 标签改为右侧图例 (真实比例下环太小, 贴环标签会重叠)
-    // 布局: 圆环外右边 12px 起, 每个 tier 一行, 行间距 14px
     'let legendX=e+9*s/yawRange+12,legendY=t-4*7;' +
     'tiers.forEach((tr,idx)=>{' +
       'let ly=legendY+idx*14;' +
@@ -206,32 +283,33 @@ const POS_RANGE_ORIG = 'e===`position`&&(D.yawRange=80,D.pitchRange=45';
 const POS_RANGE_V6   = 'e===`position`&&(D.yawRange=20,D.pitchRange=45';
 
 /* ---------- 升级路径 ---------- */
-// 注: v5 版本号被跳过 (曾计划但未落到 bundle), 实际落地版本: orig → v1 → v2 → v4 → v6
-if (src.includes(MARK_V4)) {
-  // v4 → v6: 标签由环上对角改为右侧图例 + position 模式 yawRange 80→20 (环默认可见)
-  replaceOnce('Nn() v4 → v6 (标签改右侧图例)', NN_V4_OLD_LABELS, NN_V6);
+// 注: v5 版本号被跳过 (曾计划但未落到 bundle), 实际落地版本: orig → v1 → v2 → v4 → v6 → v7(语法错) → v8(语法修复)
+if (src.includes(MARK_V7)) {
+  // v7 (语法错) → v8: 修掉 for 循环多余的 ')'
+  replaceOnce('Nn() v7(语法错) → v8 语法修复', NN_V7_SYNTAX_BUG, NN_V8);
+} else if (src.includes(MARK_V6)) {
+  // v6 → v8: 加环带填色 (annulus evenodd)
+  replaceOnce('Nn() v6 → v8 (环带填色)', NN_V6_LEGEND_NO_FILL, NN_V8);
+} else if (src.includes(MARK_V4)) {
+  replaceOnce('Nn() v4 → v8', NN_V4_OLD_LABELS, NN_V8);
   replaceOnce('position 模式 yawRange 80→20', POS_RANGE_ORIG, POS_RANGE_V6);
 } else if (src.includes(MARK_V3)) {
-  // v3 → v6: 环半径已是真实角度, 只需加 dotY 统一 + 标签图例化 + yawRange
-  replaceOnce('Nn() v3 → v6', NN_V3_NO_UNIFY, NN_V6);
+  replaceOnce('Nn() v3 → v8', NN_V3_NO_UNIFY, NN_V8);
   replaceOnce('dotY 比例统一', DOTY_ORIG, DOTY_V4);
   replaceOnce('position 模式 yawRange 80→20', POS_RANGE_ORIG, POS_RANGE_V6);
 } else if (src.includes(MARK_V2)) {
-  // v2 → v6: 环半径改真实角度 + dotY 统一 + 标签图例化 + yawRange
-  replaceOnce('Nn() v2 → v6', NN_V2_OLD_RADIUS, NN_V6);
+  replaceOnce('Nn() v2 → v8', NN_V2_OLD_RADIUS, NN_V8);
   replaceOnce('dotY 比例统一', DOTY_ORIG, DOTY_V4);
   replaceOnce('position 模式 yawRange 80→20', POS_RANGE_ORIG, POS_RANGE_V6);
 } else if (src.includes(MARK_V1)) {
-  // v1 → v6: 一步到位
-  replaceOnce('Nn() v1 → v6', NN_V1_OLD_LABELS, NN_V6);
+  replaceOnce('Nn() v1 → v8', NN_V1_OLD_LABELS, NN_V8);
   replaceOnce('dotY 比例统一', DOTY_ORIG, DOTY_V4);
   replaceOnce('position 模式 yawRange 80→20', POS_RANGE_ORIG, POS_RANGE_V6);
 } else {
-  // 原始 → v6
-  replaceOnce('Nn() 位置觉同心圆标靶', NN_ORIG, NN_V6);
+  replaceOnce('Nn() 位置觉同心圆标靶', NN_ORIG, NN_V8);
   replaceOnce('dotY 比例统一', DOTY_ORIG, DOTY_V4);
   replaceOnce('position 模式 yawRange 80→20', POS_RANGE_ORIG, POS_RANGE_V6);
 }
 
 fs.writeFileSync(FILE, src);
-console.log('DONE: 位置觉同心圆标靶 v6 已写入 ' + path.basename(FILE));
+console.log('DONE: 位置觉同心圆标靶 v8 (含环带填色 + 语法修复) 已写入 ' + path.basename(FILE));
