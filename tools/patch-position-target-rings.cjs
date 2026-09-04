@@ -38,7 +38,8 @@ const fs = require('fs');
 const path = require('path');
 
 const FILE = path.join(__dirname, '..', 'assets', 'index-Cc2Ik-Ku.js');
-const MARK = '/*POSITION-RINGS-v13*/';
+const MARK = '/*POSITION-RINGS-v14*/';
+const MARK_V13 = '/*POSITION-RINGS-v13*/';
 const MARK_V12 = '/*POSITION-RINGS-v12*/';
 const MARK_V11 = '/*POSITION-RINGS-v11*/';
 const MARK_V10 = '/*POSITION-RINGS-v10*/';
@@ -454,11 +455,12 @@ const NN_V13 =
   // 原逻辑保留 (stability / coordination / integrated / coordChecker 等)
   'let n=D.mode===`coordination`||D.mode===`integrated`||D.mode===`coordChecker`,r=n?D.trajectoryType===`horizontal`:!0,i=n?D.trajectoryType===`vertical`||D.trajectoryType===`vertical_left`||D.trajectoryType===`vertical_right`:!0;if(r){let n=e-Wn/2+15,r=e+Wn/2-15;J.beginPath(),J.moveTo(n,t),J.lineTo(r,t),J.strokeStyle=jn().CROSSHAIR,J.globalAlpha=1,J.lineWidth=26,J.stroke()}if(i){let n=Gn*.85;J.beginPath(),J.moveTo(e,t-n),J.lineTo(e,t+n),J.strokeStyle=jn().CROSSHAIR,J.globalAlpha=1,J.lineWidth=26,J.stroke()}J.globalAlpha=1}';
 
-/* ---------- mn() dotY 比例统一 (position 模式) ---------- */
-// 原: dotY = roll / rollCoefficient (rollRange=22.5 / Gn*0.85)
-// 改: position 模式用 yawCoefficient, 与 dotX 同比例 → 同心圆 x/y 都真实
-const DOTY_ORIG = 'D.dotY=D.roll/(D.rollCoefficient||(D.rollCoefficient=(D.rollRange||22.5)/(Gn*.85)))';
-const DOTY_V4   = 'D.dotY=D.roll/(D.mode===`position`?D.yawCoefficient:(D.rollCoefficient||(D.rollCoefficient=(D.rollRange||22.5)/(Gn*.85))))';
+/* ---------- mn() dot clamp (v14) ---------- */
+// 原: dot clamp 在 Wn/2-15 (canvas 半宽, 但比 canvas 大, 导致 yawRange=15 时 dot 会跑到 canvas 外)
+// v14: position 模式 dot clamp 在 9° 环边界 (外圈) → 任何误差都能看见 dot, 无死区
+//      >9° 的误差 dot 固定在 9° 环边界, 表示"重度障碍" (与报告分级一致)
+const CLAMP_ORIG = 'let e=D.mode===\`coordination\`?q.width/2-10:Wn/2-15,t=D.mode===\`coordination\`?q.height/2-10:Gn*.85';
+const CLAMP_V14  = 'let e=D.mode===\`coordination\`?q.width/2-10:D.mode===\`position\`?9*(Wn/2-15)/(D.yawRange||15):Wn/2-15,t=D.mode===\`coordination\`?q.height/2-10:D.mode===\`position\`?9*(Wn/2-15)/(D.yawRange||15):Gn*.85';
 
 /* ---------- position 模式 yawRange 默认 80 → 20 (v6) ---------- */
 // 原因: yawRange 决定「画布半宽像素 / 满量程角度」比例, 只影响显示不影响测量。
@@ -471,50 +473,67 @@ const POS_RANGE_V12   = 'e===`position`&&(D.yawRange=15,D.pitchRange=45'; // v12
 
 /* ---------- 升级路径 ---------- */
 // 注: v5 版本号被跳过 (曾计划但未落到 bundle), 实际落地版本: orig → v1 → v2 → v4 → v6 → v7(语法错) → v8(语法修复) → v9(0.12→0.25) → v10(0.25→0.5) → v11(0.5→1.0) → v12(yawRange 20→15)
-if (src.includes(MARK_V12)) {
-  // v12 → v13: 右侧图例字号 10→14px bold, 色点 4→6, 行高 14→22
-  replaceOnce('Nn() v12 → v13 (图例字号+色点+行高放大)', NN_V12_LEGEND_SMALL, NN_V13);
+if (src.includes(MARK_V13)) {
+  // v13 → v14: dot clamp 改外圈 9° 边界 (消除头部转动时死区)
+  replaceOnce('Nn() v13 → v14 (dot clamp 改外圈)', NN_V13, NN_V14);
+  replaceOnce('position 模式 dot clamp 改 9° 环边界', CLAMP_ORIG, CLAMP_V14);
+} else if (src.includes(MARK_V12)) {
+  // v12 → v14: 右上图例放大 + dot clamp 改外圈
+  replaceOnce('Nn() v12 → v14 (图例放大 + dot clamp 改外圈)', NN_V12_LEGEND_SMALL, NN_V14);
+  replaceOnce('position 模式 yawRange 20→15', POS_RANGE_V6, POS_RANGE_V12);
+  replaceOnce('position 模式 dot clamp 改 9° 环边界', CLAMP_ORIG, CLAMP_V14);
 } else if (src.includes(MARK_V11)) {
-  replaceOnce('Nn() v11 → v13 (yawRange 20→15 + 图例放大)', NN_V11_SMALL, NN_V13);
+  replaceOnce('Nn() v11 → v14 (yawRange 20→15 + 图例放大 + dot clamp 改外圈)', NN_V11_SMALL, NN_V14);
   replaceOnce('position 模式 yawRange 20→15', POS_RANGE_V6, POS_RANGE_V12);
+  replaceOnce('position 模式 dot clamp 改 9° 环边界', CLAMP_ORIG, CLAMP_V14);
 } else if (src.includes(MARK_V10)) {
-  replaceOnce('Nn() v10 → v13 (alpha 0.5→1.0 + yawRange 20→15 + 图例放大)', NN_V10_HALF, NN_V13);
+  replaceOnce('Nn() v10 → v14 (alpha 0.5→1.0 + yawRange 20→15 + 图例 + dot clamp)', NN_V10_HALF, NN_V14);
   replaceOnce('position 模式 yawRange 20→15', POS_RANGE_V6, POS_RANGE_V12);
+  replaceOnce('position 模式 dot clamp 改 9° 环边界', CLAMP_ORIG, CLAMP_V14);
 } else if (src.includes(MARK_V9)) {
-  replaceOnce('Nn() v9 → v13 (alpha 0.25→1.0 + yawRange 20→15 + 图例放大)', NN_V9_PALE, NN_V13);
+  replaceOnce('Nn() v9 → v14 (alpha 0.25→1.0 + yawRange 20→15 + 图例 + dot clamp)', NN_V9_PALE, NN_V14);
   replaceOnce('position 模式 yawRange 20→15', POS_RANGE_V6, POS_RANGE_V12);
+  replaceOnce('position 模式 dot clamp 改 9° 环边界', CLAMP_ORIG, CLAMP_V14);
 } else if (src.includes(MARK_V8)) {
-  replaceOnce('Nn() v8 → v13 (alpha 0.12→1.0 + yawRange 20→15 + 图例放大)', NN_V8_PALE_FILL, NN_V13);
+  replaceOnce('Nn() v8 → v14 (alpha 0.12→1.0 + yawRange 20→15 + 图例 + dot clamp)', NN_V8_PALE_FILL, NN_V14);
   replaceOnce('position 模式 yawRange 20→15', POS_RANGE_V6, POS_RANGE_V12);
+  replaceOnce('position 模式 dot clamp 改 9° 环边界', CLAMP_ORIG, CLAMP_V14);
 } else if (src.includes(MARK_V7)) {
-  replaceOnce('Nn() v7(语法错) → v13', NN_V7_SYNTAX_BUG, NN_V13);
+  replaceOnce('Nn() v7(语法错) → v14', NN_V7_SYNTAX_BUG, NN_V14);
   replaceOnce('dotY 比例统一', DOTY_ORIG, DOTY_V4);
   replaceOnce('position 模式 yawRange 80→15', POS_RANGE_ORIG, POS_RANGE_V12);
+  replaceOnce('position 模式 dot clamp 改 9° 环边界', CLAMP_ORIG, CLAMP_V14);
 } else if (src.includes(MARK_V6)) {
-  replaceOnce('Nn() v6 → v13', NN_V6_LEGEND_NO_FILL, NN_V13);
+  replaceOnce('Nn() v6 → v14', NN_V6_LEGEND_NO_FILL, NN_V14);
   replaceOnce('dotY 比例统一', DOTY_ORIG, DOTY_V4);
   replaceOnce('position 模式 yawRange 80→15', POS_RANGE_ORIG, POS_RANGE_V12);
+  replaceOnce('position 模式 dot clamp 改 9° 环边界', CLAMP_ORIG, CLAMP_V14);
 } else if (src.includes(MARK_V4)) {
-  replaceOnce('Nn() v4 → v13', NN_V4_OLD_LABELS, NN_V13);
+  replaceOnce('Nn() v4 → v14', NN_V4_OLD_LABELS, NN_V14);
   replaceOnce('dotY 比例统一', DOTY_ORIG, DOTY_V4);
   replaceOnce('position 模式 yawRange 80→15', POS_RANGE_ORIG, POS_RANGE_V12);
+  replaceOnce('position 模式 dot clamp 改 9° 环边界', CLAMP_ORIG, CLAMP_V14);
 } else if (src.includes(MARK_V3)) {
-  replaceOnce('Nn() v3 → v13', NN_V3_NO_UNIFY, NN_V13);
+  replaceOnce('Nn() v3 → v14', NN_V3_NO_UNIFY, NN_V14);
   replaceOnce('dotY 比例统一', DOTY_ORIG, DOTY_V4);
   replaceOnce('position 模式 yawRange 80→15', POS_RANGE_ORIG, POS_RANGE_V12);
+  replaceOnce('position 模式 dot clamp 改 9° 环边界', CLAMP_ORIG, CLAMP_V14);
 } else if (src.includes(MARK_V2)) {
-  replaceOnce('Nn() v2 → v13', NN_V2_OLD_RADIUS, NN_V13);
+  replaceOnce('Nn() v2 → v14', NN_V2_OLD_RADIUS, NN_V14);
   replaceOnce('dotY 比例统一', DOTY_ORIG, DOTY_V4);
   replaceOnce('position 模式 yawRange 80→15', POS_RANGE_ORIG, POS_RANGE_V12);
+  replaceOnce('position 模式 dot clamp 改 9° 环边界', CLAMP_ORIG, CLAMP_V14);
 } else if (src.includes(MARK_V1)) {
-  replaceOnce('Nn() v1 → v13', NN_V1_OLD_LABELS, NN_V13);
+  replaceOnce('Nn() v1 → v14', NN_V1_OLD_LABELS, NN_V14);
   replaceOnce('dotY 比例统一', DOTY_ORIG, DOTY_V4);
   replaceOnce('position 模式 yawRange 80→15', POS_RANGE_ORIG, POS_RANGE_V12);
+  replaceOnce('position 模式 dot clamp 改 9° 环边界', CLAMP_ORIG, CLAMP_V14);
 } else {
-  replaceOnce('Nn() 位置觉同心圆标靶', NN_ORIG, NN_V13);
+  replaceOnce('Nn() 位置觉同心圆标靶', NN_ORIG, NN_V14);
   replaceOnce('dotY 比例统一', DOTY_ORIG, DOTY_V4);
   replaceOnce('position 模式 yawRange 80→15', POS_RANGE_ORIG, POS_RANGE_V12);
+  replaceOnce('position 模式 dot clamp 改 9° 环边界', CLAMP_ORIG, CLAMP_V14);
 }
 
 fs.writeFileSync(FILE, src);
-console.log('DONE: 位置觉同心圆标靶 v13 (环更大 + 完全不透明 + 图例放大) 已写入 ' + path.basename(FILE));
+console.log('DONE: 位置觉同心圆标靶 v14 (环大 + 不透明 + 图例放大 + dot clamp 改外圈 9°) 已写入 ' + path.basename(FILE));
