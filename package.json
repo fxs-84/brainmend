@@ -20,6 +20,7 @@
     "patch:coord-vertical": "node tools/patch-coord-vertical.cjs",
     "patch:coord-catchup": "node tools/patch-coord-catchup.cjs",
     "patch:push-acq": "node tools/patch-push-acq.cjs",
+    "patch:position-rings": "node tools/patch-position-target-rings.cjs",
     "test:e2e:coord-drift": "node tests/e2e/coord-drift.spec.cjs",
     "test:e2e:coord-catchup": "node tests/e2e/coord-catchup.spec.cjs",
     "test:e2e:coord-vertical": "node tests/e2e/coord-vertical.spec.cjs",
