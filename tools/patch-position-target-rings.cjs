@@ -38,7 +38,9 @@ const fs = require('fs');
 const path = require('path');
 
 const FILE = path.join(__dirname, '..', 'assets', 'index-Cc2Ik-Ku.js');
-const MARK = '/*POSITION-RINGS-v9*/';
+const MARK = '/*POSITION-RINGS-v11*/';
+const MARK_V10 = '/*POSITION-RINGS-v10*/';
+const MARK_V9 = '/*POSITION-RINGS-v9*/';
 const MARK_V8 = '/*POSITION-RINGS-v8*/';
 const MARK_V7 = '/*POSITION-RINGS-v7*/';
 const MARK_V6 = '/*POSITION-RINGS-v6*/';
@@ -261,7 +263,79 @@ const NN_V8_PALE_FILL =
   '}' +
   'let n=D.mode===`coordination`||D.mode===`integrated`||D.mode===`coordChecker`,r=n?D.trajectoryType===`horizontal`:!0,i=n?D.trajectoryType===`vertical`||D.trajectoryType===`vertical_left`||D.trajectoryType===`vertical_right`:!0;if(r){let n=e-Wn/2+15,r=e+Wn/2-15;J.beginPath(),J.moveTo(n,t),J.lineTo(r,t),J.strokeStyle=jn().CROSSHAIR,J.globalAlpha=1,J.lineWidth=26,J.stroke()}if(i){let n=Gn*.85;J.beginPath(),J.moveTo(e,t-n),J.lineTo(e,t+n),J.strokeStyle=jn().CROSSHAIR,J.globalAlpha=1,J.lineWidth=26,J.stroke()}J.globalAlpha=1}';
 
-const NN_V9 =
+// v9 旧版 (alpha=0.25 还是不够饱和) — 用于升级路径
+const NN_V9_PALE =
+  'function Nn(){' + MARK_V9 +
+  'let e=Hn+D.crosshairOffsetX,t=Un+D.crosshairOffsetY;' +
+  'if(D.mode===`position`){' +
+    'let s=Wn/2-15,yawRange=D.yawRange||80,' +
+    'tiers=[{r:2,c:`#22c55e`,label:`优秀 <2°`},' +
+           '{r:3,c:`#84cc16`,label:`良好 2-3°`},' +
+           '{r:4.5,c:`#06b6d4`,label:`正常 3-4.5°`},' +
+           '{r:6,c:`#eab308`,label:`轻度 4.5-6°`},' +
+           '{r:9,c:`#f97316`,label:`中度 6-9°`}];' +
+    'for(let i=0;i<tiers.length;i++){' +
+      'let tr=tiers[i],innerR=i>0?tiers[i-1].r*s/yawRange:0;' +
+      'J.globalAlpha=0.25,J.fillStyle=tr.c,J.beginPath(),' +
+      'J.arc(e,t,tr.r*s/yawRange,0,Math.PI*2,!0),' +
+      'innerR>0&&J.arc(e,t,innerR,0,Math.PI*2,!0),' +
+      'J.fill(`evenodd`)' +
+    '};' +
+    'J.globalAlpha=1;' +
+    'tiers.forEach(tr=>{' +
+      'let rr=tr.r*s/yawRange;' +
+      'J.beginPath(),J.arc(e,t,rr,0,Math.PI*2),J.strokeStyle=tr.c,J.lineWidth=1.5,J.stroke()' +
+    '});' +
+    'J.strokeStyle=`#94a3b8`,J.lineWidth=1.5,' +
+    'J.beginPath(),J.moveTo(e-8,t),J.lineTo(e+8,t),J.moveTo(e,t-8),J.lineTo(e,t+8),J.stroke();' +
+    'let legendX=e+9*s/yawRange+12,legendY=t-4*7;' +
+    'tiers.forEach((tr,idx)=>{' +
+      'let ly=legendY+idx*14;' +
+      'J.fillStyle=tr.c,J.beginPath(),J.arc(legendX,ly-3,4,0,Math.PI*2),J.fill(),' +
+      'J.fillStyle=tr.c,J.font=`10px Arial`,J.textAlign=`left`,J.textBaseline=`middle`,' +
+      'J.fillText(tr.label,legendX+8,ly)' +
+    '});' +
+    'return' +
+  '}' +
+  'let n=D.mode===`coordination`||D.mode===`integrated`||D.mode===`coordChecker`,r=n?D.trajectoryType===`horizontal`:!0,i=n?D.trajectoryType===`vertical`||D.trajectoryType===`vertical_left`||D.trajectoryType===`vertical_right`:!0;if(r){let n=e-Wn/2+15,r=e+Wn/2-15;J.beginPath(),J.moveTo(n,t),J.lineTo(r,t),J.strokeStyle=jn().CROSSHAIR,J.globalAlpha=1,J.lineWidth=26,J.stroke()}if(i){let n=Gn*.85;J.beginPath(),J.moveTo(e,t-n),J.lineTo(e,t+n),J.strokeStyle=jn().CROSSHAIR,J.globalAlpha=1,J.lineWidth=26,J.stroke()}J.globalAlpha=1}';
+
+// v10 旧版 (alpha=0.5 仍不够饱和) — 用于升级路径
+const NN_V10_HALF =
+  'function Nn(){' + MARK_V10 +
+  'let e=Hn+D.crosshairOffsetX,t=Un+D.crosshairOffsetY;' +
+  'if(D.mode===`position`){' +
+    'let s=Wn/2-15,yawRange=D.yawRange||80,' +
+    'tiers=[{r:2,c:`#22c55e`,label:`优秀 <2°`},' +
+           '{r:3,c:`#84cc16`,label:`良好 2-3°`},' +
+           '{r:4.5,c:`#06b6d4`,label:`正常 3-4.5°`},' +
+           '{r:6,c:`#eab308`,label:`轻度 4.5-6°`},' +
+           '{r:9,c:`#f97316`,label:`中度 6-9°`}];' +
+    'for(let i=0;i<tiers.length;i++){' +
+      'let tr=tiers[i],innerR=i>0?tiers[i-1].r*s/yawRange:0;' +
+      'J.globalAlpha=0.5,J.fillStyle=tr.c,J.beginPath(),' +
+      'J.arc(e,t,tr.r*s/yawRange,0,Math.PI*2,!0),' +
+      'innerR>0&&J.arc(e,t,innerR,0,Math.PI*2,!0),' +
+      'J.fill(`evenodd`)' +
+    '};' +
+    'J.globalAlpha=1;' +
+    'tiers.forEach(tr=>{' +
+      'let rr=tr.r*s/yawRange;' +
+      'J.beginPath(),J.arc(e,t,rr,0,Math.PI*2),J.strokeStyle=tr.c,J.lineWidth=1.5,J.stroke()' +
+    '});' +
+    'J.strokeStyle=`#94a3b8`,J.lineWidth=1.5,' +
+    'J.beginPath(),J.moveTo(e-8,t),J.lineTo(e+8,t),J.moveTo(e,t-8),J.lineTo(e,t+8),J.stroke();' +
+    'let legendX=e+9*s/yawRange+12,legendY=t-4*7;' +
+    'tiers.forEach((tr,idx)=>{' +
+      'let ly=legendY+idx*14;' +
+      'J.fillStyle=tr.c,J.beginPath(),J.arc(legendX,ly-3,4,0,Math.PI*2),J.fill(),' +
+      'J.fillStyle=tr.c,J.font=`10px Arial`,J.textAlign=`left`,J.textBaseline=`middle`,' +
+      'J.fillText(tr.label,legendX+8,ly)' +
+    '});' +
+    'return' +
+  '}' +
+  'let n=D.mode===`coordination`||D.mode===`integrated`||D.mode===`coordChecker`,r=n?D.trajectoryType===`horizontal`:!0,i=n?D.trajectoryType===`vertical`||D.trajectoryType===`vertical_left`||D.trajectoryType===`vertical_right`:!0;if(r){let n=e-Wn/2+15,r=e+Wn/2-15;J.beginPath(),J.moveTo(n,t),J.lineTo(r,t),J.strokeStyle=jn().CROSSHAIR,J.globalAlpha=1,J.lineWidth=26,J.stroke()}if(i){let n=Gn*.85;J.beginPath(),J.moveTo(e,t-n),J.lineTo(e,t+n),J.strokeStyle=jn().CROSSHAIR,J.globalAlpha=1,J.lineWidth=26,J.stroke()}J.globalAlpha=1}';
+
+const NN_V11 =
   'function Nn(){' + MARK +
   'let e=Hn+D.crosshairOffsetX,t=Un+D.crosshairOffsetY;' +
   // 位置觉: 同心圆标靶 (与报告 JPS 同款 5 环 + 分级配色 + 真实角度 + 环带填色)
@@ -275,10 +349,10 @@ const NN_V9 =
            '{r:9,c:`#f97316`,label:`中度 6-9°`}];' +
     // 环带填色: each tier fills annulus [prevR, thisR] (最内圈填中心圆)
     // 用 fill(\'evenodd\') 实现环带 (两同向 arc + evenodd parity)
-    // globalAlpha=0.25 让颜色饱和可见 (v9: 0.12 太淡, 提到 0.25)
+    // globalAlpha=1.0 让环带填色完全不透明 (v11: 0.5 仍淡, 提到 1.0)
     'for(let i=0;i<tiers.length;i++){' +
       'let tr=tiers[i],innerR=i>0?tiers[i-1].r*s/yawRange:0;' +
-      'J.globalAlpha=0.25,J.fillStyle=tr.c,J.beginPath(),' +
+      'J.globalAlpha=1,J.fillStyle=tr.c,J.beginPath(),' +
       'J.arc(e,t,tr.r*s/yawRange,0,Math.PI*2,!0),' +
       'innerR>0&&J.arc(e,t,innerR,0,Math.PI*2,!0),' +
       'J.fill(`evenodd`)' +
@@ -320,10 +394,14 @@ const POS_RANGE_ORIG = 'e===`position`&&(D.yawRange=80,D.pitchRange=45';
 const POS_RANGE_V6   = 'e===`position`&&(D.yawRange=20,D.pitchRange=45';
 
 /* ---------- 升级路径 ---------- */
-// 注: v5 版本号被跳过 (曾计划但未落到 bundle), 实际落地版本: orig → v1 → v2 → v4 → v6 → v7(语法错) → v8(语法修复) → v9(alpha 0.12→0.25)
-if (src.includes(MARK_V8)) {
-  // v8 → v9: 环带填色透明度 0.12 → 0.25 (颜色更饱和可见)
-  replaceOnce('Nn() v8 → v9 (alpha 0.12→0.25)', NN_V8_PALE_FILL, NN_V9);
+// 注: v5 版本号被跳过 (曾计划但未落到 bundle), 实际落地版本: orig → v1 → v2 → v4 → v6 → v7(语法错) → v8(语法修复) → v9(alpha 0.12→0.25) → v10(0.25→0.5) → v11(0.5→1.0)
+if (src.includes(MARK_V10)) {
+  // v10 → v11: alpha 0.5 → 1.0 (颜色完全不透明)
+  replaceOnce('Nn() v10 → v11 (alpha 0.5→1.0)', NN_V10_HALF, NN_V11);
+} else if (src.includes(MARK_V9)) {
+  replaceOnce('Nn() v9 → v11 (alpha 0.25→1.0)', NN_V9_PALE, NN_V11);
+} else if (src.includes(MARK_V8)) {
+  replaceOnce('Nn() v8 → v11 (alpha 0.12→1.0)', NN_V8_PALE_FILL, NN_V11);
 } else if (src.includes(MARK_V7)) {
   replaceOnce('Nn() v7(语法错) → v9 (语法修复 + alpha 0.25)', NN_V7_SYNTAX_BUG, NN_V9);
 } else if (src.includes(MARK_V6)) {

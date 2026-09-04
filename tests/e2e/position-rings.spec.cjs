@@ -20,17 +20,17 @@ const base = process.argv[2] || "http://localhost:8765";
   await page.goto(base + "/index.html", { waitUntil: "load", timeout: 60000 });
   await page.waitForTimeout(1200);
 
-  // 1) bundle 已含 POSITION-RINGS-v9 标记
+  // 1) bundle 已含 POSITION-RINGS-v11 标记
   const bundleHasMark = await page.evaluate(async () => {
     try {
       const res = await fetch("./assets/index-Cc2Ik-Ku.js");
       const text = await res.text();
-      return text.includes("/*POSITION-RINGS-v9*/");
+      return text.includes("/*POSITION-RINGS-v11*/");
     } catch (e) {
       return false;
     }
   });
-  console.log((bundleHasMark ? "✅" : "❌") + " bundle 含 POSITION-RINGS-v9 标记");
+  console.log((bundleHasMark ? "✅" : "❌") + " bundle 含 POSITION-RINGS-v11 标记");
 
   // 2) 进入头动追踪, 再切到位置觉模式
   await page.click('#page2-tracking').catch((e) => console.log('page2-tracking 点击失败:', e.message));
