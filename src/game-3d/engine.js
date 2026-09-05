@@ -69,14 +69,24 @@ export class Road3DEngine {
     this.player = new Player();
     this.camCtl = new CockpitCamera(innerWidth / innerHeight);
     this.scene.add(this.player.group);
+
+    // worldGroup: 世界反向平移的载体 (海风球道 runner 同款方案)
+    // 陀螺仪控制 player.laneX (逻辑值), player.group.position.x 永远 = 0 (屏幕下方中央),
+    // worldGroup.position.x = -laneX → 摩托车视觉上相对世界移动
+    // (替代原"player.group.position.x 直接由陀螺仪控制"的方案, 避免车偏到车道最边上不好控制)
+    this.worldGroup = new THREE.Group();
+    this.scene.add(this.worldGroup);
+    // 把可动的世界元素全装进去 (sky.mesh 不动, player 不动)
+    this.worldGroup.add(this.road.group, this.buildings.group);
+
     this.obstacles = new ObstaclePool();
-    this.scene.add(this.obstacles.group);
+    this.worldGroup.add(this.obstacles.group);
     this.scenery = new SceneryPool();
-    this.scene.add(this.scenery.group);
+    this.worldGroup.add(this.scenery.group);
     this.coins = new Coins();
-    this.scene.add(this.coins.group);
+    this.worldGroup.add(this.coins.group);
     this.hazards = new HazardPool();
-    this.scene.add(this.hazards.group);
+    this.worldGroup.add(this.hazards.group);
     this.engine = new EngineSound();
 
     this.state = {
@@ -154,9 +164,12 @@ export class Road3DEngine {
     this.obstacles.reset();
     this.hazards.reset();
     this.coins.reset();
-    // 玩家回中间车道
+    // 玩家回中间车道 (laneX 是逻辑值, 屏幕位置由 worldGroup 反向平移)
     this.player.group.position.x = 0;
     this.player.group.rotation.z = 0;
+    this.player.laneX = 0;
+    // 世界归位
+    this.worldGroup.position.x = 0;
     // 生态回城市
     if (this.biomeManager) this.biomeManager.reset();
     // 引擎声状态
@@ -222,6 +235,10 @@ export class Road3DEngine {
     WorldCurve.updateFromDistance(Math.abs(st.worldZ));
     this.player.group.position.z = 0;
     this.player.update(input, dt);
+    // 世界反向平移: worldGroup 装路面/障碍/金币等所有可动物体, player 不动 (屏幕下方中央)
+    // 摩托车"往左变道" = 陀螺仪左转 → laneX 负 → worldGroup 向右移 → 障碍物视觉上向右移
+    // (海风球道 runner/game.js trackGroup.position.x = -ballX 同款方案)
+    this.worldGroup.position.x = -this.player.laneX;
     this.camCtl.update(this.player.group, input, st.speed, dt);
     this.biomeManager.update(st.worldZ);
     this.scenery.update(st.worldZ);
@@ -262,7 +279,7 @@ export class Road3DEngine {
 
       // 更新
       this.obstacles.update(dt, st.speed, 0, null, () => { st.dodged++; st.score += 50; });
-      this.coins.update(dt, st.speed, 0, this.player.group.position.x, () => { st.coins++; st.score += 100; this.engine.coin(); });
+      this.coins.update(dt, st.speed, 0, this.player.laneX, () => { st.coins++; st.score += 100; this.engine.coin(); });
       st.boostTimer = Math.max(0, st.boostTimer - dt);
 
       // 撞击处理：扣 1 命，3 命扣完才结束
@@ -280,7 +297,7 @@ export class Road3DEngine {
         }
       };
 
-      this.hazards.update(dt, st.speed, 0, this.player.group.position.x,
+      this.hazards.update(dt, st.speed, 0, this.player.laneX,
         (h) => {
           if (h.type === 'oil' || h.type === 'pothole') { st.speed *= 0.5; st.score = Math.max(0, st.score - 20); }
           else onCrash();
@@ -291,7 +308,7 @@ export class Road3DEngine {
       if (st.boostTimer > 0) st.speed = Math.min(st.maxSpeed * 1.3, st.speed + dt * 20);
 
       // 碰撞（玩家 z=0，按真实包围盒判定）
-      if (this.obstacles.checkCollision(this.player.group.position.x, 0, this.player.halfX, this.player.halfZ)) {
+      if (this.obstacles.checkCollision(this.player.laneX, 0, this.player.halfX, this.player.halfZ)) {
         onCrash();
       }
       st.score += dt * 2;
