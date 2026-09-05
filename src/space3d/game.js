@@ -262,44 +262,44 @@ export function bootSpace3D({
       speed = Math.min(CFG.baseSpeed + aliveT * CFG.speedRamp, CFG.baseSpeed * CFG.speedMaxMul);
 
       // 头控映射（直接用 raw-offset，绕开 HeadPoseSource 内 ±20°/±15° 的 VOR 钳制）：
-      // yaw ±20° → [-1,1] 横向；pitch ±16° → [-1,1] 纵向（D 通道抬头=负值，pitchInv 默认取反=抬头上升）
+      // yaw ±20° → [-1,1] 横向；roll ±16° → [-1,1] 纵向（抬头低头=roll, 与 bundle 坐标系对齐）
       // |yaw|<2.4° 死区回中
       if (!zeroed && input.source !== 'none') {
         // 首份数据到达后采 ~20 帧均值设零点（单帧即设会被通道启动延迟坑：
         // 首帧到达时头可能已在转/旧码在 raw=0 时盲设导致飞船被钉到一侧——用户实测"开局偏右"）
-        if (!tick._za) tick._za = { n: 0, sy: 0, sp: 0 };
+        if (!tick._za) tick._za = { n: 0, sy: 0, sr: 0 };
         const za = tick._za;
-        za.n++; za.sy += input.raw.yaw; za.sp += input.raw.pitch;
+        za.n++; za.sy += input.raw.yaw; za.sr += input.raw.roll;   // 采 roll (抬头低头)
         if (za.n >= 20) {
           input.offset.yaw = za.sy / za.n;
-          input.offset.pitch = za.sp / za.n;
+          input.offset.roll = za.sr / za.n;
           zeroed = true;
         }
       }
       const dyaw = input.raw.yaw - input.offset.yaw;
-      const dpitch = input.raw.pitch - input.offset.pitch;
+      const droll = input.raw.roll - (input.offset.roll || 0);     // 抬头低头=roll
       // 漂移对策：头在近中位（±6°/±5°）且准静止 1.2s 后，零点缓慢爬向当前头位（0.5/s 混合）。
       // 只在近中位启用——偏头躲障碍保持不动时不会把船偷走（runner 的"自动回中"教训）
-      const nearCenter = Math.abs(dyaw) < 6 && Math.abs(dpitch) < 5;
-      const vel = Math.abs(input.raw.yaw - (tick._py ?? input.raw.yaw)) + Math.abs(input.raw.pitch - (tick._pp ?? input.raw.pitch));
-      tick._py = input.raw.yaw; tick._pp = input.raw.pitch;
+      const nearCenter = Math.abs(dyaw) < 6 && Math.abs(droll) < 5;
+      const vel = Math.abs(input.raw.yaw - (tick._py ?? input.raw.yaw)) + Math.abs(input.raw.roll - (tick._pp ?? input.raw.roll));
+      tick._py = input.raw.yaw; tick._pp = input.raw.roll;
       if (nearCenter && vel < 0.15) {
         stillT += dt;
         if (stillT > 1.2) {
           const creep = Math.min(1, dt * 0.5);
           input.offset.yaw += (input.raw.yaw - input.offset.yaw) * creep;
-          input.offset.pitch += (input.raw.pitch - input.offset.pitch) * creep;
+          input.offset.roll = (input.offset.roll || 0) + (input.raw.roll - (input.offset.roll || 0)) * creep;
         }
       } else stillT = 0;
       const yawN = CFG.yawInv * (Math.abs(dyaw) < CFG.deadzone ? 0 : clamp(dyaw / CFG.yawRange, -1, 1));
-      const pitchN = CFG.pitchInv * clamp(dpitch / CFG.pitchRange, -1, 1);
+      const pitchN = CFG.pitchInv * clamp(droll / CFG.pitchRange, -1, 1);   // pitch 字段装 roll (抬头低头=roll)
       const targetX = yawN * CFG.boundX;
       const targetY = pitchN * CFG.boundY;
       const k = Math.min(1, dt * CFG.follow);     // 帧率无关平滑跟随
       shipX += (targetX - shipX) * k;
       shipY += (targetY - shipY) * k;
       ship.position.set(shipX, shipY, 0);
-      // 姿态：yaw→压弯滚转 ±0.6rad（右转右压），pitch→俯仰 ±0.35rad（抬头抬机头）
+      // 姿态：yaw→压弯滚转 ±0.6rad（右转右压），roll→俯仰 ±0.35rad（抬头抬机头）
       ship.rotation.z = -yawN * 0.6;
       ship.rotation.x = pitchN * 0.35;
       shipApi.update(dt, speed);
