@@ -17,7 +17,7 @@ function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 export class HeadPoseSource {
   constructor() {
     this.raw = { yaw: 0, pitch: 0, roll: 0 };
-    this.offset = { yaw: 0, pitch: 0 };
+    this.offset = { yaw: 0, pitch: 0, roll: 0 };   // 加 roll 通道 (第二章抬头低头=roll)
     this.t = performance.now() / 1000;
     this.source = 'none';       // none | external | deviceorientation | keyboard | auto
     this.clinical = true;
@@ -114,13 +114,14 @@ export class HeadPoseSource {
     }
     // 校准采样（每帧采当前 raw，无新样本时也能完成）
     if (this._cal) {
-      this._cal.samples.push({ yaw: this.raw.yaw, pitch: this.raw.pitch });
+      this._cal.samples.push({ yaw: this.raw.yaw, pitch: this.raw.pitch, roll: this.raw.roll });
       if (now >= this._cal.until) {
         const s = this._cal.samples;
         const m = s.length
           ? { yaw: s.reduce((a, b) => a + b.yaw, 0) / s.length,
-              pitch: s.reduce((a, b) => a + b.pitch, 0) / s.length }
-          : { yaw: 0, pitch: 0 };
+              pitch: s.reduce((a, b) => a + b.pitch, 0) / s.length,
+              roll: s.reduce((a, b) => a + b.roll, 0) / s.length }
+          : { yaw: 0, pitch: 0, roll: 0 };
         this.offset = m;
         const cb = this._cal.cb; this._cal = null;
         cb && cb();
@@ -160,6 +161,7 @@ export class HeadPoseSource {
     return {
       yaw: clamp(wrapPi(this.raw.yaw - this.offset.yaw), -YAW_LIMIT, YAW_LIMIT),
       pitch: clamp(this.raw.pitch - this.offset.pitch, -PITCH_LIMIT, PITCH_LIMIT),
+      roll: clamp(this.raw.roll - (this.offset.roll || 0), -PITCH_LIMIT, PITCH_LIMIT),  // 抬头低头=roll (第二章)
       t: this.t,
     };
   }

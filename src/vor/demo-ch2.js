@@ -328,23 +328,24 @@ export function bootVorCh2({
 
     input.update(dt);
     const pose = input.pose;
-    chain.push(pose.yaw, pose.pitch, pose.t);
+    // 第二章垂直 VOR: 抬头低头 = roll (不是 pitch), 用 pose.roll 替代 pose.pitch
+    chain.push(pose.yaw, pose.roll, pose.t);
     const sig = chain.update(pose.t);
 
     const judging = pace.state === 'active' && !pace.paused && !input.calibrating;
     evaluator.update({
-      yaw: pose.yaw, pitch: pose.pitch,
+      yaw: pose.yaw, pitch: pose.roll,          // pitch 字段装 roll (抬头低头=roll)
       wyaw: sig.omega.yaw, wpitch: sig.omega.pitch,
       alphaRMS: sig.alphaRMS, valid: sig.valid && judging, t: pose.t,
     });
     // 会话数据记录（3.6）：60Hz 头姿 + Active 块 αRMS
-    recorder.pushPose(pose.yaw, pose.pitch, input.raw.roll);
+    recorder.pushPose(pose.yaw, pose.roll, input.raw.roll);
     if (judging) recorder.addAlpha(sig.alphaRMS);
     // 毛刺惩罚（4.1.4）：平滑度掉线 → 齿轮火花变大 + 金属摩擦声（连 3 次整体闪红）
     if (judging && ch2.setSmooth(sig.valid && evaluator.isSmooth)) metronome.grind();
     // 靶心命中：仅 Active 块判定；靶心方位 = 最新周期中线 ± amp（自动吸收陀螺仪漂移）
     const ds = judging
-      ? drill.update(dt, pose.pitch, metronome.nearestBeatDelta(), evaluator.lastCycle?.midline ?? 0)
+      ? drill.update(dt, pose.roll, metronome.nearestBeatDelta(), evaluator.lastCycle?.midline ?? 0)
       : { err: 0, hold: 0 };
     ch2.setTargetLock(ds.hold);
     pace.update(dt);
@@ -353,9 +354,9 @@ export function bootVorCh2({
     // 固定场景模式（实测反馈：世界随头反扫不真实）——相机固定不转，场景静止；
     // 光球仍是相机子节点钉屏幕中心，只有靶环按"头相对目标的俯仰角差"纵向滑动：
     // 头越接近目标方位，靶环越滑向中心，与光球重合即命中（判定链只看角度，不受影响）
-    ch2.setTargetDelta(drill.bearing - pose.pitch);
+    ch2.setTargetDelta(drill.bearing - pose.roll);
 
-    hud.setAngle(pose.pitch, CFG.pitchLimit, CFG.amp);
+    hud.setAngle(pose.roll, CFG.pitchLimit, CFG.amp);
     hud.setLamp(evaluator.isSmooth, sig.alphaRMS, evaluator.threshold, judging);
     hud.setProgress(ch2.repaired, CFG.segs, drill.stats.hits, drill.stats.combo);
 
