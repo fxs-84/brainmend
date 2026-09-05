@@ -25,6 +25,11 @@ export class Player {
     this.group = new THREE.Group();
     this.mesh = null;
     this.loaded = false;
+    // laneX = 玩家在世界坐标中的横向位置 (车道偏移逻辑值)
+    // player.group.position.x 永远 = 0 (屏幕中央),
+    // 由 main.js 的 worldGroup.position.x = -laneX 实现"车钉屏幕中心, 世界反向平移"
+    // (海风球道 runner/game.js 同款方案, 用户反馈偏到车道边不好控制后改)
+    this.laneX = 0;
   }
 
   async load(manager) {
@@ -80,9 +85,9 @@ export class Player {
     if (Math.abs(yaw) < YAW_DEADZONE) yaw = 0;
     const targetX = THREE.MathUtils.clamp(yaw, -1, 1) * MAX_ROAD_X;
 
-    // 平滑跟随头部位置
-    const dx = targetX - this.group.position.x;
-    this.group.position.x += dx * Math.min(1, dt * LANE_LERP_SPEED);
+    // 平滑跟随头部位置 (更新 laneX 逻辑值; group.position.x 永远 = 0 屏幕中央)
+    const dx = targetX - this.laneX;
+    this.laneX += dx * Math.min(1, dt * LANE_LERP_SPEED);
 
     // 车身侧倾：直接跟随头部偏航（侧头 = 压弯），转头多少车倾斜多少
     // yaw>0（头右转）→ 负倾角（向右压）；头回正 → 车身回正

@@ -54,9 +54,16 @@ setupFog(scene);
 const sky = new Sky();
 scene.add(sky.mesh);
 const road = new Road();
-scene.add(road.group);
 const buildings = new Buildings();
-scene.add(buildings.group);
+
+// worldGroup: 世界反向平移的载体 (海风球道 runner 同款方案)
+// 陀螺仪控制 player.laneX (逻辑值), player.group.position.x 永远 = 0 (屏幕中央),
+// worldGroup.position.x = -laneX → 摩托车视觉上相对世界移动
+// (替代原"player.group.position.x 直接由陀螺仪控制"的方案, 避免车偏到车道最边上不好控制)
+const worldGroup = new THREE.Group();
+scene.add(worldGroup);
+worldGroup.add(road.group, buildings.group);
+
 const biomeManager = new BiomeManager({ road, sky, buildings, scene });
 
 // ---------- 加载管理 ----------
@@ -75,17 +82,17 @@ scene.add(player.group);
 
 // ---------- 障碍 + 街景 ----------
 const obstacles = new ObstaclePool();
-scene.add(obstacles.group);
+worldGroup.add(obstacles.group);
 const scenery = new SceneryPool();
-scene.add(scenery.group);
+worldGroup.add(scenery.group);
 
 // ---------- 金币 ----------
 const coins = new Coins();
-scene.add(coins.group);
+worldGroup.add(coins.group);
 
 // ---------- 多种障碍物 ----------
 const hazards = new HazardPool();
-scene.add(hazards.group);
+worldGroup.add(hazards.group);
 
 // ---------- 引擎声 ----------
 const engine = new EngineSound();
@@ -222,6 +229,10 @@ function loop(now) {
   input.yaw = _gyroYaw;
   input.pitch = _gyroPitch;
   player.update(input, dt);
+  // 世界反向平移: worldGroup 装路面/障碍/金币等所有可动物体, player 不动 (屏幕下方中央)
+  // 摩托车"往左变道" = 陀螺仪左转 → laneX 负 → worldGroup 向右移 → 障碍物视觉上向右移
+  // (海风球道 runner/game.js trackGroup.position.x = -ballX 同款方案)
+  worldGroup.position.x = -player.laneX;
   camCtl.update(player.group, input, state.speed, dt);
   biomeManager.update(state.worldZ);
   scenery.update(state.worldZ);
@@ -235,7 +246,7 @@ function loop(now) {
     state.spawnTimer -= dt;
     if (state.spawnTimer <= 0 && obstacles.active.length < state.maxObstacles) {
       state.spawnTimer = state.spawnInterval * (0.7 + Math.random() * 0.6);
-      const playerLane = xToLane(player.group.position.x);
+      const playerLane = xToLane(player.laneX);
       const isConvoy = Math.random() < 0.3;
       const count = isConvoy ? 2 : 1;
       const used = new Set();
@@ -281,7 +292,7 @@ function loop(now) {
     });
 
     // 金币更新（对齐 2D：收集 +100 分，玩家 z=0）
-    coins.update(dt, state.speed, 0, player.group.position.x, () => {
+    coins.update(dt, state.speed, 0, player.laneX, () => {
       state.coins++;
       state.score += 100;
       engine.coin();
@@ -304,7 +315,7 @@ function loop(now) {
 
     // 多种障碍物更新（玩家 z=0）
     state.boostTimer = Math.max(0, state.boostTimer - dt);
-    hazards.update(dt, state.speed, 0, player.group.position.x,
+    hazards.update(dt, state.speed, 0, player.laneX,
       (h) => {  // onHit：撞到障碍物
         if (h.type === 'oil' || h.type === 'pothole') {
           // 油污/坑洼 = 减速 debuff，不直接撞车
@@ -330,7 +341,7 @@ function loop(now) {
     }
 
     // 碰撞（玩家 z=0，按真实包围盒判定）
-    if (obstacles.checkCollision(player.group.position.x, 0, player.halfX, player.halfZ)) {
+    if (obstacles.checkCollision(player.laneX, 0, player.halfX, player.halfZ)) {
       onCrash();
     }
 
