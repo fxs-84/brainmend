@@ -196,6 +196,8 @@ export class Road3DEngine {
   // 接收外部喂入的陀螺仪数据（与 2D valleyEngine.setGyroInput 完全对齐）
   // 数据格式: pitch=俯仰(-90..90度, 抬头负值), yaw=左右(-180..180), roll=横滚
   // 对齐 2D 的 mapToGame YAW_PITCH_SPEED: yaw/35 → 转向, pitch/22.5 → 速度
+  // 注意: 抬头低头在陀螺仪坐标系里是 roll (不是 pitch) — 用户实测反馈
+  // 所以速度控制用 roll, 转向用 yaw
   setGyroInput(pitch, yaw, roll) {
     this.gyroInput = { pitch: pitch || 0, yaw: yaw || 0, roll: roll || 0 };
   }
@@ -203,10 +205,10 @@ export class Road3DEngine {
     // 优先用外部 setGyroInput 喂入的数据 (与 2D 引擎一致), 兜底 window.state 和 window.D
     const g = this.gyroInput || window.state || {};
     const yawRaw = (g.yaw != null) ? g.yaw : (window.D ? (window.D.yaw || 0) : 0);
-    const pitchRaw = (g.pitch != null) ? g.pitch : (window.D ? (window.D.pitch || 0) : 0);
+    const rollRaw = (g.roll != null) ? g.roll : (window.D ? (window.D.roll || 0) : 0);
     const yaw = Math.max(-1, Math.min(1, (yawRaw || 0) / 35));
-    const pitch = Math.max(-1, Math.min(1, (pitchRaw || 0) / 22.5));
-    return { yaw, pitch };
+    const roll = Math.max(-1, Math.min(1, (rollRaw || 0) / 22.5));
+    return { yaw, pitch: roll };  // pitch 字段实际装 roll (抬头低头=roll, 抬头加速低头减速)
   }
 
   _speedMultiplier(pitch) {
