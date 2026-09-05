@@ -208,7 +208,7 @@ export class Road3DEngine {
     const rollRaw = (g.roll != null) ? g.roll : (window.D ? (window.D.roll || 0) : 0);
     const yaw = Math.max(-1, Math.min(1, (yawRaw || 0) / 35));
     const roll = Math.max(-1, Math.min(1, (rollRaw || 0) / 22.5));
-    return { yaw, pitch: roll };  // pitch 字段实际装 roll (抬头低头=roll, 抬头加速低头减速)
+    return { yaw, pitch: -roll };  // pitch 字段实际装 roll (抬头低头=roll, 抬头加速低头减速; 取负因为设备 roll 方向与视觉方向相反)
   }
 
   _speedMultiplier(pitch) {
