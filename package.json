@@ -22,6 +22,8 @@
     "patch:push-acq": "node tools/patch-push-acq.cjs",
     "patch:position-rings": "node tools/patch-position-target-rings.cjs",
     "test:e2e:coord-drift": "node tests/e2e/coord-drift.spec.cjs",
+    "test:e2e:tracking-menu": "node tests/e2e/tracking-menu.spec.mjs",
+    "test:e2e:tunnel-v2": "node tests/e2e/tunnel-v2.spec.mjs",
     "test:e2e:coord-catchup": "node tests/e2e/coord-catchup.spec.cjs",
     "test:e2e:coord-vertical": "node tests/e2e/coord-vertical.spec.cjs",
     "test:ble-stall": "node tests/e2e/ble-stall.spec.cjs",
