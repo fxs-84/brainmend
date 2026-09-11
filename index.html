@@ -29,6 +29,16 @@
     .cog-modal-close { position:absolute;top:12px;right:16px;background:none;border:none;color:#aaa;font-size:24px;cursor:pointer; }
     .cog-modal-close:hover { color:#fff; }
     .cog-mod-btn.active { background:var(--primary); color:var(--bg-dark); border-color:var(--primary); }
+
+    /* 头动追踪二级菜单 (大卡片, 替代标靶+侧边栏直进) */
+    #tracking-menu { position:fixed; inset:0; z-index:9999; display:none; flex-direction:column; align-items:center; justify-content:center; background:linear-gradient(135deg,#fff5f5 0%,#f5f9ff 50%,#fffaf0 100%); text-align:center; overflow-y:auto; padding:24px 16px; box-sizing:border-box; }
+    #tracking-menu .tm-back { position:absolute; top:20px; left:24px; background:rgba(0,0,0,0.06); border:1px solid rgba(0,0,0,0.15); color:#5a7a9a; font-size:14px; padding:10px 18px; border-radius:10px; cursor:pointer; transition:background 0.2s; }
+    #tracking-menu .tm-back:hover { background:rgba(0,0,0,0.12); }
+    #tracking-menu .tm-grid { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; max-width:1100px; }
+    #tracking-menu .tm-card { flex:1 1 240px; max-width:340px; padding:24px 16px; color:#fff; border:none; border-radius:16px; cursor:pointer; font-size:16px; font-weight:600; font-family:inherit; transition:transform 0.2s; }
+    #tracking-menu .tm-card:hover { transform:scale(1.03); }
+    #tracking-menu .tm-icon { width:96px; height:96px; margin:0 auto 10px; background:#fff; border-radius:20px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(0,0,0,0.15); overflow:hidden; }
+    #tracking-menu .tm-sub { font-size:11px; font-weight:400; opacity:0.85; margin-top:6px; }
   </style>
   <style>
     @font-face {
@@ -206,6 +216,47 @@
                 <div style="font-size:40px;margin-bottom:8px;">📋</div>
                 神经系统自评
                 <div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:4px;">100 题 · 16 分区脑功能地图</div>
+            </button>
+        </div>
+    </div>
+
+
+    <!-- 头动追踪二级菜单 (大卡片) -->
+    <div id="tracking-menu">
+        <button id="tm-back-home" class="tm-back">← 返回首页</button>
+        <img src="assets/brainmend-home.png" alt="BrainMend Logo" style="max-width:180px;height:auto;margin-bottom:12px;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.08));">
+        <h2 style="font-size:32px;margin:0 0 8px 0;color:#1a3a5c;font-weight:700;">头动追踪</h2>
+        <p style="font-size:14px;color:#5a7a9a;margin:0 0 32px 0;">选择检测 / 训练模式</p>
+        <div class="tm-grid">
+            <button class="tm-card" data-tmode="coordination" style="background:linear-gradient(135deg,#FF6B6B,#FF8E53);box-shadow:0 8px 24px rgba(255,107,107,0.25);">
+                <div class="tm-icon"><canvas id="tm-icon-coordination" width="96" height="96"></canvas></div>
+                协调性检查
+                <div class="tm-sub">8字轨迹追踪评估</div>
+            </button>
+            <button class="tm-card" data-tmode="position" style="background:linear-gradient(135deg,#4facfe,#00f2fe);box-shadow:0 8px 24px rgba(79,172,254,0.25);">
+                <div class="tm-icon"><canvas id="tm-icon-position" width="96" height="96"></canvas></div>
+                位置觉检查
+                <div class="tm-sub">同心圆标靶定位</div>
+            </button>
+            <button class="tm-card" data-tmode="visualVestibular" style="background:linear-gradient(135deg,#43E97B,#38F9D7);box-shadow:0 8px 24px rgba(67,233,123,0.25);">
+                <div class="tm-icon"><canvas id="tm-icon-vv" width="96" height="96"></canvas></div>
+                视动训练
+                <div class="tm-sub">条纹视动刺激</div>
+            </button>
+            <button class="tm-card" data-tmode="visualChecker" style="background:linear-gradient(135deg,#667eea,#764ba2);box-shadow:0 8px 24px rgba(102,126,234,0.25);">
+                <div class="tm-icon"><canvas id="tm-icon-vc" width="96" height="96"></canvas></div>
+                大脑垂直感知运动训练
+                <div class="tm-sub">棋盘格滑动感知</div>
+            </button>
+            <button class="tm-card" data-tmode="coordChecker" style="background:linear-gradient(135deg,#f77062,#fe5196);box-shadow:0 8px 24px rgba(247,112,98,0.25);">
+                <div class="tm-icon"><canvas id="tm-icon-cc" width="96" height="96"></canvas></div>
+                视觉-协调性整合训练
+                <div class="tm-sub">棋盘协调 · 8字轨迹</div>
+            </button>
+            <button class="tm-card" data-tmode="game" style="background:linear-gradient(135deg,#f093fb,#f5576c);box-shadow:0 8px 24px rgba(245,87,108,0.25);">
+                <div class="tm-icon"><span style="font-size:48px;">🎧</span></div>
+                脑科学游戏
+                <div class="tm-sub">健脑小游戏</div>
             </button>
         </div>
     </div>
@@ -630,7 +681,7 @@
                         <button id="cc-score-close" class="btn-secondary" style="margin-top:8px;width:100%;padding:8px 6px;font-size:12px;font-weight:600;background:rgba(255,255,255,0.06);border:1px solid rgba(0,217,165,0.55);color:var(--primary);border-radius:6px;cursor:pointer;transition:background 0.15s,border-color 0.15s;" onmouseover="this.style.background='rgba(0,217,165,0.18)';this.style.borderColor='rgba(0,217,165,0.9)'" onmouseout="this.style.background='rgba(255,255,255,0.06)';this.style.borderColor='rgba(0,217,165,0.55)'">✕ 关闭</button>
                     </div>
 
-                    <div class="panel-title">棋盘协调训练</div>
+                    <div class="panel-title">视觉-协调性整合训练</div>
                     <div class="data-card" style="text-align:center;padding:8px;">
                         <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">棋盘背景上叠加协调任务：跟随红点移动</div>
 
@@ -1017,6 +1068,8 @@
         }
         function goHome() {
             page2.style.display = 'flex';
+            var tm = document.getElementById('tracking-menu');
+            if (tm) tm.style.display = 'none';
             var tb = document.getElementById('cog-toolbar');
             if (tb) tb.style.display = '';
             if (window._hideCognitive) window._hideCognitive();
@@ -1103,19 +1156,85 @@
             }
         });
 
-        // 3. 头动追踪系统
-        var trkBtn = document.getElementById('page2-tracking');
-        if (trkBtn) trkBtn.addEventListener('click', function() {
-            page2.style.display = 'none';
+        // 3. 头动追踪系统 → 先显示二级大卡片菜单 (不直进标靶+侧边栏)
+        // 卡片图标: 用与各模式主画布相同的画法在小 canvas 上画真实标靶
+        function _tmDrawIcons() {
+            function cv(id) { var c = document.getElementById(id); return c ? c.getContext('2d') : null; }
+            // 协调性: 8字标靶 (参数方程 x=sin f, y=sin f·cos f, 与主画布一致)
+            var ctx = cv('tm-icon-coordination');
+            if (ctx) {
+                ctx.clearRect(0, 0, 96, 96);
+                ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+                ctx.beginPath();
+                for (var i = 0; i <= 200; i++) {
+                    var f = i / 200 * Math.PI * 2;
+                    var x = 48 + Math.sin(f) * 38, y = 48 - Math.sin(f) * Math.cos(f) * 34;
+                    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+                }
+                ctx.stroke();
+                ctx.fillStyle = '#B91C1C'; // 红色靶点
+                ctx.beginPath(); ctx.arc(48 + Math.sin(0.6) * 38, 48 - Math.sin(0.6) * Math.cos(0.6) * 34, 7, 0, Math.PI * 2); ctx.fill();
+            }
+            // 位置觉: 同心圆标靶 (外→内 7 层色带, 色值与主画布 tiers 一致) + 中心十字
+            ctx = cv('tm-icon-position');
+            if (ctx) {
+                ctx.clearRect(0, 0, 96, 96);
+                var tiers = ['#b91c1c', '#ef4444', '#f97316', '#eab308', '#06b6d4', '#84cc16', '#22c55e'];
+                for (var k = 0; k < tiers.length; k++) {
+                    ctx.fillStyle = tiers[k];
+                    ctx.beginPath(); ctx.arc(48, 48, 44 - k * 6.2, 0, Math.PI * 2); ctx.fill();
+                }
+                ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(40, 48); ctx.lineTo(56, 48); ctx.moveTo(48, 40); ctx.lineTo(48, 56); ctx.stroke();
+            }
+            // 视动训练: 黑色竖条纹 + 中心红锚点
+            ctx = cv('tm-icon-vv');
+            if (ctx) {
+                ctx.clearRect(0, 0, 96, 96);
+                ctx.fillStyle = '#111';
+                for (var sx = 4; sx < 96; sx += 20) ctx.fillRect(sx, 0, 10, 96);
+                ctx.fillStyle = '#B91C1C';
+                ctx.beginPath(); ctx.arc(48, 48, 8, 0, Math.PI * 2); ctx.fill();
+            }
+            // 大脑垂直感知: 黑白棋盘格
+            ctx = cv('tm-icon-vc');
+            if (ctx) {
+                ctx.clearRect(0, 0, 96, 96);
+                for (var r = 0; r < 6; r++) for (var c = 0; c < 6; c++) {
+                    ctx.fillStyle = (r + c) % 2 ? '#111' : '#fff';
+                    ctx.fillRect(c * 16, r * 16, 16, 16);
+                }
+            }
+            // 棋盘协调: 棋盘格 + 8字轨迹
+            ctx = cv('tm-icon-cc');
+            if (ctx) {
+                ctx.clearRect(0, 0, 96, 96);
+                for (var r2 = 0; r2 < 6; r2++) for (var c2 = 0; c2 < 6; c2++) {
+                    ctx.fillStyle = (r2 + c2) % 2 ? '#222' : '#f5f5f5';
+                    ctx.fillRect(c2 * 16, r2 * 16, 16, 16);
+                }
+                ctx.strokeStyle = '#f97316'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+                ctx.beginPath();
+                for (var j = 0; j <= 200; j++) {
+                    var f2 = j / 200 * Math.PI * 2;
+                    var x2 = 48 + Math.sin(f2) * 38, y2 = 48 - Math.sin(f2) * Math.cos(f2) * 34;
+                    j ? ctx.lineTo(x2, y2) : ctx.moveTo(x2, y2);
+                }
+                ctx.stroke();
+            }
+        }
+        // 进入头动追踪主界面 (显示侧边栏; 模式选择改由大卡片菜单承担, 故隐藏 view-mode-select)
+        window._enterTrackingApp = function() {
             if (window._hideCognitive) window._hideCognitive();
             var vc = document.getElementById('view-cognitive');
             var vm = document.getElementById('view-mode-select');
             var sp = document.getElementById('side-panel');
             if (vc) vc.style.display = 'none';
-            if (vm) vm.style.display = '';
+            if (vm) vm.style.display = 'none';
             if (sp) {
-              // 永远保留侧边栏（用户明确要求）。窄屏不加 important，让 mobile CSS 媒体查询
-              // （底部抽屉布局）覆盖；桌面端强制 210px 防止被压缩。
+              // 先清掉菜单期间设置的 display:none!important, 否则窄屏下普通优先级覆盖不掉
+              sp.style.removeProperty('display');
+              // 窄屏不加 important，让 mobile CSS 媒体查询（底部抽屉布局）覆盖；桌面端强制 210px。
               var isNarrow = window.innerWidth <= 767;
               sp.style.setProperty('display', 'flex', isNarrow ? '' : 'important');
               if (!isNarrow) {
@@ -1123,6 +1242,55 @@
                 sp.style.setProperty('min-width', '210px', 'important');
               }
             }
+        };
+        // 从大卡片直接进入指定模式
+        window._enterTrackingMode = function(mode) {
+            var tm = document.getElementById('tracking-menu');
+            if (tm) tm.style.display = 'none';
+            page2.style.display = 'none';
+            window._enterTrackingApp();
+            var modeBtn = document.querySelector('#view-mode-select .mode-btn[data-mode="' + mode + '"]');
+            if (modeBtn) modeBtn.click(); // 走 bundle 的 Tp() 切换视图
+        };
+        var trkBtn = document.getElementById('page2-tracking');
+        if (trkBtn) trkBtn.addEventListener('click', function() {
+            page2.style.display = 'none';
+            if (window._hideCognitive) window._hideCognitive();
+            // 菜单覆盖期间真正隐藏侧边栏 (进入模式时由 _enterTrackingApp 恢复)
+            var sp = document.getElementById('side-panel');
+            if (sp) sp.style.setProperty('display', 'none', 'important');
+            var tm = document.getElementById('tracking-menu');
+            if (tm) { tm.style.display = 'flex'; _tmDrawIcons(); }
+        });
+        // 大卡片点击 → 进入对应模式
+        var tmMenu = document.getElementById('tracking-menu');
+        if (tmMenu) {
+            tmMenu.querySelectorAll('.tm-card').forEach(function(card) {
+                card.addEventListener('click', function() {
+                    window._enterTrackingMode(card.getAttribute('data-tmode'));
+                });
+            });
+            var tmBack = document.getElementById('tm-back-home');
+            if (tmBack) tmBack.addEventListener('click', goHome);
+        }
+        // 各模式视图内 "← 返回" → 回到大卡片菜单 (bundle 的 Tp 仍会把侧边栏切回 view-mode-select, 被菜单盖住无妨)
+        // 游戏选择面板 (#game-select-panel, bundle 生成) 的 "← 返回" 同样拦截
+        document.addEventListener('click', function(e) {
+            if (!e.target || !e.target.closest) return;
+            var b = e.target.closest('.back-btn');
+            var isGamePanel = false;
+            if (!b) { b = e.target.closest('#game-back-to-menu'); isGamePanel = !!b; }
+            if (!b) return;
+            if (window._patientSandbox || document.body.getAttribute('data-patient-sandbox') === '1') return; // 沙盒患者流程保持原样
+            if (!isGamePanel) {
+                var ids = ['view-coordination', 'view-rom', 'view-position', 'view-visual-vestibular', 'view-visual-checker', 'view-coord-checker', 'view-game'];
+                var v = b.parentElement;
+                while (v && ids.indexOf(v.id) < 0) v = v.parentElement;
+                if (!v) return;
+            }
+            var tm = document.getElementById('tracking-menu');
+            if (!tm || page2.style.display !== 'none') return; // 头动追踪不在前台时不拦截
+            tm.style.display = 'flex';
         });
 
         // 4. 侧边栏返回首页按钮
@@ -1578,14 +1746,25 @@
                     if (trkBtn) {
                         clearInterval(readyTimer);
                         trkBtn.click();
-                        setTimeout(function() {
+                        // 扫码直达指定模式: 跳过大卡片菜单
+                        // bundle 的 mode-btn 点击处理由压缩 JS 异步绑定, 300ms 不一定够,
+                        // 改为重试: 目标 view 真正显示出来才算激活成功
+                        var viewIds = { coordination:'view-coordination', rom:'view-rom', position:'view-position', visualVestibular:'view-visual-vestibular', visualChecker:'view-visual-checker', coordChecker:'view-coord-checker', game:'view-game' };
+                        var attempts = 0;
+                        var activateTimer = setInterval(function() {
+                            attempts++;
+                            var tm = document.getElementById('tracking-menu');
+                            if (tm) tm.style.display = 'none';
+                            if (window._enterTrackingApp) window._enterTrackingApp();
                             var modeBtn = document.querySelector('#view-mode-select .mode-btn[data-mode="' + testMode + '"]');
                             if (modeBtn) {
                                 document.querySelectorAll('#view-mode-select .mode-btn').forEach(function(b){ b.classList.remove('active'); });
                                 modeBtn.classList.add('active');
                                 modeBtn.click();
                             }
-                        }, 300);
+                            var v = viewIds[testMode] && document.getElementById(viewIds[testMode]);
+                            if ((v && v.style.display !== 'none') || attempts > 20) clearInterval(activateTimer);
+                        }, 400);
                     } else if (retries > 50) {
                         clearInterval(readyTimer);
                     }
