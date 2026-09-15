@@ -97,17 +97,17 @@ const homeBack = await page.evaluate(() => ({
 }));
 check('返回首页: page2 显示且菜单隐藏', homeBack.p2 === 'flex' && homeBack.tm === 'none');
 
-// 7. 脑科学游戏 → 游戏选择面板的 ← 返回 → 应回到大卡片菜单
+// 7. 脑科学游戏 → 卡片选择面板显示; 面板返回 → 回到大卡片菜单
 await page.click('#page2-tracking');
 await page.waitForTimeout(400);
 await page.click('.tm-card[data-tmode="game"]');
-await page.waitForTimeout(1200);
-const panelShown = await page.evaluate(() => {
-  const p = document.getElementById('game-select-panel');
-  return !!p && p.style.display !== 'none' && !!p.offsetParent;
-});
-check('进入脑科学游戏: 游戏选择面板显示', panelShown);
-await page.click('#game-back-to-menu');
+await page.waitForTimeout(1500);
+const panelShown = await page.evaluate(() => ({
+  gc: getComputedStyle(document.getElementById('game-cards')).display,
+  cards: document.querySelectorAll('#gc-grid .gc-card').length
+}));
+check('进入脑科学游戏: 卡片面板显示', panelShown.gc === 'flex' && panelShown.cards === 12);
+await page.click('#gc-back');
 await page.waitForTimeout(400);
 const tmAfterGame = await page.evaluate(() => getComputedStyle(document.getElementById('tracking-menu')).display);
 check('游戏面板返回后回到大卡片菜单', tmAfterGame === 'flex');

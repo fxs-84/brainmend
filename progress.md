@@ -48,6 +48,16 @@ Original prompt: 用户想重做脑科学游戏中的「太空隧道 - 穿越小
 - 精灵 v8: 深色岩体 (#42465a→#0d0e13) + 手绘白描边 (两道粗细不一) + 抖动白圈坑 (9 点 wobble 路径, 非正圆) —— 插画感。
 - 测试: 自动驾驶升级为避障转向 (扫 dy∈[-0.16,0.16] 候选, 按最近障碍距离减中心偏置打分), 否则中心逼迫石必撞。
 
+## 游戏卡片选择面板 (脑科学游戏)
+- bundle 原生 #game-select-panel 用 CSS `display:none!important` 隐藏, 另建 `#game-cards` 覆盖层 (z-index 9998, 深空渐变, 卡片=游戏截图+标题+简介)。
+- 7 张卡片 = 太空射击/山谷飞行/太空3D飞行/前庭固视/太空点头/太空隧道/公路赛车; 截图取自真实游戏画面 (sharp 缩到 480 宽, 存 assets/game-cards/*.png, 各 80~150KB)。山谷/点头截图是 Playwright 实机截取 (screenshots/game-card-src-*.png)。
+- 点击卡片 → 程序化点击隐藏原面板的 scene/mode 按钮 + #start-game-btn 开始; 公路赛车卡两步: 先展开 简单/普通/困难, 直接写 window._easyMode/_roadSpeedConfig (PRESETS 参数内联在 index.html)。
+- 面板显隐同步: 轮询等面板创建 → MutationObserver 盯 style.display, attach 后立即同步一次 (防竞态); ⚠️ 不要在 sync 里改 panel 自身的 display, 否则 mutation 自触发把覆盖层关掉。
+- 返回按钮 → 点 #game-back-to-menu, 拦截器自然回到头动追踪大卡片菜单。
+- 补漏 (用户指出"还有几个没做出来"): 面板里还有 5 个注入类游戏 —— 回声编织者一/二章 (vorch1/vorch2)、海风球道 (runner)、节拍打地鼠 (mole)、公路赛车3D (road3d, 第一视角摩托), 由 src/*/integrate.js 轮询 panel.offsetParent 注入。隐藏面板不能用 display:none (offsetParent 恒 null → 注入永远不发生), 改用 visibility:hidden + 移出屏外。注入按钮异步出现, startGameCard 对 mode 按钮轮询 (200ms×25) 后再点开始; 这 5 个游戏点 mode 设 window.gameUI.selectedMode, 开始按钮被对应 integrate 捕获转发。卡片截图: vor-ch1-active / ch2-1-idle / runner-1-game / mole-game / 3d-final。
+- 2D/3D 拆分 (用户指出 3D 摩托入口丢失): 原"公路赛车"卡是 bundle 2D 版 (竖版俯视), 3D 摩托 (road3d) 是 game-3d 注入的独立入口。现在两张卡: 公路赛车(2D, 直接开始) + 公路赛车 3D(第一视角, 保留简单/普通/困难两步 —— _roadSpeedConfig/_easyMode 只有 src/game-3d/engine.js 消费)。road.png 截自 2D 实机 (竖版公路), road3d.png 用 3D 第一视角图。
+- e2e: tests/e2e/game-cards.spec.mjs (13 断言); tracking-menu.spec 对应断言已同步更新。
+
 ## TODO / 建议
 - 金币收集半径 38px，自动驾驶截图里金币会与飞船短暂重叠（不影响游玩）；介意可加大到 42。
 - rest 段圆环阵在极小概率下与带环行星视觉重叠，可再调。

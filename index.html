@@ -39,6 +39,28 @@
     #tracking-menu .tm-card:hover { transform:scale(1.03); }
     #tracking-menu .tm-icon { width:96px; height:96px; margin:0 auto 10px; background:#fff; border-radius:20px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(0,0,0,0.15); overflow:hidden; }
     #tracking-menu .tm-sub { font-size:11px; font-weight:400; opacity:0.85; margin-top:6px; }
+
+    /* 脑科学游戏: 卡片式游戏选择面板 (替代 bundle 原生面板)
+       用 visibility+移出屏外隐藏 (不能用 display:none —— mole/runner/vor 的按钮注入依赖 offsetParent) */
+    #game-select-panel { position:absolute !important; left:-9999px !important; top:0 !important; transform:none !important; visibility:hidden !important; pointer-events:none !important; }
+    #game-cards { position:fixed; inset:0; z-index:9998; display:none; flex-direction:column; align-items:center; justify-content:center; background:linear-gradient(135deg,#0d0a1e 0%,#1a1035 50%,#0a1226 100%); text-align:center; overflow-y:auto; padding:24px 16px; box-sizing:border-box; }
+    #game-cards .gc-back { position:absolute; top:20px; left:24px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.2); color:#c7d2fe; font-size:14px; padding:10px 18px; border-radius:10px; cursor:pointer; transition:background 0.2s; }
+    #game-cards .gc-back:hover { background:rgba(255,255,255,0.16); }
+    #game-cards h2 { color:#fff; font-size:30px; margin:0 0 6px; font-weight:700; }
+    #game-cards .gc-sub { color:#8b93b8; font-size:14px; margin:0 0 28px; }
+    #game-cards .gc-grid { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; max-width:1200px; }
+    .gc-card { position:relative; width:250px; border:none; border-radius:16px; overflow:hidden; cursor:pointer; padding:0; background:#1a1a2e; box-shadow:0 8px 24px rgba(0,0,0,0.4); transition:transform 0.2s; font-family:inherit; text-align:left; }
+    .gc-card:hover { transform:scale(1.04); }
+    .gc-card img { display:block; width:100%; height:132px; object-fit:cover; }
+    .gc-card .gc-info { padding:10px 12px 12px; background:linear-gradient(135deg,#241b45,#16213e); }
+    .gc-card .gc-title { color:#fff; font-size:16px; font-weight:600; }
+    .gc-card .gc-desc { color:#9aa3c0; font-size:11px; margin-top:4px; }
+    .gc-card .gc-diff { display:none; gap:8px; margin-top:10px; }
+    .gc-card.expanded .gc-diff { display:flex; }
+    .gc-diff button { flex:1; padding:8px 4px; border-radius:8px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.08); color:#fff; font-size:12px; cursor:pointer; font-family:inherit; }
+    .gc-diff button:hover { background:rgba(255,255,255,0.2); }
+    /* 视口偏矮时改顶部对齐, 避免居中溢出盖住返回按钮 */
+    @media (max-height:860px) { #game-cards { justify-content:flex-start; } }
   </style>
   <style>
     @font-face {
@@ -259,6 +281,15 @@
                 <div class="tm-sub">健脑小游戏</div>
             </button>
         </div>
+    </div>
+
+
+    <!-- 脑科学游戏: 卡片式游戏选择面板 -->
+    <div id="game-cards">
+        <button id="gc-back" class="gc-back">← 返回</button>
+        <h2>🎮 脑科学游戏</h2>
+        <p class="gc-sub">选择游戏开始训练</p>
+        <div class="gc-grid" id="gc-grid"></div>
     </div>
 
 
@@ -1292,6 +1323,102 @@
             if (!tm || page2.style.display !== 'none') return; // 头动追踪不在前台时不拦截
             tm.style.display = 'flex';
         });
+
+        // 4.5 脑科学游戏: 卡片式游戏选择面板 (替代 bundle 原生面板, 卡片用游戏截图)
+        var GAME_CARDS = [
+            { scene: 'space',   mode: 'shooting', img: 'assets/game-cards/space-shooting.png', title: '太空射击',   desc: '消灭敌舰 · 保卫星系' },
+            { scene: 'valley',  mode: 'shooting', img: 'assets/game-cards/valley.png',         title: '山谷飞行',   desc: '峡谷穿梭 · 闪避射击' },
+            { scene: 'space3d', mode: 'shooting', img: 'assets/game-cards/space3d.png',        title: '太空3D飞行', desc: '3D 太空 · 环带穿越' },
+            { scene: 'space',   mode: 'vor',      img: 'assets/game-cards/vor.png',            title: '前庭固视',   desc: '飞船不动 · 画面随头动 ±20°' },
+            { scene: 'space',   mode: 'nodding',  img: 'assets/game-cards/nodding.png',        title: '太空点头',   desc: '上下躲避 · 吃金币' },
+            { scene: 'space',   mode: 'tunnel',   img: 'assets/game-cards/tunnel.png',         title: '太空隧道',   desc: '穿越小行星带' },
+            { scene: 'space',   mode: 'road',     img: 'assets/game-cards/road.png',           title: '公路赛车',   desc: '左右换道 · 躲车竞速' },
+            { scene: 'space',   mode: 'road3d',   img: 'assets/game-cards/road3d.png',         title: '公路赛车 3D', desc: '第一视角 · 摩托骑行', roadDiff: true },
+            { scene: 'space',   mode: 'vorch1',   img: 'assets/game-cards/vor-ch1.png',        title: '回声编织者·第一章', desc: 'VOR 3D · 听声定位' },
+            { scene: 'space',   mode: 'vorch2',   img: 'assets/game-cards/vor-ch2.png',        title: '回声编织者·第二章', desc: '垂直 VOR · 钟楼修钟' },
+            { scene: 'space',   mode: 'runner',   img: 'assets/game-cards/runner.png',       title: '海风球道',   desc: '头控跑酷 · 沙滩滚球' },
+            { scene: 'space',   mode: 'mole',     img: 'assets/game-cards/mole.png',         title: '节拍打地鼠', desc: '肢体节律训练' }
+        ];
+        var gcOverlay = document.getElementById('game-cards');
+        var gcGrid = document.getElementById('gc-grid');
+        if (gcOverlay && gcGrid) {
+            var ROAD_PRESETS = {
+                easy:   { min: 0.6, initial: 1.0, max: 1.5 },
+                normal: { min: 1.2, initial: 1.5, max: 2.0 },
+                hard:   { min: 2.0, initial: 3.0, max: 4.0 }
+            };
+            var startGameCard = function(g, diff) {
+                var panel = document.getElementById('game-select-panel');
+                if (!panel) return;
+                var sb = panel.querySelector('.scene-btn[data-scene="' + g.scene + '"]');
+                if (sb) sb.click();
+                if (diff) {
+                    window._easyMode = (diff === 'easy');
+                    window._roadSpeedConfig = ROAD_PRESETS[diff] || ROAD_PRESETS.hard;
+                }
+                gcOverlay.style.display = 'none';
+                // 注入类按钮 (vorch1/vorch2/runner/mole) 由各自 integrate.js 异步注入, 需轮询等待
+                var tryStart = function(attempts) {
+                    var mb = panel.querySelector('.mode-btn[data-mode="' + g.mode + '"]');
+                    if (mb) {
+                        mb.click();
+                        setTimeout(function() {
+                            var start = document.getElementById('start-game-btn');
+                            if (start) start.click();
+                        }, 60);
+                        return;
+                    }
+                    if (attempts > 0) setTimeout(function() { tryStart(attempts - 1); }, 200);
+                };
+                tryStart(25);
+            };
+            GAME_CARDS.forEach(function(g) {
+                var card = document.createElement('button');
+                card.className = 'gc-card';
+                card.innerHTML = '<img src="' + g.img + '" alt="' + g.title + '">' +
+                    '<div class="gc-info"><div class="gc-title">' + g.title + '</div><div class="gc-desc">' + g.desc + '</div>' +
+                    (g.roadDiff ? '<div class="gc-diff">' +
+                        '<button data-diff="easy">简单</button>' +
+                        '<button data-diff="normal">普通</button>' +
+                        '<button data-diff="hard">困难</button></div>' : '') +
+                    '</div>';
+                if (g.roadDiff) {
+                    // 第一步: 展开难度; 第二步: 点难度开始
+                    card.addEventListener('click', function(e) {
+                        var diffBtn = e.target.closest && e.target.closest('[data-diff]');
+                        if (!diffBtn) { card.classList.add('expanded'); return; }
+                        startGameCard(g, diffBtn.getAttribute('data-diff'));
+                    });
+                } else {
+                    card.addEventListener('click', function() { startGameCard(g, null); });
+                }
+                gcGrid.appendChild(card);
+            });
+            var gcBack = document.getElementById('gc-back');
+            if (gcBack) gcBack.addEventListener('click', function() {
+                gcOverlay.style.display = 'none';
+                var back = document.getElementById('game-back-to-menu');
+                if (back) back.click(); // bundle 隐藏面板 + 回 mode-select; 拦截器会显示大卡片菜单
+            });
+            // 面板显隐同步: bundle 显示原生面板时改显示卡片面板 (attach 后立即同步, 防竞态)
+            var gcSync = function(panel) {
+                // 注意: 不改 panel 自身的 display (CSS 已强制隐藏), 否则 mutation 会自触发把覆盖层又关掉
+                if (panel.style.display === 'block') {
+                    gcGrid.querySelectorAll('.gc-card.expanded').forEach(function(c) { c.classList.remove('expanded'); });
+                    gcOverlay.style.display = 'flex';
+                } else if (panel.style.display === 'none') {
+                    gcOverlay.style.display = 'none';
+                }
+            };
+            var gcPoll = setInterval(function() {
+                var panel = document.getElementById('game-select-panel');
+                if (!panel) return;
+                clearInterval(gcPoll);
+                var gcObs = new MutationObserver(function() { gcSync(panel); });
+                gcObs.observe(panel, { attributes: true, attributeFilter: ['style'] });
+                gcSync(panel); // 面板可能在我们 attach 之前就已显示
+            }, 300);
+        }
 
         // 4. 侧边栏返回首页按钮
         var backBtn = document.getElementById('back-to-page2-btn');
