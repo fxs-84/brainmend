@@ -182,7 +182,7 @@
       · <b>佩戴</b><br>
       · <b>佩戴</b>:首选<b>腰部正中(约L5,靠近重心)</b>——文献标准位置;也可贴胸口,但结果不要与腰部位置混测。传感器竖直贴紧,四项之间不要挪动。<br>
       · <b>站姿</b>:每项保持一致——建议双脚并拢、双臂自然下垂;软垫项踩在软垫/折叠毛巾上;闭眼项在提示音后闭眼,结束提示音后睁眼。<br>
-      · <b>流程</b>:点"开始"→ 倒计时(站好/准备)→ 自动归零并开始记录 → 到时提示音 → 出该次结果;同一条件自动累计到设定次数(默认 3 次,mCTSIB 临床标准)后取平均作为报告值。建议按 A→D 顺序测。<br>
+      · <b>流程</b>:点"开始"→ 倒计时(站好/准备)→ 自动归零并开始记录 → 到时提示音 → 出结果,建议按 A→D 顺序测。默认每条件测 1 次;次数调到 2~3(mCTSIB 临床标准为每条件 3 次)时自动取平均,重复性更好。<br>
       · <b>原理与边界</b>:陀螺仪测的是躯干<b>倾斜角度摇摆</b>,不是测力台的压力中心(COP);两者高度相关但绝对值不可直接比较。本结果适合<b>自我随访趋势对比</b>,不构成医学诊断;分级阈值仅为粗略参考。
     </div>
   </details>
@@ -190,10 +190,10 @@
   <main class="layout">
   <section class="col-main">
   <div class="panel">
-    <h2>测试项 · 每项 <span id="runs-v">3</span> 次 × <span id="dur-v">30</span> 秒自动取平均</h2>
+    <h2>测试项 · 每项 <span id="runs-v">1</span> 次 × <span id="dur-v">30</span> 秒(次数>1 时自动取平均)</h2>
     <div class="row" style="margin-bottom:8px">
       <label>记录时长 <input type="number" id="dur" min="10" max="120" step="5" value="30" style="width:64px"> 秒</label>
-      <label>每条件次数 <input type="number" id="runs" min="1" max="5" step="1" value="3" style="width:52px"> 次</label>
+      <label>每条件次数 <input type="number" id="runs" min="1" max="5" step="1" value="1" style="width:52px"> 次</label>
       <label>倒计时 <input type="number" id="cd" min="3" max="10" step="1" value="5" style="width:52px"> 秒</label>
       <label>身高 <input type="number" id="height" min="80" max="230" step="1" placeholder="cm" style="width:64px"> cm</label>
       <label title="瞬时倾斜分级三界(°):稳定/轻度/中度。默认值由 Biodex mCTSIB 健康常模上限×1.73(Rayleigh 95%半径)推导,无公认标准,有本地常模时可直接改">分级°
@@ -702,7 +702,7 @@ function finishTrial(aborted) {
     saveCurrentSession();
     const need = runsNeeded(), got = BT.runs[tr.id].length, agg = BT.results[tr.id];
     log(`${tr.name} 第 ${got}/${need} 次:面积 ${m.area.toFixed(2)} deg² | 均速 ${m.speed.toFixed(2)} °/s | RMS ${m.rms.toFixed(2)}° (${m.n} 样本)` + (got >= need ? ` → ${need} 次均值面积 ${agg.area.toFixed(2)} deg²` : ''));
-    statusShow(got >= need ? `${tr.name} 完成 ✓(${need} 次取平均)` : `${tr.name} 第 ${got}/${need} 次完成 — 建议再测 ${need - got} 次`);
+    statusShow(got >= need ? `${tr.name} 完成 ✓` + (need > 1 ? `(${need} 次取平均)` : '') : `${tr.name} 第 ${got}/${need} 次完成 — 建议再测 ${need - got} 次`);
     // 报告立即切回本会话
     viewingId = BT.sessionId;
     renderReport();
@@ -785,7 +785,8 @@ function setCardState() {
     else if (runs.length) {
       if (runs.length >= need) {
         card.classList.add('done');
-        res.textContent = `✓ ${runs.length}次均值: 面积 ${agg.area.toFixed(2)} deg² · 均速 ${agg.speed.toFixed(2)} °/s · 分 ${scoreOf(agg)}`;
+        const tag = runs.length > 1 ? `${runs.length}次均值` : '单次';
+        res.textContent = `✓ ${tag}: 面积 ${agg.area.toFixed(2)} deg² · 均速 ${agg.speed.toFixed(2)} °/s · 分 ${scoreOf(agg)}`;
       } else {
         res.textContent = `已测 ${runs.length}/${need} 次(面积 ${runs.map(r => r.area.toFixed(2)).join(' / ')}) — 再点"开始"继续`;
       }

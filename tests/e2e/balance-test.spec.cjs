@@ -85,6 +85,14 @@ function assert(name, cond, detail = '') {
     await page.click('#btn-abort');
     await page.waitForTimeout(300);
 
+    /* ---- 1d) 默认每条件 1 次(新页面不带 runs 参数) ---- */
+    const page0 = await browser.newPage();
+    await page0.goto(`http://localhost:${PORT}/balance-test.html?sim=1`, { waitUntil: 'load' });
+    await page0.waitForFunction(() => window.__bt, null, { timeout: 5000 });
+    const defRuns = await page0.evaluate(() => document.getElementById('runs').value);
+    assert('默认每条件次数 = 1', defRuns === '1', `runs=${defRuns}`);
+    await page0.close();
+
     /* ---- 2) 条件A: 第1次(1/2) ---- */
     await runTrial(page, 0, 1);
     const a1 = await page.evaluate(() => ({
