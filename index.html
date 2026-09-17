@@ -234,6 +234,11 @@
                 步态分析
                 <div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:4px;">AI步态参数评估</div>
             </button>
+            <button id="page2-balance" style="flex:1;min-width:0;padding:28px 16px;background:linear-gradient(135deg,#0f766e,#14b8a6);color:#fff;border:none;border-radius:16px;cursor:pointer;font-size:16px;font-weight:600;box-shadow:0 8px 24px rgba(15,118,110,0.25);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size:40px;margin-bottom:8px;">🧍</div>
+                平衡测试
+                <div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:4px;">i-mCTSIB · 躯干摇摆评估</div>
+            </button>
             <button id="page2-questionnaire" style="flex:1;min-width:0;padding:28px 16px;background:linear-gradient(135deg,#f093fb,#f5576c);color:#fff;border:none;border-radius:16px;cursor:pointer;font-size:16px;font-weight:600;box-shadow:0 8px 24px rgba(245,87,108,0.25);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
                 <div style="font-size:40px;margin-bottom:8px;">📋</div>
                 神经系统自评
@@ -2047,6 +2052,12 @@
         var qnrBtn = document.getElementById('page2-questionnaire');
         if (qnrBtn) qnrBtn.addEventListener('click', function() {
             window.location.href = './questionnaire.html?sandbox=1';
+        });
+
+        // 1b) 首页入口 → 平衡测试 (i-mCTSIB 躯干摇摆评估, 独立页)
+        var balBtn = document.getElementById('page2-balance');
+        if (balBtn) balBtn.addEventListener('click', function() {
+            window.location.href = './balance-test.html';
         });
 
         // 神经系统自评 QR 码弹窗 (已废弃 — 工作台自渲染 bm-qr-overlay, 这里仅留空 div 防止遗留 JS 报错)

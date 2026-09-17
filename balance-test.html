@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>平衡重心测试 — 躯干摇摆测量 (维特陀螺仪)</title>
+<style>
+  :root {
+    --bg: #eef1ee;
+    --card: #ffffff;
+    --border: #e3e8e3;
+    --border-strong: #d4dcd5;
+    --ink: #1b2521;
+    --muted: #68746d;
+    --faint: #9aa5a0;
+    --accent: #0f766e;
+    --accent-strong: #0d9488;
+    --accent-soft: #ecf5f4;
+    --amber: #b45309;
+    --amber-soft: #fdf3e7;
+    --green: #15803d;
+    --red: #dc2626;
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(20,30,25,.05), 0 10px 30px rgba(20,30,25,.06);
+    --mono: "SF Mono", "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    background-image: radial-gradient(1200px 500px at 80% -10%, rgba(13,148,136,.07), transparent 60%),
+                      radial-gradient(900px 400px at -10% 0%, rgba(180,83,9,.05), transparent 55%);
+    color: var(--ink);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 20px 16px 40px; }
+
+  /* ---------- 顶栏 ---------- */
+  .topbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 4px 18px; }
+  .brand h1 { font-size: 22px; font-weight: 700; letter-spacing: .5px; }
+  .brand .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .sim-badge { display: none; background: var(--amber-soft); color: var(--amber); border: 1px solid #f0dcc0; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-left: 8px; vertical-align: 1px; }
+  body.sim .sim-badge { display: inline-block; }
+  .conn { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px; box-shadow: var(--shadow); }
+  .status-pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; font-size: 12px; }
+  .status-pill i { width: 8px; height: 8px; border-radius: 50%; background: #cbd5d0; }
+  .status-pill:has(.status.on) i { background: var(--green); box-shadow: 0 0 0 3px rgba(21,128,61,.15); }
+  .status { font-weight: 600; }
+  .status.on { color: var(--green); }
+  .status.off { color: var(--muted); }
+  .battery { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* ---------- 面板 ---------- */
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 14px; box-shadow: var(--shadow); animation: rise .45s ease both; }
+  .panel h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 12px; letter-spacing: .3px; display: flex; align-items: center; gap: 8px; }
+  .panel h2::before { content: ""; width: 4px; height: 14px; border-radius: 2px; background: var(--accent-strong); }
+  details.panel { padding: 0; }
+  details.panel > summary { list-style: none; cursor: pointer; padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  details.panel > summary::before { content: ""; width: 4px; height: 14px; border-radius: 2px; background: var(--accent-strong); }
+  details.panel > summary::after { content: "展开"; margin-left: auto; font-size: 11px; font-weight: 400; color: var(--faint); }
+  details.panel[open] > summary::after { content: "收起"; }
+  details.panel > .note, details.panel > #log { margin: 0 18px 14px; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .panel { animation: none; } }
+
+  /* ---------- 布局 ---------- */
+  .layout { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 14px; align-items: start; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+  /* ---------- 控件 ---------- */
+  .row { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; }
+  button { background: var(--card); color: var(--ink); border: 1px solid var(--border-strong); border-radius: 10px; padding: 7px 14px; font-size: 13px; font-family: inherit; cursor: pointer; transition: border-color .15s, background .15s, color .15s, transform .05s; }
+  button:hover { border-color: var(--accent-strong); color: var(--accent); }
+  button:active { transform: translateY(1px); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
+  button.warn { background: var(--amber-soft); border-color: #f0dcc0; color: var(--amber); }
+  button.warn:hover { border-color: var(--amber); }
+  button:disabled { opacity: .45; cursor: default; transform: none; }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+  select, input[type="number"] { background: var(--card); color: var(--ink); border: 1px solid var(--border-strong); border-radius: 8px; padding: 6px 8px; font-size: 13px; font-family: inherit; }
+  label { font-size: 12px; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; }
+  input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; }
+  .note { font-size: 12px; color: var(--muted); }
+  .note b { color: var(--amber); font-weight: 600; }
+
+  /* ---------- 测试卡片 ---------- */
+  .trial-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+  .trial-card { background: #fbfdfc; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; transition: border-color .2s, box-shadow .2s; }
+  .trial-card .name { font-size: 14px; font-weight: 600; }
+  .trial-card .name .tag { font-size: 11px; font-weight: 400; color: var(--faint); margin-left: 6px; }
+  .trial-card .hint { font-size: 12px; color: var(--muted); margin: 5px 0 8px; min-height: 34px; }
+  .trial-card .result-line { font-size: 12px; font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--accent); min-height: 18px; margin-bottom: 8px; }
+  .trial-card.done { border-color: #bfe3d2; background: #f4faf7; }
+  .trial-card.active { border-color: var(--accent-strong); box-shadow: 0 0 0 3px rgba(13,148,136,.12); background: var(--accent-soft); }
+  .trial-card.next { border-color: #e8c897; border-style: dashed; }
+
+  /* ---------- 状态与进度 ---------- */
+  #trial-status { margin-top: 12px; background: var(--accent-soft); border: 1px solid #d6e9e7; border-radius: 12px; font-size: 16px; font-weight: 600; color: var(--accent); text-align: center; padding: 12px 10px; }
+  #trial-status .cd { font-size: 36px; color: var(--amber); font-family: var(--mono); font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .pbar { height: 8px; background: #e7ece9; border-radius: 999px; overflow: hidden; margin-top: 10px; }
+  .pbar > div { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-strong)); border-radius: 999px; transition: width .1s linear; }
+
+  /* ---------- 实时数据 ---------- */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+  .cell { background: #f7faf8; border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; text-align: center; }
+  .cell .k { font-size: 11px; color: var(--muted); }
+  .cell .v { font-size: 17px; font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); margin-top: 1px; }
+  .cell .v.big { font-size: 26px; color: var(--accent); font-weight: 700; }
+  #canvas-box { position: relative; width: 100%; height: 460px; background: #fcfefd; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* ---------- 报告 ---------- */
+  .score-line { display: flex; flex-wrap: wrap; gap: 14px; align-items: baseline; margin: 2px 0 10px; }
+  .score-line .score { font-size: 42px; font-weight: 800; color: var(--accent); font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -1px; }
+  .score-line .lbl { color: var(--green); font-size: 13px; font-weight: 700; background: #edf7ef; border: 1px solid #cde8d3; padding: 2px 10px; border-radius: 999px; }
+  .score-line .lbl:empty { display: none; }
+  .score-line .expl { color: var(--faint); font-size: 11px; }
+  .unit-toggle { display: inline-flex; background: #edf1ee; border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; }
+  .unit-toggle button { border: 0; background: transparent; padding: 5px 12px; border-radius: 8px; color: var(--muted); font-size: 12px; }
+  .unit-toggle button:hover { color: var(--accent); border: 0; }
+  .unit-toggle button.primary { background: var(--card); color: var(--accent); font-weight: 600; box-shadow: 0 1px 3px rgba(20,30,25,.12); }
+  .unit-toggle button.primary:hover { background: var(--card); color: var(--accent); }
+  .unit-toggle button:disabled { opacity: .45; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 7px 9px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; border-bottom: 1px solid var(--border-strong); background: #f7faf8; }
+  td { color: var(--ink); font-family: var(--mono); }
+  tr:last-child td { border-bottom: 0; }
+  tr.hl td { color: var(--accent); font-weight: 600; }
+  #v-quotients { line-height: 1.8; }
+
+  /* ---------- 各条件轨迹图 ---------- */
+  .stato-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+  .stato-cell { background: #fcfefd; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .stato-cell .t { font-size: 12px; font-weight: 600; padding: 8px 10px 0; }
+  .stato-cell canvas { width: 100%; height: 180px; }
+  .stato-cell .cap { font-size: 11px; font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--accent); padding: 2px 10px 8px; }
+  .stato-cell.empty .t, .stato-cell.empty .cap { color: var(--faint); }
+
+  /* ---------- 历史 ---------- */
+  #hist-list { max-height: 190px; overflow-y: auto; font-size: 12px; }
+  .hist-item { padding: 7px 10px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; background: #fbfdfc; transition: border-color .15s, background .15s; font-variant-numeric: tabular-nums; }
+  .hist-item:hover { border-color: var(--accent-strong); }
+  .hist-item.sel { border-color: var(--accent); background: var(--accent-soft); }
+  .hist-item .d { color: var(--muted); font-family: var(--mono); }
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 720px) { .chart-row { grid-template-columns: 1fr; } }
+  .chart-box { background: #fcfefd; border: 1px solid var(--border); border-radius: 10px; height: 150px; position: relative; }
+  #log { height: 120px; overflow-y: auto; background: #f7faf8; border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <h1>平衡重心测试</h1>
+      <p class="sub">躯干摇摆测量 · 器械化改良 Romberg(i-mCTSIB)四条件 · 维特蓝牙陀螺仪<span class="sim-badge">仿真模式</span></p>
+    </div>
+    <div class="conn">
+      <span class="status-pill"><i></i><span id="st" class="status off">未连接</span></span>
+      <span id="battery" class="battery"></span>
+      <label>回传速率
+        <select id="rate">
+          <option value="0x07">20 Hz</option>
+          <option value="0x08" selected>50 Hz</option>
+          <option value="0x09">100 Hz</option>
+        </select>
+      </label>
+      <button id="btn-connect" class="primary">扫描连接</button>
+      <button id="btn-connect-all">通用扫描</button>
+      <button id="btn-disconnect" disabled>断开</button>
+    </div>
+  </header>
+
+  <details class="panel">
+    <summary>佩戴与测试说明 · 方案依据</summary>
+    <div class="note">
+      · <b>方案依据</b>:四项条件即临床 mCTSIB(改良 Romberg 感觉交互测试);单 IMU 测躯干摇摆与测力台 COP 的相关性 r≈0.5~0.9(Ferrari 2024),闭眼/睁眼商值跨仪器一致。指标按 Quijoux 2021 / Doğan 2026 惯例:<b>5Hz 4阶 Butterworth 零相位滤波后</b>计算。<br>
+      · <b>分级阈值</b>:摇摆图的稳定/轻度/中度/重度同心圆<b>无公认分级标准</b>;默认值 0.8/1.7/3.8° 由 Biodex mCTSIB 健康常模上限(0.48/0.99/2.22°)×1.73(Rayleigh 95% 半径)推导,可在下方设置中按本地人群常模修改。<br>
+      · <b>佩戴</b><br>
+      · <b>佩戴</b>:首选<b>腰部正中(约L5,靠近重心)</b>——文献标准位置;也可贴胸口,但结果不要与腰部位置混测。传感器竖直贴紧,四项之间不要挪动。<br>
+      · <b>站姿</b>:每项保持一致——建议双脚并拢、双臂自然下垂;软垫项踩在软垫/折叠毛巾上;闭眼项在提示音后闭眼,结束提示音后睁眼。<br>
+      · <b>流程</b>:点"开始"→ 倒计时(站好/准备)→ 自动归零并开始记录 → 到时提示音 → 出该次结果;同一条件自动累计到设定次数(默认 3 次,mCTSIB 临床标准)后取平均作为报告值。建议按 A→D 顺序测。<br>
+      · <b>原理与边界</b>:陀螺仪测的是躯干<b>倾斜角度摇摆</b>,不是测力台的压力中心(COP);两者高度相关但绝对值不可直接比较。本结果适合<b>自我随访趋势对比</b>,不构成医学诊断;分级阈值仅为粗略参考。
+    </div>
+  </details>
+
+  <main class="layout">
+  <section class="col-main">
+  <div class="panel">
+    <h2>测试项 · 每项 <span id="runs-v">3</span> 次 × <span id="dur-v">30</span> 秒自动取平均</h2>
+    <div class="row" style="margin-bottom:8px">
+      <label>记录时长 <input type="number" id="dur" min="10" max="120" step="5" value="30" style="width:64px"> 秒</label>
+      <label>每条件次数 <input type="number" id="runs" min="1" max="5" step="1" value="3" style="width:52px"> 次</label>
+      <label>倒计时 <input type="number" id="cd" min="3" max="10" step="1" value="5" style="width:52px"> 秒</label>
+      <label>身高 <input type="number" id="height" min="80" max="230" step="1" placeholder="cm" style="width:64px"> cm</label>
+      <label title="瞬时倾斜分级三界(°):稳定/轻度/中度。默认值由 Biodex mCTSIB 健康常模上限×1.73(Rayleigh 95%半径)推导,无公认标准,有本地常模时可直接改">分级°
+        <input type="number" id="lv1" min="0.2" max="10" step="0.1" value="0.8" style="width:52px">
+        <input type="number" id="lv2" min="0.3" max="15" step="0.1" value="1.7" style="width:52px">
+        <input type="number" id="lv3" min="0.5" max="25" step="0.1" value="3.8" style="width:52px">
+      </label>
+      <label>左右(ML)轴
+        <select id="src-x"><option value="pitch" selected>Pitch</option><option value="roll">Roll</option><option value="yaw">Yaw</option></select>
+      </label>
+      <label><input type="checkbox" id="inv-x"> 反向</label>
+      <label>前后(AP)轴
+        <select id="src-y"><option value="roll" selected>Roll</option><option value="pitch">Pitch</option><option value="yaw">Yaw</option></select>
+      </label>
+      <label><input type="checkbox" id="inv-y"> 反向</label>
+      <span style="font-size:11px;color:#484f58">水平安装默认:Pitch=左右摇摆→ML,Roll=前后摇摆→AP;填身高后报告可切换为 CoM 位移单位(cm/cm²,CoM 高≈0.552×身高),与文献数值直接可比</span>
+    </div>
+    <div class="trial-grid" id="trial-grid"></div>
+    <div id="trial-status">就绪 — 连接设备后开始测试</div>
+    <div class="pbar"><div id="pbar-fill"></div></div>
+    <div class="row" style="margin-top:8px;justify-content:center">
+      <button id="btn-abort" class="warn" disabled>中止当前项</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>实时摇摆图 · 轨迹=最近12秒实时数据,按严重度着色 · 同心圆=稳定/轻度/中度/重度分区</h2>
+    <div class="row" style="margin-bottom:8px">
+      <button id="btn-zero" class="warn">软件归零(以当前姿势为零点)</button>
+      <span class="note">连接后以首帧为零点;点击"开始"即归零(光点立即回中),记录开始时再自动归零作为数据基准;此处可手动归零</span>
+    </div>
+    <div id="canvas-box"><canvas id="cv"></canvas></div>
+    <div class="stat-grid" style="margin-top:8px">
+      <div class="cell"><div class="k">ML 倾斜(左右)</div><div class="v big" id="v-ml">—</div></div>
+      <div class="cell"><div class="k">AP 倾斜(前后)</div><div class="v big" id="v-ap">—</div></div>
+      <div class="cell"><div class="k">已记录</div><div class="v" id="v-elapsed">—</div></div>
+      <div class="cell"><div class="k">样本数</div><div class="v" id="v-nsamp">—</div></div>
+      <div class="cell"><div class="k">实测速率</div><div class="v" id="v-hz">—</div></div>
+      <div class="cell"><div class="k">实时 RMS</div><div class="v" id="v-rms-live">—</div></div>
+      <div class="cell"><div class="k">实时平均速度</div><div class="v" id="v-spd-live">—</div></div>
+      <div class="cell"><div class="k">当前等级(瞬时倾斜)</div><div class="v" id="v-level">—</div></div>
+    </div>
+  </div>
+  </section>
+
+  <aside class="col-side">
+  <div class="panel">
+    <h2>本次报告 · 点历史可回看</h2>
+    <div class="score-line">
+      <span>平衡综合分: <span class="score" id="v-score">—</span><span class="expl"> / 100</span></span>
+      <span class="lbl" id="v-grade"></span>
+      <span class="expl" id="v-score-expl">综合分 = 四项 100·exp(−面积/3) 均值(角度单位,本工具内部评分,仅用于自我趋势对比,无临床常模)</span>
+    </div>
+    <div class="row" style="margin-bottom:8px">
+      <span class="unit-toggle">
+        <button id="unit-deg" class="primary">角度 °/deg²</button>
+        <button id="unit-disp" disabled title="需在设置中填写身高">CoM 位移 cm/cm²</button>
+      </span>
+      <span class="note" id="unit-note">位移单位需填身高;CoM 高按 0.552×身高 估算,可与文献常模直接对比</span>
+    </div>
+    <div style="overflow-x:auto"><table id="report-table"></table></div>
+    <div class="note" id="stato-note" style="margin:12px 0 6px">各条件摇摆轨迹图(同一比例尺 · 琥珀椭圆=95%置信)</div>
+    <div class="stato-grid" id="stato-grid"></div>
+    <div class="score-line" style="margin-top:8px">
+      <span class="expl" id="v-quotients"></span>
+    </div>
+    <div class="note" style="margin-top:4px">常模粗略对照(Biodex mCTSIB 摇摆指数,健康成人,单位°,与本页 RMS 列可比口径;注意其为平台倾斜角,与躯干 IMU 存在系统性差异,仅作量级参考): <b>A 0.21–0.48 · B 0.48–0.99 · C 0.38–0.71 · D 1.07–2.22</b></div>
+    <div class="row">
+      <button id="btn-csv-summary">导出报告 CSV</button>
+      <button id="btn-csv-raw">导出当前原始数据 CSV</button>
+      <span class="note" id="viewing"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>历史记录 · 存本机浏览器</h2>
+    <div class="row" style="margin-bottom:10px">
+      <button id="btn-clear-hist" class="warn">清空历史</button>
+      <span class="note">同传感器位置、同站姿下分数上升 = 平衡在改善</span>
+    </div>
+    <div id="hist-list"></div>
+    <div class="chart-row" style="margin-top:10px">
+      <div><div class="note" style="margin-bottom:4px">睁眼·硬地面 摇摆面积趋势 (deg²,越低越好)</div><div class="chart-box"><canvas id="chart-area"></canvas></div></div>
+      <div><div class="note" style="margin-bottom:4px">平衡综合分趋势 (越高越好)</div><div class="chart-box"><canvas id="chart-score"></canvas></div></div>
+    </div>
+  </div>
+
+  <details class="panel">
+    <summary>日志</summary>
+    <div id="log"></div>
+  </details>
+  </aside>
+  </main>
+</div>
+
+<script>
+'use strict';
+/* ================= 常量 ================= */
+const SVC = '0000ffe5-0000-1000-8000-00805f9a34fb';
+const CHR_NOTIFY = '0000ffe4-0000-1000-8000-00805f9a34fb';
+const CHR_WRITE  = '0000ffe9-0000-1000-8000-00805f9a34fb';
+const $ = id => document.getElementById(id);
+const qs = new URLSearchParams(location.search);
+const SIM = qs.get('sim') === '1';
+if (SIM) document.body.classList.add('sim');
+
+/* 测试项定义 */
+const TRIALS = [
+  { id: 'eo_firm', name: 'A · 睁眼 · 硬地面', tag: 'baseline', hint: '双脚并拢站稳,双臂自然下垂,目视前方固定点。' },
+  { id: 'ec_firm', name: 'B · 闭眼 · 硬地面', tag: 'Romberg',  hint: '站稳后闭眼;开始提示音后闭眼,结束提示音后睁眼。' },
+  { id: 'eo_foam', name: 'C · 睁眼 · 软垫',   tag: 'foam',     hint: '双脚并拢站在软垫/折叠毛巾上,睁眼目视前方。' },
+  { id: 'ec_foam', name: 'D · 闭眼 · 软垫',   tag: '最难',     hint: '站在软垫上,开始提示音后闭眼——注意安全,旁边最好有支撑物。' },
+];
+const HIST_KEY = 'balance-test-history-v1';
+
+/* ================= 状态 ================= */
+const S = {
+  connected: false,
+  sample: null,
+  prevRaw: null,
+  cont: { roll: 0, pitch: 0, yaw: 0 },
+  zero: { roll: 0, pitch: 0, yaw: 0 },
+  rel: { roll: 0, pitch: 0, yaw: 0 },
+  rateHz: 0, arrivals: [],
+};
+let device = null, writeChar = null;
+
+/* 测试流程状态机: idle → countdown → recording → (自动) done */
+const BT = {
+  phase: 'idle',
+  activeIdx: -1,
+  timers: [],
+  samples: [],            // 本次记录 [{t, ml, ap}] (相对自动归零)
+  t0: 0,                  // 记录开始时刻
+  rawByTrial: {},         // 当前会话各条件原始样本数组 {condId: [run1[], run2[], ...]} (仅本次,历史只存指标)
+  runs: {},               // 当前会话每条件各次指标 {condId: [metrics, ...]} (角度单位)
+  results: {},            // 当前会话 {condId: 聚合指标} (角度单位, 报告/评分/历史用)
+  resultsDisp: {},        // 当前会话 {condId: 聚合指标} (CoM 位移单位, 需身高)
+  sessionId: 0,
+};
+let history = loadHistory();
+let viewingId = 0;        // 报告正在查看的会话 id
+let unitMode = 'deg';     // 报告单位: 'deg' | 'disp'
+
+/* ================= 日志 ================= */
+function log(msg) {
+  const el = $('log');
+  const t = new Date();
+  const ts = t.toTimeString().slice(0, 8) + '.' + String(t.getMilliseconds()).padStart(3, '0');
+  el.textContent += `[${ts}] ${msg}\n`;
+  const lines = el.textContent.split('\n');
+  if (lines.length > 100) el.textContent = lines.slice(-100).join('\n');
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ================= 提示音 ================= */
+let AC = null;
+function beep(freq = 880, ms = 80, vol = 0.12) {
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + ms / 1000);
+    o.connect(g); g.connect(AC.destination);
+    o.start(); o.stop(AC.currentTime + ms / 1000);
+  } catch (e) { /* 无声也不影响测试 */ }
+}
+
+/* ================= 解析器(与 imu-demo 相同: 0x55 对齐, 滑动重同步) ================= */
+const P = {
+  buf: new Uint8Array(8192), len: 0,
+  feed(chunk) {
+    if (this.len + chunk.length > this.buf.length) {
+      const nb = new Uint8Array((this.len + chunk.length) * 2);
+      nb.set(this.buf.subarray(0, this.len));
+      this.buf = nb;
+    }
+    this.buf.set(chunk, this.len);
+    this.len += chunk.length;
+    this.drain();
+  },
+  drain() {
+    let off = 0;
+    while (off < this.len) {
+      if (this.buf[off] !== 0x55) {
+        let n = off + 1;
+        while (n < this.len && this.buf[n] !== 0x55) n++;
+        off = n;
+        continue;
+      }
+      if (this.len - off < 2) break;
+      const flag = this.buf[off + 1];
+      let frameLen;
+      if (flag === 0x61) {
+        frameLen = this.len61(off);
+        if (frameLen === 0) break;
+      } else if (flag === 0x71) {
+        frameLen = 20;
+      } else {
+        off += 1;
+        continue;
+      }
+      if (this.len - off < frameLen) break;
+      this.frame(this.buf.subarray(off, off + frameLen), flag);
+      off += frameLen;
+    }
+    if (off > 0) { this.buf.copyWithin(0, off, this.len); this.len -= off; }
+  },
+  len61(off) {
+    const avail = this.len - off;
+    if (avail < 20) return 0;
+    if (avail === 20) return 20;
+    if (this.buf[off + 20] === 0x55) return 20;
+    if (avail >= 26) {
+      const b = this.buf, t = off + 20;
+      const ok = b[t] <= 99 && b[t + 1] >= 1 && b[t + 1] <= 12 && b[t + 2] >= 1 && b[t + 2] <= 31 &&
+                 b[t + 3] <= 23 && b[t + 4] <= 59 && b[t + 5] <= 59;
+      if (ok) return avail >= 28 ? 28 : 0;
+      return 20;
+    }
+    return 0;
+  },
+  frame(b, flag) {
+    if (flag === 0x61) {
+      const s16 = o => { const v = b[o + 1] << 8 | b[o]; return v >= 0x8000 ? v - 0x10000 : v; };
+      onSample({
+        ax: s16(2) / 32768 * 16, ay: s16(4) / 32768 * 16, az: s16(6) / 32768 * 16,
+        wx: s16(8) / 32768 * 2000, wy: s16(10) / 32768 * 2000, wz: s16(12) / 32768 * 2000,
+        roll: s16(14) / 32768 * 180, pitch: s16(16) / 32768 * 180, yaw: s16(18) / 32768 * 180,
+      });
+    } else {
+      const reg = b[2] | b[3] << 8;
+      const s16 = o => { const v = b[o + 1] << 8 | b[o]; return v >= 0x8000 ? v - 0x10000 : v; };
+      if (reg === 0x64) {
+        const v = s16(4);
+        const pct = v > 396 ? 100 : v > 393 ? 90 : v > 387 ? 75 : v > 382 ? 60 : v > 379 ? 50 : v > 377 ? 40 :
+                    v > 373 ? 30 : v > 370 ? 20 : v > 368 ? 15 : v > 350 ? 10 : v > 340 ? 5 : 0;
+        $('battery').textContent = `电量 ~${pct}%`;
+      }
+    }
+  },
+};
+function wrapDelta(d) { if (d > 180) return d - 360; if (d < -180) return d + 360; return d; }
+
+/* ================= 采样处理 ================= */
+function onSample(smp) {
+  const now = performance.now();
+  S.arrivals.push(now);
+  if (S.arrivals.length > 100) S.arrivals.shift();
+  if (S.arrivals.length >= 2) {
+    const span = (S.arrivals[S.arrivals.length - 1] - S.arrivals[0]) / 1000;
+    S.rateHz = span > 0 ? (S.arrivals.length - 1) / span : 0;
+  }
+  S.sample = smp;
+  if (!S.prevRaw) {
+    S.cont = { roll: smp.roll, pitch: smp.pitch, yaw: smp.yaw };
+    S.zero = { ...S.cont };   // 首帧自动归零: 连接/仿真启动后以当前姿势为零点
+  } else {
+    S.cont = {
+      roll: S.cont.roll + wrapDelta(smp.roll - S.prevRaw.roll),
+      pitch: S.cont.pitch + wrapDelta(smp.pitch - S.prevRaw.pitch),
+      yaw: S.cont.yaw + wrapDelta(smp.yaw - S.prevRaw.yaw),
+    };
+  }
+  S.prevRaw = { roll: smp.roll, pitch: smp.pitch, yaw: smp.yaw };
+  S.rel = { roll: S.cont.roll - S.zero.roll, pitch: S.cont.pitch - S.zero.pitch, yaw: S.cont.yaw - S.zero.yaw };
+  const swNow = usedSway();
+  liveTrail.push({ ms: now, ml: swNow.ml, ap: swNow.ap });
+  while (liveTrail.length && now - liveTrail[0].ms > 12000) liveTrail.shift();
+  if (BT.phase === 'recording') {
+    BT.samples.push({ t: (now - BT.t0) / 1000, ml: swNow.ml, ap: swNow.ap });
+  }
+}
+function usedSway() {
+  const ix = $('inv-x').checked ? -1 : 1, iy = $('inv-y').checked ? -1 : 1;
+  return { ml: S.rel[$('src-x').value] * ix, ap: S.rel[$('src-y').value] * iy };
+}
+
+/* ---- 摇摆严重度分级(瞬时倾斜半径 r=√(ml²+ap²), 单位°) ----
+ * 无公认分级标准。默认 0.8/1.7/3.8° 推导: Biodex mCTSIB 摇摆指数健康常模上限
+ * (睁眼硬地 0.48 / 闭眼硬地 0.99 / 闭眼软垫 2.22, 单位°) × 1.73 (Rayleigh 分布 95% 时间半径换算)。
+ * 注意 Biodex 是平台倾斜角, 与躯干 IMU 口径不同, 仅作量级参考; 页面可改阈值, 有本地常模时替换。 */
+const LEVEL_STYLE = [
+  { rgb: [21, 128, 61],  label: '稳定' },
+  { rgb: [217, 119, 6],  label: '轻度' },
+  { rgb: [234, 88, 12],  label: '中度' },
+  { rgb: [220, 38, 38],  label: '重度' },
+];
+function ringThresholds() {
+  const t = [+$('lv1').value, +$('lv2').value, +$('lv3').value];
+  return [
+    t[0] > 0 ? t[0] : 0.8,
+    t[1] > t[0] ? t[1] : Math.max(1.7, t[0] + 0.1),
+    t[2] > t[1] ? t[2] : Math.max(3.8, t[1] + 0.1),
+  ];
+}
+function swayLevel(r) {
+  const t = ringThresholds();
+  if (r <= t[0]) return 0;
+  if (r <= t[1]) return 1;
+  if (r <= t[2]) return 2;
+  return 3;
+}
+function lvColor(i, a) { const c = LEVEL_STYLE[i].rgb; return `rgba(${c[0]},${c[1]},${c[2]},${a})`; }
+
+/* 实时轨迹滚动缓冲: 每个采样包都进(与是否记录无关), 保留最近约 12 秒 */
+const liveTrail = [];
+
+/* ================= 指标计算 =================
+ * 处理流程对齐文献惯例 (Ferrari 2024 / Doğan 2026 / Quijoux 2021):
+ *   1) 5Hz 4阶 Butterworth 低通,零相位(正反滤波),端点反射填充
+ *   2) 去均值(均心化)
+ *   3) 指标: 95%置信椭圆面积 / 路径长 / 平均速度 / RMS / AP·ML 分量 / Range / 峰值速度(95分位)
+ * 单位: deg / deg² / deg/s(躯干倾斜角空间; 非测力台 COP, 两者相关 r≈0.5~0.9 但不可直接比绝对值)
+ * ================================================================================ */
+const RATE_HZ = { '0x07': 20, '0x08': 50, '0x09': 100 };
+function lowpassZeroPhase(y, fs, fc) {
+  /* 4阶 Butterworth(fc Hz)零相位: 两级 biquad,每级正反各滤一次 */
+  const n = y.length;
+  if (n < 40 || fc >= fs / 2) return y.slice();
+  const pad = Math.min(25, Math.floor((n - 1) / 3));
+  const ext = new Float64Array(n + 2 * pad);
+  for (let i = 0; i < pad; i++) ext[i] = 2 * y[0] - y[pad - i];
+  for (let i = 0; i < n; i++) ext[pad + i] = y[i];
+  for (let i = 0; i < pad; i++) ext[pad + n + i] = 2 * y[n - 1] - y[n - 2 - i];
+  const w0 = 2 * Math.PI * fc / fs, cw = Math.cos(w0), sw = Math.sin(w0);
+  for (const Q of [0.5411961, 1.3065630]) {           // 4阶 Butterworth 的两级 Q
+    const alpha = sw / (2 * Q);
+    const b0 = (1 - cw) / 2, b1 = 1 - cw, b2 = b0, a0 = 1 + alpha, a1 = -2 * cw, a2 = 1 - alpha;
+    for (let pass = 0; pass < 2; pass++) {            // pass 0 正向, pass 1 反向
+      let x1 = ext[0], x2 = ext[0], y1 = ext[0], y2 = ext[0];
+      for (let i = 0; i < ext.length; i++) {
+        const x0 = ext[i];
+        const y0 = (b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2) / a0;
+        ext[i] = y0; x2 = x1; x1 = x0; y2 = y1; y1 = y0;
+      }
+      ext.reverse();
+    }
+  }
+  return Array.from(ext.subarray(pad, pad + n));
+}
+function computeMetrics(samples, plannedDur) {
+  const n = samples.length;
+  if (n < 10) return null;
+  const dur = samples[n - 1].t - samples[0].t;
+  const fs = dur > 0 ? (n - 1) / dur : 50;
+  const mlArr = lowpassZeroPhase(samples.map(s => s.ml), fs, 5);
+  const apArr = lowpassZeroPhase(samples.map(s => s.ap), fs, 5);
+  let sumMl = 0, sumAp = 0;
+  for (let i = 0; i < n; i++) { sumMl += mlArr[i]; sumAp += apArr[i]; }
+  const meanMl = sumMl / n, meanAp = sumAp / n;
+  let varMl = 0, varAp = 0, cov = 0, rms = 0, path = 0;
+  let minMl = Infinity, maxMl = -Infinity, minAp = Infinity, maxAp = -Infinity;
+  const vels = [];
+  let prev = null;
+  for (let i = 0; i < n; i++) {
+    const ml = mlArr[i] - meanMl, ap = apArr[i] - meanAp;
+    varMl += ml * ml; varAp += ap * ap; cov += ml * ap;
+    rms += ml * ml + ap * ap;
+    if (ml < minMl) minMl = ml; if (ml > maxMl) maxMl = ml;
+    if (ap < minAp) minAp = ap; if (ap > maxAp) maxAp = ap;
+    if (prev) {
+      const d = Math.hypot(mlArr[i] - prev.ml, apArr[i] - prev.ap);
+      const dt = samples[i].t - prev.t;
+      path += d;
+      if (dt > 0.002) vels.push(d / dt);              // BLE 成批投递时 dt 可能极小,跳过防假峰值
+    }
+    prev = { ml: mlArr[i], ap: apArr[i], t: samples[i].t };
+  }
+  varMl /= n; varAp /= n; cov /= n;
+  rms = Math.sqrt(rms / n);
+  const det = Math.max(varMl * varAp - cov * cov, 1e-12);
+  vels.sort((a, b) => a - b);
+  const peak = vels.length ? vels[Math.min(vels.length - 1, Math.floor(vels.length * 0.95))] : 0;  // 95分位,抗离群
+  const expected = Math.round(plannedDur * (RATE_HZ[$('rate') ? $('rate').value : '0x08'] || 50));
+  return {
+    n,
+    area: Math.PI * 5.991 * Math.sqrt(det),          // 95% 置信椭圆面积 (χ²₂(0.95)=5.991)
+    path,
+    speed: dur > 0 ? path / dur : 0,                  // 平均摇摆速度
+    peak,                                             // 95 分位瞬时速度
+    rms,
+    mlRms: Math.sqrt(varMl),
+    apRms: Math.sqrt(varAp),
+    rangeMl: maxMl - minMl,
+    rangeAp: maxAp - minAp,
+    meanMl, meanAp,
+    varMl, varAp, cov,                               // 供椭圆绘制
+    dur,
+    fs,
+    expected,
+  };
+}
+/* 粗参考分级(睁眼·硬地面 95%椭圆面积 deg²) */
+function gradeOf(area) {
+  if (area <= 1) return '稳定';
+  if (area <= 3) return '正常';
+  if (area <= 8) return '轻度不稳';
+  return '明显不稳';
+}
+function scoreOf(m) { return Math.max(0, Math.min(100, Math.round(100 * Math.exp(-m.area / 3)))); }
+
+/* ---- 多次测量聚合与 CoM 位移换算 ---- */
+function runsNeeded() { return Math.max(1, Math.min(5, +$('runs').value || 3)); }
+function getHeightCm() { const h = +$('height').value; return h >= 80 && h <= 230 ? h : 0; }
+/* 躯干角 → CoM 水平位移(cm): 倒置钟摆 d = h_com·tanθ, h_com ≈ 0.552×身高 (Winter 人体测量) */
+function toDispSamples(samples, heightCm) {
+  const hc = 0.552 * heightCm, D2R = Math.PI / 180;
+  return samples.map(s => ({ t: s.t, ml: hc * Math.tan(s.ml * D2R), ap: hc * Math.tan(s.ap * D2R) }));
+}
+/* 同一条件多次试验取均值(mCTSIB 惯例) */
+function aggregateRuns(runs) {
+  if (!runs || !runs.length) return null;
+  if (runs.length === 1) return { ...runs[0] };
+  const out = {};
+  const keys = Object.keys(runs[0]);
+  for (const k of keys) {
+    const vals = runs.map(r => r[k]).filter(v => typeof v === 'number');
+    out[k] = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+  }
+  return out;
+}
+
+/* ================= 测试流程 ================= */
+function trialById(id) { return TRIALS.find(t => t.id === id); }
+
+function startTrial(idx) {
+  if (!S.connected && !SIM) { log('请先连接设备'); return; }
+  if (BT.phase === 'countdown' || BT.phase === 'recording') { log('当前有进行中的测试项,请先等待完成或中止'); return; }
+  const tr = TRIALS[idx];
+  BT.activeIdx = idx;
+  BT.phase = 'countdown';
+  BT.samples = [];
+  if (S.prevRaw) {
+    // 点击即归零: 光点立即回中给出反馈; 倒计时结束开始记录时会再归零一次作为数据基准
+    S.zero = { ...S.cont };
+    S.rel = { roll: 0, pitch: 0, yaw: 0 };
+    liveTrail.length = 0;
+  }
+  const cdSec = Math.max(3, +$('cd').value || 5);
+  setCardState();
+  $('btn-abort').disabled = false;
+  log(`开始 ${tr.name}:${cdSec} 秒倒计时(自动归零后记录)`);
+  let left = cdSec;
+  statusShow(`${tr.name}<br><span class="cd">${left}</span><br><span style="font-size:13px;color:#8b949e">${tr.hint}</span>`);
+  beep(660, 70);
+  const tick = () => {
+    left--;
+    if (left > 0) {
+      statusShow(`${tr.name}<br><span class="cd">${left}</span><br><span style="font-size:13px;color:#8b949e">${tr.hint}</span>`);
+      beep(660, 70);
+      BT.timers.push(setTimeout(tick, 1000));
+    } else {
+      beginRecording(tr);
+    }
+  };
+  BT.timers.push(setTimeout(tick, 1000));
+}
+function beginRecording(tr) {
+  // 自动归零: 以倒计时结束瞬间的站姿为基准
+  S.zero = { ...S.cont };
+  S.rel = { roll: 0, pitch: 0, yaw: 0 };
+  BT.samples = [];
+  BT.t0 = performance.now();
+  BT.phase = 'recording';
+  beep(1320, 120); beep(1760, 120);
+  const dur = Math.max(2, +$('dur').value || 30);
+  statusShow(`${tr.name}<br><span class="cd" style="color:var(--accent)">记录中</span><br><span style="font-size:13px;color:var(--muted)">保持站姿不动,${dur} 秒后自动结束</span>`);
+  log(`记录中:${tr.name},${dur} 秒`);
+  BT.timers.push(setTimeout(() => finishTrial(false), dur * 1000));
+}
+function finishTrial(aborted) {
+  BT.timers.forEach(clearTimeout);
+  BT.timers = [];
+  $('btn-abort').disabled = true;
+  const tr = TRIALS[BT.activeIdx];
+  if (aborted) {
+    BT.phase = 'idle';
+    BT.samples = [];
+    statusShow('已中止 — 可重新开始');
+    log(`中止 ${tr.name},数据弃用`);
+    BT.activeIdx = -1;
+    setCardState();
+    return;
+  }
+  const dur = Math.max(2, +$('dur').value || 30);
+  const m = computeMetrics(BT.samples, dur);
+  BT.phase = 'done';
+  beep(1320, 200); setTimeout(() => beep(1320, 200), 250);
+  if (!m) {
+    log(`${tr.name}: 有效样本不足(${BT.samples.length}),请重试`);
+    statusShow(`${tr.name} 失败 — 有效样本不足,请重测`);
+  } else {
+    if (m.n < m.expected * 0.5) log(`⚠ ${tr.name}: 有效样本 ${m.n}/${m.expected},数据可能不完整`);
+    // 累计本次试验并聚合
+    if (!BT.runs[tr.id]) BT.runs[tr.id] = [];
+    BT.runs[tr.id].push(m);
+    if (!BT.rawByTrial[tr.id]) BT.rawByTrial[tr.id] = [];
+    BT.rawByTrial[tr.id].push(BT.samples.slice());
+    BT.results[tr.id] = aggregateRuns(BT.runs[tr.id]);
+    const h = getHeightCm();
+    if (h) BT.resultsDisp[tr.id] = aggregateRuns(BT.rawByTrial[tr.id].map(run => computeMetrics(toDispSamples(run, h), dur)));
+    BT.lastDone = { samples: BT.samples.slice(), metrics: m };
+    ensureSession();
+    saveCurrentSession();
+    const need = runsNeeded(), got = BT.runs[tr.id].length, agg = BT.results[tr.id];
+    log(`${tr.name} 第 ${got}/${need} 次:面积 ${m.area.toFixed(2)} deg² | 均速 ${m.speed.toFixed(2)} °/s | RMS ${m.rms.toFixed(2)}° (${m.n} 样本)` + (got >= need ? ` → ${need} 次均值面积 ${agg.area.toFixed(2)} deg²` : ''));
+    statusShow(got >= need ? `${tr.name} 完成 ✓(${need} 次取平均)` : `${tr.name} 第 ${got}/${need} 次完成 — 建议再测 ${need - got} 次`);
+    // 报告立即切回本会话
+    viewingId = BT.sessionId;
+    renderReport();
+    renderHistory();
+  }
+  BT.activeIdx = -1;
+  setCardState();
+  setTimeout(() => { if (BT.phase === 'done') { BT.phase = 'idle'; statusShow('就绪 — 选择下一项'); setCardState(); } }, 1500);
+}
+function abortTrial() {
+  if (BT.phase === 'countdown' || BT.phase === 'recording') finishTrial(true);
+}
+function ensureSession() {
+  if (!BT.sessionId) {
+    BT.sessionId = Date.now();
+    log(`新建会话 #${BT.sessionId}`);
+  }
+}
+function currentSession() {
+  return history.find(h => h.id === viewingId) || null;
+}
+function stripMetric(m) {
+  const { expected, fs, ...rest } = m;   // 保留 varMl/varAp/cov 供历史会话画椭圆
+  return rest;
+}
+function saveCurrentSession() {
+  ensureSession();
+  const results = {}, resultsDisp = {};
+  let hasDisp = false;
+  for (const [k, m] of Object.entries(BT.results)) results[k] = stripMetric(m);
+  for (const [k, m] of Object.entries(BT.resultsDisp)) { if (m) { resultsDisp[k] = stripMetric(m); hasDisp = true; } }
+  const runs = {};
+  for (const [k, arr] of Object.entries(BT.runs)) runs[k] = arr.map(stripMetric);
+  const sess = { id: BT.sessionId, date: new Date(BT.sessionId).toISOString(), height: getHeightCm() || null, results, runs };
+  if (hasDisp) sess.resultsDisp = resultsDisp;
+  const i = history.findIndex(h => h.id === sess.id);
+  if (i >= 0) history[i] = sess; else history.unshift(sess);
+  try { localStorage.setItem(HIST_KEY, JSON.stringify(history.slice(0, 100))); } catch (e) { log('历史保存失败: ' + e.message); }
+}
+
+/* ================= 卡片 / 状态 UI ================= */
+function buildCards() {
+  const grid = $('trial-grid');
+  grid.innerHTML = '';
+  TRIALS.forEach((tr, i) => {
+    const div = document.createElement('div');
+    div.className = 'trial-card';
+    div.id = 'card-' + tr.id;
+    div.innerHTML = `
+      <div class="name">${tr.name}<span class="tag">${tr.tag}</span></div>
+      <div class="hint">${tr.hint}</div>
+      <div class="result-line" id="res-${tr.id}"></div>
+      <div class="row">
+        <button class="primary btn-start" data-i="${i}">开始</button>
+        <button class="warn btn-skip" data-i="${i}">跳过</button>
+      </div>`;
+    grid.appendChild(div);
+  });
+  grid.querySelectorAll('.btn-start').forEach(b => b.onclick = () => startTrial(+b.dataset.i));
+  grid.querySelectorAll('.btn-skip').forEach(b => b.onclick = () => {
+    const tr = TRIALS[+b.dataset.i];
+    if (BT.results[tr.id]) delete BT.results[tr.id];
+    if (BT.resultsDisp[tr.id]) delete BT.resultsDisp[tr.id];
+    if (BT.runs[tr.id]) delete BT.runs[tr.id];
+    if (BT.rawByTrial[tr.id]) delete BT.rawByTrial[tr.id];
+    log(`跳过/清除 ${tr.name}`);
+    ensureSession(); saveCurrentSession();
+    renderReport(); renderHistory(); setCardState();
+  });
+}
+function setCardState() {
+  TRIALS.forEach((tr, i) => {
+    const card = $('card-' + tr.id);
+    card.classList.remove('done', 'active', 'next');
+    const res = $('res-' + tr.id);
+    const runs = BT.runs[tr.id] || [];
+    const agg = BT.results[tr.id];
+    const need = runsNeeded();
+    if (BT.phase !== 'idle' && i === BT.activeIdx) { card.classList.add('active'); res.textContent = '进行中…'; }
+    else if (runs.length) {
+      if (runs.length >= need) {
+        card.classList.add('done');
+        res.textContent = `✓ ${runs.length}次均值: 面积 ${agg.area.toFixed(2)} deg² · 均速 ${agg.speed.toFixed(2)} °/s · 分 ${scoreOf(agg)}`;
+      } else {
+        res.textContent = `已测 ${runs.length}/${need} 次(面积 ${runs.map(r => r.area.toFixed(2)).join(' / ')}) — 再点"开始"继续`;
+      }
+    } else {
+      res.textContent = '';
+      if (BT.phase === 'idle') {
+        const firstUndone = TRIALS.findIndex(t => !(BT.runs[t.id] || []).length);
+        if (firstUndone === i) card.classList.add('next');
+      }
+    }
+  });
+  // 清除/跳过按钮文字
+  TRIALS.forEach(tr => {
+    const btn = document.querySelector(`.btn-skip[data-i="${TRIALS.indexOf(tr)}"]`);
+    btn.textContent = (BT.runs[tr.id] || []).length ? '清除' : '跳过';
+  });
+  $('btn-zero').disabled = BT.phase !== 'idle';   // 倒计时/记录中禁止归零,防止污染当次数据
+}
+function statusShow(html) { $('trial-status').innerHTML = html; }
+
+/* 位移口径的指标集: 优先用会话存的; 当前会话补填身高后可用原始数据现算 */
+function dispResultsOf(sess) {
+  if (!sess) return null;
+  if (sess.resultsDisp && Object.keys(sess.resultsDisp).length) return sess.resultsDisp;
+  if (sess.id === BT.sessionId && getHeightCm()) {
+    const h = getHeightCm(), out = {};
+    const dur = Math.max(2, +$('dur').value || 30);
+    for (const tr of TRIALS) {
+      const rawRuns = BT.rawByTrial[tr.id];
+      if (rawRuns && rawRuns.length) out[tr.id] = aggregateRuns(rawRuns.map(run => computeMetrics(toDispSamples(run, h), dur)));
+    }
+    if (Object.keys(out).length) return out;
+  }
+  return null;
+}
+
+/* ================= 报告 ================= */
+function renderReport() {
+  const sess = currentSession();
+  const table = $('report-table');
+  $('viewing').textContent = sess ? `查看: ${new Date(sess.id).toLocaleString()} (会话 #${sess.id})` : '暂无数据';
+  // 单位模式: 无位移数据时回落角度口径
+  const dispSet = dispResultsOf(sess);
+  $('unit-disp').disabled = !dispSet;
+  $('unit-disp').title = dispSet ? '' : '需在③中填写身高(且该会话有原始数据)';
+  if (unitMode === 'disp' && !dispSet) unitMode = 'deg';
+  $('unit-deg').classList.toggle('primary', unitMode === 'deg');
+  $('unit-disp').classList.toggle('primary', unitMode === 'disp');
+  const angle = sess ? sess.results : {};
+  if (!sess || !Object.keys(angle).length) {
+    table.innerHTML = '<tr><td style="color:#8b949e">完成任意一项后在此出报告</td></tr>';
+    $('v-score').textContent = '—';
+    $('v-grade').textContent = '';
+    $('v-quotients').textContent = '';
+    renderStatoCharts(sess);
+    return;
+  }
+  const isDisp = unitMode === 'disp';
+  const resSet = isDisp ? dispSet : angle;
+  const U = isDisp ? { area: 'cm²', len: 'cm', vel: 'cm/s' }
+                   : { area: 'deg²', len: 'deg', vel: '°/s' };
+  const cols = [
+    ['area', `95%椭圆面积(${U.area})`, 2], ['path', `总路径长(${U.len})`, 1],
+    ['speed', `均速(${U.vel})`, 2], ['peak', `峰值速度95%分位(${U.vel})`, 1],
+    ['rms', `RMS(${U.len})`, 2], ['apRms', `AP RMS(${U.len})`, 2], ['mlRms', `ML RMS(${U.len})`, 2],
+    ['rangeAp', `AP范围(${U.len})`, 2], ['rangeMl', `ML范围(${U.len})`, 2],
+    ['score', '单项分(角度口径)', 0],
+  ];
+  let html = '<tr><th>条件</th>' + cols.map(c => `<th>${c[1]}</th>`).join('') + '</tr>';
+  let scoreSum = 0, scoreCnt = 0;
+  for (const tr of TRIALS) {
+    const mA = angle[tr.id];
+    if (!mA) { html += `<tr><td>${tr.name}</td><td colspan="${cols.length}" style="color:#484f58;text-align:center">— 未测 —</td></tr>`; continue; }
+    const m = resSet[tr.id] || mA;
+    const sc = scoreOf(mA);
+    scoreSum += sc; scoreCnt++;
+    const hl = tr.id === 'eo_firm' ? ' class="hl"' : '';
+    html += `<tr${hl}><td>${tr.name}</td>` + cols.map(([k, , d]) =>
+      k === 'score' ? `<td>${sc}</td>` : `<td>${typeof m[k] === 'number' ? m[k].toFixed(d) : '—'}</td>`).join('') + `</tr>`;
+  }
+  // 商值行(Romberg / 软垫; 商值与单位无关); 文献参考: 健康人群 IMU 闭眼/睁眼面积商约 1.3~1.9 (Ferrari 2024)
+  const q = [];
+  const g = id => angle[id] ? angle[id].area : null;
+  if (g('eo_firm') && g('ec_firm')) q.push(`Romberg 商(闭眼/睁眼·硬地)= ${(g('ec_firm') / g('eo_firm')).toFixed(2)}(健康约 1.3~1.9,>2.0 提示视觉依赖偏高)`);
+  if (g('eo_firm') && g('eo_foam')) q.push(`软垫商(睁眼软垫/硬地)= ${(g('eo_foam') / g('eo_firm')).toFixed(2)}`);
+  if (g('eo_firm') && g('ec_foam')) q.push(`闭眼软垫联合 = ${(g('ec_foam') / g('eo_firm')).toFixed(2)}`);
+  // 参考分级始终按角度口径
+  const gD = dispSet && dispSet.eo_firm ? dispSet.eo_firm.area : null;
+  html += `<tr><td>参考分级</td><td colspan="${cols.length}" style="text-align:left;color:#d29922">睁眼·硬地面(角度口径) ${g('eo_firm') ? g('eo_firm').toFixed(2) + ' deg² → ' + gradeOf(g('eo_firm')) : '—'}(≤1 稳定 · ≤3 正常 · ≤8 轻度 · >8 明显,本工具粗参考)` +
+    (gD ? ` | 同项位移口径 ${gD.toFixed(2)} cm²,Doğan 2026 健康青年常模约 1.6±2.0 cm²(正常站姿·睁眼)` : '') + `</td></tr>`;
+  table.innerHTML = html;
+  $('v-quotients').textContent = q.join('　|　');
+  if (scoreCnt) {
+    const total = Math.round(scoreSum / scoreCnt);
+    $('v-score').textContent = total;
+    const eo = g('eo_firm');
+    $('v-grade').textContent = eo ? gradeOf(eo) : '';
+  } else {
+    $('v-score').textContent = '—'; $('v-grade').textContent = '';
+  }
+  renderStatoCharts(sess);
+}
+
+/* ================= 历史 ================= */
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { return []; }
+}
+function renderHistory() {
+  const list = $('hist-list');
+  if (!history.length) { list.innerHTML = '<div class="note">暂无历史记录</div>'; }
+  else {
+    list.innerHTML = '';
+    history.forEach(h => {
+      const keys = Object.keys(h.results);
+      const eo = h.results.eo_firm;
+      const sc = keys.length ? Math.round(keys.reduce((s, k) => s + scoreOf(h.results[k]), 0) / keys.length) : '—';
+      const div = document.createElement('div');
+      div.className = 'hist-item' + (h.id === viewingId ? ' sel' : '');
+      div.innerHTML = `<span>${new Date(h.id).toLocaleString()} · ${keys.length}/4 项</span>` +
+        `<span class="d">${eo ? 'EO面积 ' + eo.area.toFixed(2) + ' · ' : ''}综合分 ${sc}</span>`;
+      div.onclick = () => { viewingId = h.id; renderReport(); renderHistory(); };
+      list.appendChild(div);
+    });
+  }
+  drawTrend($('chart-area'), h => h.results.eo_firm ? +h.results.eo_firm.area.toFixed(2) : null, v => v.toFixed(1), '#d97706');
+  drawTrend($('chart-score'), h => {
+    const keys = Object.keys(h.results);
+    return keys.length ? Math.round(keys.reduce((s, k) => s + scoreOf(h.results[k]), 0) / keys.length) : null;
+  }, v => String(v), '#0d9488');
+}
+function drawTrend(cv, getVal, fmt, color) {
+  const box = cv.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  const w = box.clientWidth, h = box.clientHeight;
+  if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const data = history.slice(0, 20).reverse().map(getVal).filter(v => v !== null && v !== undefined);
+  if (!data.length) { ctx.fillStyle = '#9aa5a0'; ctx.font = '11px sans-serif'; ctx.fillText('暂无数据', 10, 20); return; }
+  const max = Math.max(...data), min = Math.min(...data);
+  const pad = 8, bw = (w - pad * 2) / data.length;
+  ctx.strokeStyle = '#e0e7e2';
+  ctx.beginPath(); ctx.moveTo(0, h - 18); ctx.lineTo(w, h - 18); ctx.stroke();
+  data.forEach((v, i) => {
+    const x = pad + i * bw + bw * 0.15, bwid = bw * 0.7;
+    const t = max === min ? 0.5 : (v - min) / (max - min);
+    const y = 6 + (1 - t) * (h - 40);
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, bwid, h - 18 - y);
+    ctx.fillStyle = '#68746d'; ctx.font = '9px Consolas';
+    if (data.length <= 12 || i % 2 === 0) ctx.fillText(fmt(v), x, y - 2 > 8 ? y - 2 : 10);
+  });
+  ctx.fillStyle = '#9aa5a0'; ctx.font = '10px sans-serif';
+  ctx.fillText(`最新 ${fmt(data[data.length - 1])} | 区间 [${fmt(min)}, ${fmt(max)}]`, 6, h - 6);
+}
+
+/* ================= CSV 导出 ================= */
+function download(name, text) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
+function csvEsc(s) { return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+$('btn-csv-summary').onclick = () => {
+  const sess = currentSession();
+  if (!sess) { log('暂无报告可导出'); return; }
+  const hasDisp = sess.resultsDisp && Object.keys(sess.resultsDisp).length;
+  const head = ['会话时间', '条件', '次数', '95%椭圆面积(deg2)', '总路径长(deg)', '均速(deg/s)', '峰值速度95分位(deg/s)', 'RMS(deg)', 'AP_RMS(deg)', 'ML_RMS(deg)', 'AP范围(deg)', 'ML范围(deg)', '样本数', '有效时长(s)', '单项分'];
+  if (hasDisp) head.push('CoM面积(cm2)', 'CoM均速(cm/s)', 'CoM_RMS(cm)');
+  const rows = [head];
+  const fnum = (v, d) => typeof v === 'number' ? v.toFixed(d) : '';
+  const pushRow = (tr, tag, m) => {
+    const r = [new Date(sess.id).toLocaleString(), tr.name, tag, fnum(m.area, 3), fnum(m.path, 2), fnum(m.speed, 3),
+      fnum(m.peak, 2), fnum(m.rms, 3), fnum(m.apRms, 3), fnum(m.mlRms, 3), fnum(m.rangeAp, 3), fnum(m.rangeMl, 3),
+      m.n, fnum(m.dur, 1), scoreOf(m)];
+    if (hasDisp) {
+      const md = sess.resultsDisp[tr.id];
+      r.push(md ? fnum(md.area, 3) : '', md ? fnum(md.speed, 3) : '', md ? fnum(md.rms, 3) : '');
+    }
+    rows.push(r);
+  };
+  for (const tr of TRIALS) {
+    const runArr = sess.runs && sess.runs[tr.id];
+    if (runArr && runArr.length > 1) runArr.forEach((m, i) => pushRow(tr, `第${i + 1}次`, m));
+    const m = sess.results[tr.id];
+    if (m) pushRow(tr, runArr && runArr.length > 1 ? '均值' : '第1次', m);
+  }
+  download(`balance-report-${sess.id}.csv`, rows.map(r => r.map(csvEsc).join(',')).join('\n'));
+  log('报告 CSV 已导出');
+};
+$('btn-csv-raw').onclick = () => {
+  if (!BT.sessionId || !Object.keys(BT.rawByTrial).length) { log('当前会话暂无原始数据(历史记录不保留原始样本)'); return; }
+  const rows = [['条件', '次数', 't(s)', 'ML(deg)', 'AP(deg)']];
+  for (const tr of TRIALS) {
+    const runsArr = BT.rawByTrial[tr.id];
+    if (!runsArr) continue;
+    runsArr.forEach((arr, i) => {
+      for (const s of arr) rows.push([tr.name, i + 1, s.t.toFixed(3), s.ml.toFixed(4), s.ap.toFixed(4)]);
+    });
+  }
+  download(`balance-raw-${BT.sessionId}.csv`, rows.map(r => r.join(',')).join('\n'));
+  log('原始数据 CSV 已导出');
+};
+
+/* ================= 实时渲染 ================= */
+const cv = $('cv'), ctx = cv.getContext('2d');
+function drawEllipse(ctx, cx, cy, m, scale) {
+  // m.varMl/varAp/cov 为均心化协方差;半轴 = 2.448*sqrt(λ), 屏幕 y 翻转 → 旋转角取负
+  const tr = m.varMl + m.varAp, det = m.varMl * m.varAp - m.cov * m.cov;
+  const disc = Math.max(0, tr * tr / 4 - det);
+  const l1 = tr / 2 + Math.sqrt(disc), l2 = Math.max(tr / 2 - Math.sqrt(disc), 1e-9);
+  const a = 2.448 * Math.sqrt(Math.max(l1, 1e-9)), b = 2.448 * Math.sqrt(l2);
+  const theta = 0.5 * Math.atan2(2 * m.cov, m.varMl - m.varAp);
+  ctx.strokeStyle = '#b45309'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.ellipse(cx, cy, a * scale, b * scale, -theta, 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.fillStyle = '#b45309';
+  ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+}
+
+/* ---- 各条件轨迹图(报告内, 全部条件同一比例尺) ---- */
+function drawStato(cvs, runsArr, agg, maxAbs) {
+  const w = cvs.clientWidth || 220, h = 180;
+  const dpr = window.devicePixelRatio || 1;
+  cvs.width = w * dpr; cvs.height = h * dpr;
+  const c = cvs.getContext('2d');
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const cx = w / 2, cy = h / 2;
+  const scale = (Math.min(w, h) / 2 * 0.86) / maxAbs;
+  const T = ringThresholds();
+  for (let i = 0; i < 4; i++) {
+    const rOut = Math.min(i < 3 ? T[i] : maxAbs, maxAbs) * scale;
+    const rIn = (i === 0 ? 0 : T[i - 1]) * scale;
+    c.beginPath();
+    c.arc(cx, cy, rOut, 0, Math.PI * 2);
+    if (rIn > 0) c.arc(cx, cy, rIn, 0, Math.PI * 2, true);
+    c.fillStyle = lvColor(i, 0.07);
+    c.fill('evenodd');
+  }
+  for (let i = 0; i < 3; i++) {
+    c.strokeStyle = lvColor(i, 0.45);
+    c.beginPath(); c.arc(cx, cy, T[i] * scale, 0, Math.PI * 2); c.stroke();
+  }
+  c.strokeStyle = '#dde4df';
+  c.beginPath(); c.moveTo(0, cy); c.lineTo(w, cy); c.moveTo(cx, 0); c.lineTo(cx, h); c.stroke();
+  // 轴标签: x=左右(ML) y=前后(AP)
+  c.fillStyle = '#b6c0ba'; c.font = '10px "PingFang SC", "Microsoft YaHei", sans-serif';
+  c.textAlign = 'right'; c.fillText('ML 左右 →', w - 6, cy - 5);
+  c.textAlign = 'left'; c.fillText('↑ AP 前后', cx + 5, 12);
+  if (!agg) {
+    c.fillStyle = '#c3ccc6'; c.font = '12px "PingFang SC", "Microsoft YaHei", sans-serif'; c.textAlign = 'center';
+    c.fillText('未测', cx, cy + 4);
+    c.textAlign = 'left';
+    return;
+  }
+  // 轨迹: 每次试验叠加, 按瞬时严重度着色(原始数据仅当前会话保留)
+  for (const arr of runsArr) {
+    for (let i = 1; i < arr.length; i++) {
+      c.strokeStyle = lvColor(swayLevel(Math.hypot(arr[i].ml, arr[i].ap)), 0.75);
+      c.beginPath();
+      c.moveTo(cx + arr[i - 1].ml * scale, cy - arr[i - 1].ap * scale);
+      c.lineTo(cx + arr[i].ml * scale, cy - arr[i].ap * scale);
+      c.stroke();
+    }
+  }
+  // 95% 椭圆(聚合协方差; 历史会话也保留 var 字段)
+  if (typeof agg.varMl === 'number') drawEllipse(c, cx, cy, agg, scale);
+}
+function renderStatoCharts(sess) {
+  const grid = $('stato-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const T = ringThresholds();
+  $('stato-note').textContent = `各条件摇摆轨迹图(同一比例尺 · 分区:绿≤${T[0]}° 稳定 · 黄≤${T[1]}° 轻度 · 橙≤${T[2]}° 中度 · 红>${T[2]}° 重度 · 琥珀椭圆=95%置信)`;
+  const isCur = sess && sess.id === BT.sessionId;
+  let maxAbs = T[2] + 0.6;   // 下限容纳重度界
+  if (isCur) {
+    for (const tr of TRIALS) {
+      for (const arr of (BT.rawByTrial[tr.id] || [])) {
+        for (const s of arr) {
+          const a = Math.max(Math.abs(s.ml), Math.abs(s.ap));
+          if (a > maxAbs) maxAbs = a;
+        }
+      }
+    }
+  }
+  maxAbs *= 1.12;
+  for (const tr of TRIALS) {
+    const agg = sess && sess.results[tr.id];
+    const cell = document.createElement('div');
+    cell.className = 'stato-cell' + (agg ? '' : ' empty');
+    const t = document.createElement('div');
+    t.className = 't';
+    t.textContent = tr.name;
+    const cvs = document.createElement('canvas');
+    const cap = document.createElement('div');
+    cap.className = 'cap';
+    cap.textContent = agg ? `面积 ${agg.area.toFixed(2)} deg² · 均速 ${agg.speed.toFixed(2)} °/s · 分 ${scoreOf(agg)}` : '未测';
+    cell.appendChild(t); cell.appendChild(cvs); cell.appendChild(cap);
+    grid.appendChild(cell);
+    drawStato(cvs, isCur ? (BT.rawByTrial[tr.id] || []) : [], agg, maxAbs);
+  }
+}
+let lastNumT = 0;
+function render() {
+  requestAnimationFrame(render);
+  const box = $('canvas-box');
+  const w = box.clientWidth, h = box.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2;
+  const samples = BT.samples;
+  const nowMs = performance.now();
+  // 量程: 至少容纳重度界+余量; 摇摆更大时自适应放大视野
+  const T = ringThresholds();
+  let maxAbs = T[2] + 0.4;
+  for (const p of liveTrail) { const a = Math.max(Math.abs(p.ml), Math.abs(p.ap)); if (a > maxAbs) maxAbs = a; }
+  maxAbs *= 1.15;
+  const scale = (Math.min(w, h) / 2 * 0.88) / maxAbs;
+  // 严重度同心圆分区(环带填充, 由内向外: 稳定/轻度/中度/重度)
+  for (let i = 0; i < 4; i++) {
+    const rOut = Math.min(i < 3 ? T[i] : maxAbs, maxAbs) * scale;
+    const rIn = (i === 0 ? 0 : T[i - 1]) * scale;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rOut, 0, Math.PI * 2);
+    if (rIn > 0) ctx.arc(cx, cy, rIn, 0, Math.PI * 2, true);
+    ctx.fillStyle = lvColor(i, 0.07);
+    ctx.fill('evenodd');
+  }
+  // 分区边界环 + 标签
+  ctx.font = '10px "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.textAlign = 'center';
+  for (let i = 0; i < 3; i++) {
+    const rr = T[i] * scale;
+    ctx.strokeStyle = lvColor(i, 0.5);
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = lvColor(i, 0.95);
+    ctx.fillText(`${LEVEL_STYLE[i].label} ${T[i]}°`, cx, cy - rr - 5);
+  }
+  ctx.textAlign = 'left';
+  ctx.fillStyle = lvColor(3, 0.95);
+  ctx.fillText(`重度 >${T[2]}°`, 10, 16);
+  // 十字线
+  ctx.strokeStyle = '#dde4df';
+  ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
+  ctx.fillStyle = '#b6c0ba'; ctx.font = '10px "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.textAlign = 'right'; ctx.fillText('ML 左右 →', w - 8, cy - 6);
+  ctx.textAlign = 'left'; ctx.fillText('↑ AP 前后', cx + 6, 16);
+  // 实时轨迹: 最近 12 秒, 每段按该点瞬时严重度着色, 越新越亮
+  for (let i = 1; i < liveTrail.length; i++) {
+    const p = liveTrail[i], q = liveTrail[i - 1];
+    const fade = Math.max(0, 1 - (nowMs - p.ms) / 12000);
+    ctx.strokeStyle = lvColor(swayLevel(Math.hypot(p.ml, p.ap)), 0.08 + 0.7 * fade);
+    ctx.beginPath();
+    ctx.moveTo(cx + q.ml * scale, cy - q.ap * scale);
+    ctx.lineTo(cx + p.ml * scale, cy - p.ap * scale);
+    ctx.stroke();
+  }
+  // 上一项完成后的 95% 椭圆叠加
+  if (BT.lastDone && BT.phase !== 'recording' && BT.phase !== 'countdown') {
+    const { metrics: m } = BT.lastDone;
+    if (m) drawEllipse(ctx, cx, cy, m, scale);
+  }
+  // 当前光点(颜色=当前等级)
+  const sw = usedSway();
+  const curLv = swayLevel(Math.hypot(sw.ml, sw.ap));
+  ctx.fillStyle = lvColor(curLv, 1);
+  ctx.beginPath(); ctx.arc(cx + sw.ml * scale, cy - sw.ap * scale, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = lvColor(curLv, 0.4);
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cx + sw.ml * scale, cy - sw.ap * scale, 12, 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = 1;
+  // 数字(10Hz)
+  const now = performance.now();
+  if (now - lastNumT > 100) {
+    lastNumT = now;
+    $('v-ml').textContent = sw.ml.toFixed(2);
+    $('v-ap').textContent = sw.ap.toFixed(2);
+    $('v-hz').textContent = S.rateHz.toFixed(1) + ' Hz';
+    const lvEl = $('v-level');
+    lvEl.textContent = LEVEL_STYLE[curLv].label;
+    lvEl.style.color = lvColor(curLv, 1);
+    $('v-nsamp').textContent = samples.length;
+    const m = computeMetrics(samples, 0);
+    if (m && samples.length > 5) {
+      $('v-rms-live').textContent = m.rms.toFixed(2) + '°';
+      $('v-spd-live').textContent = m.speed.toFixed(2) + ' °/s';
+    } else {
+      $('v-rms-live').textContent = '—';
+      $('v-spd-live').textContent = '—';
+    }
+    if (BT.phase === 'countdown' || BT.phase === 'recording') {
+      const dur = Math.max(2, +$('dur').value || 30);
+      const el = BT.phase === 'recording' ? (now - BT.t0) / 1000 : 0;
+      $('v-elapsed').textContent = el.toFixed(1) + ' / ' + dur + ' s';
+      $('pbar-fill').style.width = (el / dur * 100).toFixed(1) + '%';
+    } else {
+      $('v-elapsed').textContent = '—';
+      $('pbar-fill').style.width = '0%';
+    }
+  }
+}
+
+/* ================= BLE ================= */
+async function bleConnect(acceptAll) {
+  if (!navigator.bluetooth) { log('错误: 当前浏览器不支持 Web Bluetooth(请用 Chrome/Edge 桌面版或安卓)'); return; }
+  try {
+    log('扫描设备...');
+    const opts = acceptAll
+      ? { acceptAllDevices: true, optionalServices: [SVC] }
+      : { filters: [{ namePrefix: 'WT' }, { namePrefix: 'Wit' }, { namePrefix: 'BWT' }], optionalServices: [SVC] };
+    device = await navigator.bluetooth.requestDevice(opts);
+    log(`选中设备: ${device.name || '(无名)'}`);
+    device.addEventListener('gattserverdisconnected', () => {
+      setConn(false);
+      S.prevRaw = null;   // 重连后首帧重新初始化并自动归零
+      log('设备已断开');
+      if (BT.phase === 'recording' || BT.phase === 'countdown') {
+        log('⚠ 测试被连接中断终止,数据弃用');
+        finishTrial(true);
+      }
+    });
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SVC);
+    const notifyChar = await svc.getCharacteristic(CHR_NOTIFY);
+    try { writeChar = await svc.getCharacteristic(CHR_WRITE); } catch { writeChar = null; }
+    await notifyChar.startNotifications();
+    notifyChar.addEventListener('characteristicvaluechanged', e => {
+      P.feed(new Uint8Array(e.target.value.buffer, e.target.value.byteOffset, e.target.value.byteLength));
+    });
+    setConn(true);
+    log('已订阅 FFE4 推送流(连接后静站 30~60 秒待融合收敛再测更稳)');
+    await sendHex('FF AA 03 ' + $('rate').value.slice(2) + ' 00');
+    await sendHex('FF AA 27 64 00');
+  } catch (e) {
+    log('连接失败: ' + e.message);
+  }
+}
+function setConn(on) {
+  S.connected = on;
+  $('st').textContent = on ? '已连接' : '未连接';
+  $('st').className = 'status ' + (on ? 'on' : 'off');
+  $('btn-disconnect').disabled = !on;
+  $('btn-connect').disabled = on;
+  $('btn-connect-all').disabled = on;
+  if (on && BT.phase === 'idle') statusShow('就绪 — 选择测试项开始');
+}
+async function sendHex(str) {
+  const bytes = parseHex(str);
+  if (!bytes) return false;
+  if (SIM) return true;
+  if (!writeChar) return false;
+  try {
+    if (writeChar.properties.writeWithoutResponse) await writeChar.writeValueWithoutResponse(bytes);
+    else await writeChar.writeValue(bytes);
+    return true;
+  } catch { return false; }
+}
+function parseHex(str) {
+  const parts = str.trim().split(/[\s,]+/).filter(Boolean);
+  if (!parts.length) return null;
+  const out = [];
+  for (const p of parts) {
+    const v = parseInt(p, 16);
+    if (isNaN(v) || v < 0 || v > 255) return null;
+    out.push(v);
+  }
+  return new Uint8Array(out);
+}
+
+/* ================= 仿真(?sim=1,合成摇摆数据,四条件难度递增) ================= */
+const sim = { timer: null, t: 0, last: 0, noise: 0, noise2: 0 };
+function simGain() {
+  if (BT.phase !== 'recording' || BT.activeIdx < 0) return 1;
+  return [1, 1.7, 1.9, 3.0][BT.activeIdx] || 1;
+}
+function simTick() {
+  const now = performance.now();
+  const dt = sim.last ? (now - sim.last) / 1000 : 0.02;
+  sim.last = now;
+  sim.t += dt;
+  const g = simGain();
+  // 平滑噪声(一阶低通随机游走)
+  sim.noise += (Math.random() - 0.5) * 0.08; sim.noise *= 0.94;
+  sim.noise2 += (Math.random() - 0.5) * 0.08; sim.noise2 *= 0.94;
+  const t = sim.t;
+  const ml = g * (0.35 * Math.sin(2 * Math.PI * 0.12 * t) + 0.18 * Math.sin(2 * Math.PI * 0.31 * t + 1.3) + 0.10 * Math.sin(2 * Math.PI * 0.53 * t + 0.5) + 0.07 * sim.noise);
+  const ap = g * (0.45 * Math.sin(2 * Math.PI * 0.09 * t + 0.7) + 0.22 * Math.sin(2 * Math.PI * 0.27 * t + 2.1) + 0.08 * Math.sin(2 * Math.PI * 0.47 * t) + 0.30 * Math.sin(2 * Math.PI * 0.008 * t) + 0.07 * sim.noise2);
+  // 角速度由角度差分合成
+  if (sim.prev) {
+    var wx = 0, wy = 0, wz = 0;
+    const dR = (ap - sim.prev.ap) / dt, dP = (ml - sim.prev.ml) / dt;
+    // 水平安装: roll=AP, pitch=ML(与默认轴映射一致)
+    var roll = ap, pitch = ml, yaw = 0;
+    wx = dR; wy = dP; wz = 0;
+  } else {
+    var roll = ap, pitch = ml, yaw = 0, wx = 0, wy = 0, wz = 0;
+  }
+  sim.prev = { ml, ap };
+  const rad = x => x * Math.PI / 180;
+  const pr = rad(pitch), rr = rad(roll);
+  const frame = buildSimFrame({
+    ax: -Math.sin(pr), ay: Math.sin(rr) * Math.cos(pr), az: Math.cos(rr) * Math.cos(pr),
+    wx, wy, wz, roll, pitch, yaw,
+  }, 20);
+  P.feed(frame);
+}
+function buildSimFrame(v, fmt) {
+  const n = fmt === 28 ? 28 : 20;
+  const b = new Uint8Array(n);
+  b[0] = 0x55; b[1] = 0x61;
+  const put = (o, val, scale) => {
+    let q = Math.round(val / scale * 32768);
+    q = Math.max(-32768, Math.min(32767, q));
+    if (q < 0) q += 65536;
+    b[o] = q & 0xFF; b[o + 1] = q >> 8 & 0xFF;
+  };
+  put(2, v.ax, 16); put(4, v.ay, 16); put(6, v.az, 16);
+  put(8, v.wx, 2000); put(10, v.wy, 2000); put(12, v.wz, 2000);
+  put(14, v.roll, 180); put(16, v.pitch, 180); put(18, v.yaw, 180);
+  return b;
+}
+
+/* ================= UI 事件 ================= */
+$('btn-connect').onclick = () => bleConnect(false);
+$('btn-connect-all').onclick = () => bleConnect(true);
+$('btn-disconnect').onclick = () => { if (device && device.gatt.connected) device.gatt.disconnect(); };
+$('btn-abort').onclick = abortTrial;
+$('btn-zero').onclick = () => {
+  if (BT.phase !== 'idle') { log('倒计时/记录中不能归零,请等待完成或先中止'); return; }
+  if (!S.prevRaw) { log('暂无传感器数据,无法归零'); return; }
+  S.zero = { ...S.cont };
+  S.rel = { roll: 0, pitch: 0, yaw: 0 };
+  liveTrail.length = 0;   // 旧零点下的轨迹不再有效
+  log(`软件归零 @ roll ${S.cont.roll.toFixed(2)} pitch ${S.cont.pitch.toFixed(2)} yaw ${S.cont.yaw.toFixed(2)}`);
+};
+$('rate').onchange = () => sendHex('FF AA 03 ' + $('rate').value.slice(2) + ' 00');
+$('dur').oninput = () => { $('dur-v').textContent = $('dur').value; };
+$('runs').oninput = () => { $('runs-v').textContent = $('runs').value; setCardState(); };
+$('unit-deg').onclick = () => { unitMode = 'deg'; renderReport(); saveCfg(); };
+$('unit-disp').onclick = () => { unitMode = 'disp'; renderReport(); saveCfg(); };
+$('btn-clear-hist').onclick = () => {
+  if (!confirm('确定清空全部历史记录?')) return;
+  history = [];
+  try { localStorage.removeItem(HIST_KEY); } catch {}
+  renderHistory();
+  log('历史已清空');
+};
+
+/* ---- 配置持久化 ---- */
+const CFG_KEYS = ['rate', 'dur', 'cd', 'runs', 'height', 'lv1', 'lv2', 'lv3', 'src-x', 'src-y', 'inv-x', 'inv-y'];
+function saveCfg() {
+  const c = { unitMode };
+  for (const id of CFG_KEYS) { const el = $(id); c[id] = el.type === 'checkbox' ? el.checked : el.value; }
+  try { localStorage.setItem('balance-test-cfg', JSON.stringify(c)); } catch {}
+}
+function loadCfg() {
+  let c = {};
+  try { c = JSON.parse(localStorage.getItem('balance-test-cfg') || '{}'); } catch {}
+  for (const id of CFG_KEYS) {
+    if (!(id in c)) continue;
+    const el = $(id);
+    if (el.type === 'checkbox') el.checked = !!c[id]; else el.value = c[id];
+  }
+  if (c.unitMode === 'disp') unitMode = 'disp';
+}
+CFG_KEYS.forEach(id => $(id).addEventListener('change', saveCfg));
+['src-x', 'src-y', 'inv-x', 'inv-y'].forEach(id => $(id).addEventListener('change', () => { liveTrail.length = 0; }));
+loadCfg();
+if (qs.get('dur')) $('dur').value = qs.get('dur');
+if (qs.get('cd')) $('cd').value = qs.get('cd');
+if (qs.get('runs')) $('runs').value = qs.get('runs');
+if (qs.get('height')) $('height').value = qs.get('height');
+$('dur-v').textContent = $('dur').value;
+$('runs-v').textContent = $('runs').value;
+
+/* ================= 启动 ================= */
+let resizeT = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeT);
+  resizeT = setTimeout(() => renderStatoCharts(currentSession()), 200);
+});
+buildCards();
+setCardState();
+renderHistory();
+if (history.length) viewingId = history[0].id;
+renderReport();
+if (SIM) {
+  setConn(true);
+  $('st').textContent = '仿真中';
+  sim.timer = setInterval(simTick, 20);
+  log('仿真模式: 50Hz 合成摇摆数据,条件难度 A<B≈C<D');
+  statusShow('仿真就绪 — 选择测试项开始');
+} else {
+  log('就绪。请用 Chrome/Edge (安卓或桌面) 连接维特陀螺仪; iOS 请用 Bluefy 浏览器。');
+}
+window.__bt = { S, P, BT, TRIALS, sim, startTrial, finishTrial, computeMetrics, scoreOf, aggregateRuns, toDispSamples, getHeightCm, swayLevel, ringThresholds, LEVEL_STYLE, liveTrail, get history() { return history; }, get unitMode() { return unitMode; } };
+render();
+</script>
+</body>
+</html>

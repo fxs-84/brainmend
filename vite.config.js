@@ -12,8 +12,11 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    // 入口 HTML 较多（index / vor / vor-ch2 / runner / questionnaire / imu-demo 等），
-    // Vite 默认会扫描根目录所有 *.html 作为入口，无需手动 rollupOptions.input
+    // 多页入口: Vite 默认只打包 index.html, 独立页面必须在 rollupOptions.input 登记
+    // (vor/runner/questionnaire 等旧页面未登记, 线上 404 —— 属既有遗留, 本次仅接入 balance-test)
+    rollupOptions: {
+      input: ['index.html', 'balance-test.html'],
+    },
     assetsInlineLimit: 0,
     // Vite 8 默认 CSS 压缩器是 lightningcss，遇到项目里某些第三方 CSS 段会抛
     // "Unexpected end of input"。esbuild 是更稳的备选（需独立装包），

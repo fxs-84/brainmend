@@ -31,6 +31,7 @@
     "test:ble-stall": "node tests/e2e/ble-stall.spec.cjs",
     "demo:imu": "node tests/static-server.mjs",
     "test:e2e:imu-demo": "node tests/e2e/imu-demo.spec.cjs",
+    "test:e2e:balance": "node tests/e2e/balance-test.spec.cjs",
     "test:e2e:vor-coins": "node tests/e2e/vor-coins-planets.spec.cjs",
     "test:e2e:vor-vis": "node tests/e2e/vor-visibility.spec.cjs",
     "test:e2e:vor-fire": "node tests/e2e/vor-fire-discipline.spec.cjs",
