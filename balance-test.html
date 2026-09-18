@@ -195,6 +195,7 @@
       <label>记录时长 <input type="number" id="dur" min="10" max="120" step="5" value="30" style="width:64px"> 秒</label>
       <label>每条件次数 <input type="number" id="runs" min="1" max="5" step="1" value="1" style="width:52px"> 次</label>
       <label>倒计时 <input type="number" id="cd" min="3" max="10" step="1" value="5" style="width:52px"> 秒</label>
+      <label><input type="checkbox" id="chk-voice" checked> 语音提示</label>
       <label>身高 <input type="number" id="height" min="80" max="230" step="1" placeholder="cm" style="width:64px"> cm</label>
       <label title="瞬时倾斜分级三界(°):稳定/轻度/中度。默认值由 Biodex mCTSIB 健康常模上限×1.73(Rayleigh 95%半径)推导,无公认标准,有本地常模时可直接改">分级°
         <input type="number" id="lv1" min="0.2" max="10" step="0.1" value="0.8" style="width:52px">
@@ -302,10 +303,10 @@ if (SIM) document.body.classList.add('sim');
 
 /* 测试项定义 */
 const TRIALS = [
-  { id: 'eo_firm', name: 'A · 睁眼 · 硬地面', tag: 'baseline', hint: '双脚并拢站稳,双臂自然下垂,目视前方固定点。' },
-  { id: 'ec_firm', name: 'B · 闭眼 · 硬地面', tag: 'Romberg',  hint: '站稳后闭眼;开始提示音后闭眼,结束提示音后睁眼。' },
-  { id: 'eo_foam', name: 'C · 睁眼 · 软垫',   tag: 'foam',     hint: '双脚并拢站在软垫/折叠毛巾上,睁眼目视前方。' },
-  { id: 'ec_foam', name: 'D · 闭眼 · 软垫',   tag: '最难',     hint: '站在软垫上,开始提示音后闭眼——注意安全,旁边最好有支撑物。' },
+  { id: 'eo_firm', name: 'A · 睁眼 · 硬地面', tag: 'baseline', eyes: 'open',   hint: '双脚并拢站稳,双臂自然下垂,目视前方固定点。' },
+  { id: 'ec_firm', name: 'B · 闭眼 · 硬地面', tag: 'Romberg',  eyes: 'closed', hint: '站稳后闭眼;开始提示音后闭眼,结束提示音后睁眼。' },
+  { id: 'eo_foam', name: 'C · 睁眼 · 软垫',   tag: 'foam',     eyes: 'open',   hint: '双脚并拢站在软垫/折叠毛巾上,睁眼目视前方。' },
+  { id: 'ec_foam', name: 'D · 闭眼 · 软垫',   tag: '最难',     eyes: 'closed', hint: '站在软垫上,开始提示音后闭眼——注意安全,旁边最好有支撑物。' },
 ];
 const HIST_KEY = 'balance-test-history-v1';
 
@@ -361,6 +362,28 @@ function beep(freq = 880, ms = 80, vol = 0.12) {
     o.connect(g); g.connect(AC.destination);
     o.start(); o.stop(AC.currentTime + ms / 1000);
   } catch (e) { /* 无声也不影响测试 */ }
+}
+
+/* ---- 语音提示(浏览器内置 TTS, 中文; 无 TTS 环境静默退回纯提示音) ---- */
+let voicesCache = [];
+function loadVoices() {
+  try { voicesCache = speechSynthesis.getVoices(); } catch (e) {}
+}
+if (typeof speechSynthesis !== 'undefined') {
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;
+}
+function speak(text) {
+  try {
+    if (typeof speechSynthesis === 'undefined' || $('chk-voice') && !$('chk-voice').checked) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN';
+    const v = voicesCache.find(v => v.lang && v.lang.startsWith('zh'));
+    if (v) u.voice = v;
+    u.rate = 0.95;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  } catch (e) { /* TTS 不可用时忽略, 提示音仍在 */ }
 }
 
 /* ================= 解析器(与 imu-demo 相同: 0x55 对齐, 滑动重同步) ================= */
@@ -664,6 +687,7 @@ function beginRecording(tr) {
   const dur = Math.max(2, +$('dur').value || 30);
   statusShow(`${tr.name}<br><span class="cd" style="color:var(--accent)">记录中</span><br><span style="font-size:13px;color:var(--muted)">保持站姿不动,${dur} 秒后自动结束</span>`);
   log(`记录中:${tr.name},${dur} 秒`);
+  setTimeout(() => speak(tr.eyes === 'closed' ? '请闭眼，开始记录' : '开始记录'), 250);
   BT.timers.push(setTimeout(() => finishTrial(false), dur * 1000));
 }
 function finishTrial(aborted) {
@@ -684,6 +708,7 @@ function finishTrial(aborted) {
   const m = computeMetrics(BT.samples, dur);
   BT.phase = 'done';
   beep(1320, 200); setTimeout(() => beep(1320, 200), 250);
+  setTimeout(() => speak(tr.eyes === 'closed' ? '记录结束，请睁眼' : '记录结束'), 700);
   if (!m) {
     log(`${tr.name}: 有效样本不足(${BT.samples.length}),请重试`);
     statusShow(`${tr.name} 失败 — 有效样本不足,请重测`);
@@ -1347,7 +1372,7 @@ $('btn-clear-hist').onclick = () => {
 };
 
 /* ---- 配置持久化 ---- */
-const CFG_KEYS = ['rate', 'dur', 'cd', 'runs', 'height', 'lv1', 'lv2', 'lv3', 'src-x', 'src-y', 'inv-x', 'inv-y'];
+const CFG_KEYS = ['rate', 'dur', 'cd', 'runs', 'height', 'lv1', 'lv2', 'lv3', 'chk-voice', 'src-x', 'src-y', 'inv-x', 'inv-y'];
 function saveCfg() {
   const c = { unitMode };
   for (const id of CFG_KEYS) { const el = $(id); c[id] = el.type === 'checkbox' ? el.checked : el.value; }

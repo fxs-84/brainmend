@@ -44,6 +44,12 @@ function assert(name, cond, detail = '') {
     const run = await page.evaluate(() => ({ hz: window.__bt.S.rateHz, runs: document.getElementById('runs').value, h: document.getElementById('height').value }));
     assert('仿真数据流运行(实测 35~60Hz)', run.hz > 35 && run.hz < 60, `${run.hz.toFixed(1)}Hz`);
     assert('URL 参数生效(runs=2, height=170)', run.runs === '2' && run.h === '170', `runs=${run.runs} h=${run.h}`);
+    // 语音 spy: 包装 SpeechSynthesisUtterance 记录播报文本
+    await page.evaluate(() => {
+      window.__spoken = [];
+      const OrigU = window.SpeechSynthesisUtterance;
+      window.SpeechSynthesisUtterance = function (text) { window.__spoken.push(String(text)); return new OrigU(text); };
+    });
 
     /* ---- 1b) 实时轨迹与严重度分级 ---- */
     const live = await page.evaluate(() => ({
@@ -123,6 +129,9 @@ function assert(name, cond, detail = '') {
     assert('A: 路径/均速/RMS 为正有限', a2.path > 1 && a2.aggSpeed > 0.1 && a2.rms > 0.05);
     assert('A: 峰值速度(95分位)≥均速', a2.peak >= a2.aggSpeed * 0.99, `${a2.peak.toFixed(2)} vs ${a2.aggSpeed.toFixed(2)}`);
     assert('A: 有效时长≈4s', a2.dur > 3.4 && a2.dur < 4.6, `${a2.dur.toFixed(2)}s`);
+    const spokenA = await page.evaluate(() => window.__spoken);
+    assert('A(睁眼): 语音提示 = 开始记录/记录结束', spokenA.includes('开始记录') && !spokenA.includes('请闭眼，开始记录') && spokenA.includes('记录结束'),
+      spokenA.join(' | '));
 
     /* ---- 4) CoM 位移口径 ---- */
     const hcom = 0.552 * 170;
@@ -183,6 +192,9 @@ function assert(name, cond, detail = '') {
     console.log(`  B项(1/2): 面积=${b1.agg.area.toFixed(2)}deg² RMS=${b1.agg.rms.toFixed(2)}° (A均值面积=${a2.aggArea.toFixed(2)} RMS=${a2.rms.toFixed(2)})`);
     // 4s 短窗的椭圆面积受 ml/ap 随机相关性影响很大, 闭眼>睁眼用 RMS(与协方差无关)断言更稳
     assert('B: 闭眼摇摆显著大于睁眼(RMS,增益1.7)', b1.agg.rms > a2.rms * 1.3, `${b1.agg.rms.toFixed(2)} vs ${a2.rms.toFixed(2)}`);
+    const spokenB = await page.evaluate(() => window.__spoken);
+    assert('B(闭眼): 语音提示 = 请闭眼，开始记录 / 记录结束，请睁眼',
+      spokenB.includes('请闭眼，开始记录') && spokenB.includes('记录结束，请睁眼'), spokenB.join(' | '));
     assert('Romberg 商行出现', b1.quot.includes('Romberg'), b1.quot.slice(0, 90));
     assert('两项综合分 < 单项A分(闭眼拉低)', +b1.score < +rep.score, `${b1.score} vs ${rep.score}`);
     assert('历史同会话合并(1个会话存2项)', b1.storedKeys.length === 2, b1.storedKeys.join(','));
