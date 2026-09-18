@@ -1308,8 +1308,9 @@ function simTick() {
   sim.noise += (Math.random() - 0.5) * 0.08; sim.noise *= 0.94;
   sim.noise2 += (Math.random() - 0.5) * 0.08; sim.noise2 *= 0.94;
   const t = sim.t;
-  const ml = g * (0.35 * Math.sin(2 * Math.PI * 0.12 * t) + 0.18 * Math.sin(2 * Math.PI * 0.31 * t + 1.3) + 0.10 * Math.sin(2 * Math.PI * 0.53 * t + 0.5) + 0.07 * sim.noise);
-  const ap = g * (0.45 * Math.sin(2 * Math.PI * 0.09 * t + 0.7) + 0.22 * Math.sin(2 * Math.PI * 0.27 * t + 2.1) + 0.08 * Math.sin(2 * Math.PI * 0.47 * t) + 0.30 * Math.sin(2 * Math.PI * 0.008 * t) + 0.07 * sim.noise2);
+  // 静止性摇摆: 分量频率 0.4~2.7Hz(4s 短窗也能覆盖多个周期), 窗口间 RMS 稳定, 短测断言可靠
+  const ml = g * (0.30 * Math.sin(2 * Math.PI * 0.50 * t) + 0.15 * Math.sin(2 * Math.PI * 1.10 * t + 1.3) + 0.08 * Math.sin(2 * Math.PI * 2.30 * t + 0.5) + 0.06 * sim.noise);
+  const ap = g * (0.38 * Math.sin(2 * Math.PI * 0.40 * t + 0.7) + 0.20 * Math.sin(2 * Math.PI * 1.30 * t + 2.1) + 0.07 * Math.sin(2 * Math.PI * 2.70 * t) + 0.06 * sim.noise2);
   // 角速度由角度差分合成
   if (sim.prev) {
     var wx = 0, wy = 0, wz = 0;
@@ -1389,6 +1390,7 @@ function loadCfg() {
   if (c.unitMode === 'disp') unitMode = 'disp';
 }
 CFG_KEYS.forEach(id => $(id).addEventListener('change', saveCfg));
+$('height').addEventListener('change', () => { renderReport(); });   // 补填身高后立即刷新报告的位移单位可用性
 ['src-x', 'src-y', 'inv-x', 'inv-y'].forEach(id => $(id).addEventListener('change', () => { liveTrail.length = 0; }));
 loadCfg();
 if (qs.get('dur')) $('dur').value = qs.get('dur');

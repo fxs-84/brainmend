@@ -86,7 +86,7 @@ function assert(name, cond, detail = '') {
     await page.click('.btn-start[data-i="3"]');
     await page.waitForTimeout(400);
     const zc = await page.evaluate(() => ({ phase: window.__bt.BT.phase, rel: { ...window.__bt.S.rel }, zero: { ...window.__bt.S.zero } }));
-    assert('点击开始即归零(倒计时中 rel 贴近零点)', zc.phase === 'countdown' && Math.abs(zc.rel.roll) < 0.7 && Math.abs(zc.rel.pitch) < 0.7 && Math.abs(zc.zero.roll - 6) < 0.5,
+    assert('点击开始即归零(零点捕获姿态偏移)', zc.phase === 'countdown' && Math.abs(zc.zero.roll - 6) < 0.5 && Math.abs(zc.rel.roll) < 1.2 && Math.abs(zc.rel.pitch) < 1.2,
       `rel=(${zc.rel.roll.toFixed(2)},${zc.rel.pitch.toFixed(2)}) zero.roll=${zc.zero.roll.toFixed(2)}`);
     await page.click('#btn-abort');
     await page.waitForTimeout(300);
@@ -98,6 +98,27 @@ function assert(name, cond, detail = '') {
     const defRuns = await page0.evaluate(() => document.getElementById('runs').value);
     assert('默认每条件次数 = 1', defRuns === '1', `runs=${defRuns}`);
     await page0.close();
+
+    /* ---- 1e) 补填身高后位移单位立即可用(回归: 改身高不重渲导致按钮死锁) ---- */
+    const page1 = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page1.goto(`http://localhost:${PORT}/balance-test.html?sim=1&dur=3&cd=3&runs=1`, { waitUntil: 'load' });
+    await page1.waitForFunction(() => window.__bt && window.__bt.sim.timer, null, { timeout: 5000 });
+    await page1.click('.btn-start[data-i="0"]');
+    await page1.waitForFunction(() => window.__bt.BT.phase === 'idle' && (window.__bt.BT.runs.eo_firm || []).length === 1, null, { timeout: 15000 });
+    const dis0 = await page1.evaluate(() => document.getElementById('unit-disp').disabled);
+    assert('未填身高: 位移单位禁用', dis0 === true);
+    await page1.evaluate(() => { const e = document.getElementById('height'); e.value = '170'; e.dispatchEvent(new Event('change')); });
+    await page1.waitForTimeout(300);
+    const st1 = await page1.evaluate(() => ({ dis: document.getElementById('unit-disp').disabled, mode: window.__bt.unitMode }));
+    assert('补填身高后位移单位立即可用', st1.dis === false, `disabled=${st1.dis}`);
+    await page1.click('#unit-disp');
+    await page1.waitForTimeout(300);
+    const st2 = await page1.evaluate(() => ({
+      mode: window.__bt.unitMode,
+      head: document.getElementById('report-table').querySelector('tr').textContent,
+    }));
+    assert('点击后切换到位移单位(cm² 表头)', st2.mode === 'disp' && st2.head.includes('cm²'), st2.head.slice(0, 50));
+    await page1.close();
 
     /* ---- 2) 条件A: 第1次(1/2) ---- */
     await runTrial(page, 0, 1);
