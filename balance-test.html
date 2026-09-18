@@ -1077,6 +1077,8 @@ function renderStatoCharts(sess) {
     }
   }
   maxAbs *= 1.12;
+  // 先建齐 4 个格子再统一绘制: 否则第一个 canvas 会在格子独占一行时量到全宽, 之后被挤压成椭圆
+  const pending = [];
   for (const tr of TRIALS) {
     const agg = sess && sess.results[tr.id];
     const cell = document.createElement('div');
@@ -1090,7 +1092,10 @@ function renderStatoCharts(sess) {
     cap.textContent = agg ? `面积 ${agg.area.toFixed(2)} deg² · 均速 ${agg.speed.toFixed(2)} °/s · 分 ${scoreOf(agg)}` : '未测';
     cell.appendChild(t); cell.appendChild(cvs); cell.appendChild(cap);
     grid.appendChild(cell);
-    drawStato(cvs, isCur ? (BT.rawByTrial[tr.id] || []) : [], agg, maxAbs);
+    pending.push({ cvs, agg, tr });
+  }
+  for (const p of pending) {
+    drawStato(p.cvs, isCur ? (BT.rawByTrial[p.tr.id] || []) : [], p.agg, maxAbs);
   }
 }
 let lastNumT = 0;
