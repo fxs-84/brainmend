@@ -247,7 +247,7 @@ function assert(name, cond, detail = '') {
     await page.waitForTimeout(300);
     assert('CSV 导出点击无页面错误', true);
 
-    /* ---- 8) 感觉通道保持率与主观紧绷感 ---- */
+    /* ---- 8) 感觉通道保持率与自动症状/控制策略解读 ---- */
     const missingSense = await page.evaluate(() => ({
       som: document.getElementById('sense-som').textContent,
       vis: document.getElementById('sense-vis').textContent,
@@ -278,17 +278,22 @@ function assert(name, cond, detail = '') {
       `${JSON.stringify(sense.actual)} 期望 ${JSON.stringify(sense.expected)}`);
     assert('同时显示挑战条件摇摆增幅', sense.effect.includes('较 A 摇摆'), sense.effect);
 
-    await page.selectOption('.effort-select[data-cond="eo_firm"]', '2');
-    await page.selectOption('.effort-select[data-cond="ec_firm"]', '3');
-    await page.waitForTimeout(300);
-    const effort = await page.evaluate(() => ({
-      summary: document.getElementById('effort-summary').textContent,
-      saved: JSON.parse(localStorage.getItem('balance-test-history-v1'))[0].effort,
+    const auto = await page.evaluate(() => ({
+      r: window.__bt.BT.results,
+      strategy: document.getElementById('strategy-summary').textContent,
+      som: document.getElementById('interp-som').textContent,
+      vis: document.getElementById('interp-vis').textContent,
+      vest: document.getElementById('interp-vest').textContent,
+      effortInputs: document.querySelectorAll('.effort-select').length,
     }));
-    assert('主观紧绷感入历史会话(非 IMU 指标)', effort.saved && effort.saved.eo_firm === 2 && effort.saved.ec_firm === 3,
-      JSON.stringify(effort.saved));
-    assert('自评汇总显示两项均值与放松建议', effort.summary.includes('平均 2.5/3') && effort.summary.includes('放松'),
-      effort.summary.slice(-100));
+    assert('自动计算频率重心和 Jerk(非空且为正)', ['eo_firm', 'ec_firm', 'eo_foam', 'ec_foam'].every(k =>
+      typeof auto.r[k].centroidHz === 'number' && auto.r[k].centroidHz > 0 &&
+      typeof auto.r[k].jerkRms === 'number' && auto.r[k].jerkRms > 0));
+    assert('自动生成控制策略分析(含频率重心,非主观自评)', auto.strategy.includes('频率重心') && auto.strategy.includes('Hz') && auto.strategy.includes('不是肌电测量'),
+      auto.strategy);
+    assert('自动生成三系统症状解读', auto.som.length > 5 && auto.vis.length > 5 && auto.vest.length > 5,
+      `${auto.som} | ${auto.vis} | ${auto.vest}`);
+    assert('不再要求用户主观紧绷打分', auto.effortInputs === 0);
 
     /* ---- 9) 等间隔重采样抗到达抖动 ---- */
     const rs = await page.evaluate(() => {
@@ -312,6 +317,16 @@ function assert(name, cond, detail = '') {
     });
     assert('大丢包间隔标记数据质量不足', quality.quality === 'warn' && quality.maxGapMs > 500,
       `quality=${quality.quality} maxGap=${quality.maxGapMs.toFixed(0)}ms`);
+    const freq = await page.evaluate(() => {
+      const s = [];
+      for (let i = 0; i <= 200; i++) {
+        const t = i / 50;
+        s.push({ t, ml: Math.sin(2 * Math.PI * 1.0 * t), ap: 0 });
+      }
+      return window.__bt.computeMetrics(s, 4);
+    });
+    assert('1Hz 正弦的频率重心识别准确(±0.08Hz)', Math.abs(freq.centroidHz - 1.0) < 0.08,
+      `centroid=${freq.centroidHz.toFixed(3)}Hz`);
 
     /* ---- 10) 失去平衡判定、新会话与空会话保护 ---- */
     await page.click('.btn-start[data-i="0"]');
