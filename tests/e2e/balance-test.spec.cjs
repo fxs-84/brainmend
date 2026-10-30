@@ -240,6 +240,49 @@ function assert(name, cond, detail = '') {
     await page.waitForTimeout(300);
     assert('CSV 导出点击无页面错误', true);
 
+    /* ---- 8) 感觉通道保持率与主观紧绷感 ---- */
+    const missingSense = await page.evaluate(() => ({
+      som: document.getElementById('sense-som').textContent,
+      vis: document.getElementById('sense-vis').textContent,
+      vest: document.getElementById('sense-vest').textContent,
+    }));
+    assert('仅有 A/B 时: 本体保持率出数,视觉/前庭仍待测', /%$/.test(missingSense.som) && missingSense.vis === '—' && missingSense.vest === '—',
+      JSON.stringify(missingSense));
+    await runTrial(page, 2, 1);
+    await runTrial(page, 3, 1);
+    const sense = await page.evaluate(() => {
+      const r = window.__bt.BT.results;
+      const expected = {
+        som: Math.round(r.eo_firm.rms / r.ec_firm.rms * 100) + '%',
+        vis: Math.round(r.eo_firm.rms / r.eo_foam.rms * 100) + '%',
+        vest: Math.round(r.eo_firm.rms / r.ec_foam.rms * 100) + '%',
+      };
+      return {
+        expected,
+        actual: {
+          som: document.getElementById('sense-som').textContent,
+          vis: document.getElementById('sense-vis').textContent,
+          vest: document.getElementById('sense-vest').textContent,
+        },
+        effect: document.getElementById('effect-vest').textContent,
+      };
+    });
+    assert('SOT 式保持率公式正确(A/B、A/C、A/D)', JSON.stringify(sense.actual) === JSON.stringify(sense.expected),
+      `${JSON.stringify(sense.actual)} 期望 ${JSON.stringify(sense.expected)}`);
+    assert('同时显示挑战条件摇摆增幅', sense.effect.includes('较 A 摇摆'), sense.effect);
+
+    await page.selectOption('.effort-select[data-cond="eo_firm"]', '2');
+    await page.selectOption('.effort-select[data-cond="ec_firm"]', '3');
+    await page.waitForTimeout(300);
+    const effort = await page.evaluate(() => ({
+      summary: document.getElementById('effort-summary').textContent,
+      saved: JSON.parse(localStorage.getItem('balance-test-history-v1'))[0].effort,
+    }));
+    assert('主观紧绷感入历史会话(非 IMU 指标)', effort.saved && effort.saved.eo_firm === 2 && effort.saved.ec_firm === 3,
+      JSON.stringify(effort.saved));
+    assert('自评汇总显示两项均值与放松建议', effort.summary.includes('平均 2.5/3') && effort.summary.includes('放松'),
+      effort.summary.slice(-100));
+
     await page.screenshot({ path: path.join(__dirname, '..', '..', 'screenshots', 'balance-test-sim.png') });
     await page.close();
 

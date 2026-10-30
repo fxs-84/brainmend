@@ -131,6 +131,18 @@
   tr.hl td { color: var(--accent); font-weight: 600; }
   #v-quotients { line-height: 1.8; }
 
+  /* ---------- 感觉通道与主观自评 ---------- */
+  .sense-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+  @media (max-width: 520px) { .sense-grid { grid-template-columns: 1fr; } }
+  .sense-card { background: #f7faf8; border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+  .sense-card .sk { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .sense-card .sv { font-size: 25px; font-weight: 700; font-family: var(--mono); color: var(--accent); margin: 2px 0; }
+  .sense-card .sd { font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .sense-card .se { font-size: 11px; font-family: var(--mono); color: var(--amber); margin-top: 4px; }
+  .effort-select { font-size: 11px; padding: 4px 6px; max-width: 105px; }
+  .effort-row { margin: 0 0 8px; }
+  .effort-summary { background: var(--amber-soft); border: 1px solid #f0dcc0; border-radius: 10px; padding: 9px 11px; margin-top: 10px; font-size: 12px; color: var(--amber); }
+
   /* ---------- 各条件轨迹图 ---------- */
   .stato-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
   .stato-cell { background: #fcfefd; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
@@ -270,6 +282,33 @@
   </div>
 
   <div class="panel">
+    <h2>感觉通道与代偿 · SOT 式保持率(非神经占比)</h2>
+    <div class="sense-grid">
+      <div class="sense-card">
+        <div class="sk">本体感觉相关代偿 · A→B</div>
+        <div class="sv" id="sense-som">—</div>
+        <div class="sd">闭眼硬地:撤走视觉后,依靠足底/关节位置觉等保持平衡的能力</div>
+        <div class="se" id="effect-som"></div>
+      </div>
+      <div class="sense-card">
+        <div class="sk">视觉相关代偿 · A→C</div>
+        <div class="sv" id="sense-vis">—</div>
+        <div class="sd">睁眼软垫:表面信息变差时,用视觉补偿平衡的能力</div>
+        <div class="se" id="effect-vis"></div>
+      </div>
+      <div class="sense-card">
+        <div class="sk">前庭相关代偿 · A→D</div>
+        <div class="sv" id="sense-vest">—</div>
+        <div class="sd">闭眼软垫:视觉缺失且表面信息变差时,靠前庭等残余信息维持</div>
+        <div class="se" id="effect-vest"></div>
+      </div>
+    </div>
+    <div class="note">保持率 = 基线 A 的 RMS ÷ 挑战条件 RMS ×100%,越接近或超过 100% 表示摇摆增加越少、代偿越好;括号内为摇摆增幅。它描述的是<b>条件间表现变化</b>,不是视觉/本体/前庭在神经系统中的真实贡献百分比。</div>
+    <div class="effort-summary" id="effort-summary">主观紧绷感尚未记录:可在每张测试卡片下方补充。该项为自评,不由 IMU 推断。</div>
+    <div class="note" style="margin-top:8px">安静站立虽以自动调节为主,仍有脑干、小脑和皮层参与;刻意控制可能在部分人中增加共同收缩与紧绷感,但并非人人如此。自评紧绷偏高时,可先放松肩颈、松开下颌、膝微屈、慢呼吸 1–2 分钟,再复测比较。</div>
+  </div>
+
+  <div class="panel">
     <h2>历史记录 · 存本机浏览器</h2>
     <div class="row" style="margin-bottom:10px">
       <button id="btn-clear-hist" class="warn">清空历史</button>
@@ -333,6 +372,7 @@ const BT = {
   runs: {},               // 当前会话每条件各次指标 {condId: [metrics, ...]} (角度单位)
   results: {},            // 当前会话 {condId: 聚合指标} (角度单位, 报告/评分/历史用)
   resultsDisp: {},        // 当前会话 {condId: 聚合指标} (CoM 位移单位, 需身高)
+  effort: {},             // 各条件主观紧绷感 0~3(自评, 非 IMU 测量)
   sessionId: 0,
 };
 let history = loadHistory();
@@ -761,7 +801,7 @@ function saveCurrentSession() {
   for (const [k, m] of Object.entries(BT.resultsDisp)) { if (m) { resultsDisp[k] = stripMetric(m); hasDisp = true; } }
   const runs = {};
   for (const [k, arr] of Object.entries(BT.runs)) runs[k] = arr.map(stripMetric);
-  const sess = { id: BT.sessionId, date: new Date(BT.sessionId).toISOString(), height: getHeightCm() || null, results, runs };
+  const sess = { id: BT.sessionId, date: new Date(BT.sessionId).toISOString(), height: getHeightCm() || null, results, runs, effort: { ...BT.effort } };
   if (hasDisp) sess.resultsDisp = resultsDisp;
   const i = history.findIndex(h => h.id === sess.id);
   if (i >= 0) history[i] = sess; else history.unshift(sess);
@@ -780,11 +820,29 @@ function buildCards() {
       <div class="name">${tr.name}<span class="tag">${tr.tag}</span></div>
       <div class="hint">${tr.hint}</div>
       <div class="result-line" id="res-${tr.id}"></div>
+      <div class="effort-row">
+        <label>紧绷感(主观)
+          <select class="effort-select" data-cond="${tr.id}">
+            <option value="">未评</option>
+            <option value="0">0 无</option>
+            <option value="1">1 轻</option>
+            <option value="2">2 明显</option>
+            <option value="3">3 很强</option>
+          </select>
+        </label>
+      </div>
       <div class="row">
         <button class="primary btn-start" data-i="${i}">开始</button>
         <button class="warn btn-skip" data-i="${i}">跳过</button>
       </div>`;
     grid.appendChild(div);
+  });
+  grid.querySelectorAll('.effort-select').forEach(sel => sel.onchange = () => {
+    const id = sel.dataset.cond;
+    if (sel.value === '') delete BT.effort[id];
+    else BT.effort[id] = +sel.value;
+    if (BT.sessionId) saveCurrentSession();
+    renderSensoryPanel(currentSession());
   });
   grid.querySelectorAll('.btn-start').forEach(b => b.onclick = () => startTrial(+b.dataset.i));
   grid.querySelectorAll('.btn-skip').forEach(b => b.onclick = () => {
@@ -793,6 +851,9 @@ function buildCards() {
     if (BT.resultsDisp[tr.id]) delete BT.resultsDisp[tr.id];
     if (BT.runs[tr.id]) delete BT.runs[tr.id];
     if (BT.rawByTrial[tr.id]) delete BT.rawByTrial[tr.id];
+    delete BT.effort[tr.id];
+    const effSel = document.querySelector(`.effort-select[data-cond="${tr.id}"]`);
+    if (effSel) effSel.value = '';
     log(`跳过/清除 ${tr.name}`);
     ensureSession(); saveCurrentSession();
     renderReport(); renderHistory(); setCardState();
@@ -848,6 +909,41 @@ function dispResultsOf(sess) {
   return null;
 }
 
+/* ---- 感觉通道代偿: SOT 式保持率(基线 RMS / 挑战 RMS), 非神经通路占比 ---- */
+function renderSensoryPanel(sess) {
+  const results = sess ? sess.results : {};
+  const defs = [
+    { key: 'som', a: 'eo_firm', b: 'ec_firm', tag: 'B' },
+    { key: 'vis', a: 'eo_firm', b: 'eo_foam', tag: 'C' },
+    { key: 'vest', a: 'eo_firm', b: 'ec_foam', tag: 'D' },
+  ];
+  for (const d of defs) {
+    const ma = results[d.a], mb = results[d.b];
+    const valid = ma && mb && ma.rms > 0 && mb.rms > 0;
+    $('sense-' + d.key).textContent = valid ? Math.round(ma.rms / mb.rms * 100) + '%' : '—';
+    if (valid) {
+      const delta = Math.round((mb.rms / ma.rms - 1) * 100);
+      $('effect-' + d.key).textContent = `${d.tag} 较 A 摇摆 ${delta >= 0 ? '+' : ''}${delta}%`;
+    } else {
+      $('effect-' + d.key).textContent = `需完成 A 和 ${d.tag}`;
+    }
+  }
+  // 主观紧绷感: 历史会话读保存值; 当前会话(含尚未测)读实时自评
+  const eff = sess && sess.id !== BT.sessionId ? (sess.effort || {}) : BT.effort;
+  const rated = TRIALS.filter(tr => typeof eff[tr.id] === 'number');
+  const el = $('effort-summary');
+  if (!rated.length) {
+    el.textContent = '主观紧绷感尚未记录:可在每张测试卡片下方补充。该项为自评,不由 IMU 推断。';
+    return;
+  }
+  const avg = rated.reduce((s, tr) => s + eff[tr.id], 0) / rated.length;
+  const detail = TRIALS.map(tr => `${tr.name[0]} ${typeof eff[tr.id] === 'number' ? eff[tr.id] : '—'}`).join(' · ');
+  const advice = avg >= 2
+    ? '本次主观紧绷感偏高。建议先放松肩颈、松开下颌、膝微屈、慢呼吸 1–2 分钟,再复测比较;若持续疼痛/头晕请咨询专业人员。'
+    : '主观紧绷感较低,更接近自然、自动的站立控制。';
+  el.textContent = `主观紧绷感(0~3): ${detail} | 平均 ${avg.toFixed(1)}/3。${advice}`;
+}
+
 /* ================= 报告 ================= */
 function renderReport() {
   const sess = currentSession();
@@ -867,6 +963,7 @@ function renderReport() {
     $('v-grade').textContent = '';
     $('v-quotients').textContent = '';
     renderStatoCharts(sess);
+    renderSensoryPanel(sess);
     return;
   }
   const isDisp = unitMode === 'disp';
@@ -913,6 +1010,7 @@ function renderReport() {
     $('v-score').textContent = '—'; $('v-grade').textContent = '';
   }
   renderStatoCharts(sess);
+  renderSensoryPanel(sess);
 }
 
 /* ================= 历史 ================= */
