@@ -312,6 +312,14 @@
   </div>
 
   <div class="panel">
+    <h2>姿势偏移方向 · 各象限停留时间</h2>
+    <div style="overflow-x:auto"><table id="quadrant-table"></table></div>
+    <div class="note" style="margin-top:6px">象限以 ML 向右、AP 向前为正;仅统计偏移半径 &gt;0.15° 的样本。平均向量表示持续姿态偏移,不是测力台意义上的绝对压力中心。</div>
+    <div class="effort-summary" id="quadrant-summary">完成测试后自动统计主要偏移方向。</div>
+    <div class="note" style="margin-top:6px">“反向内部重心参考”是解释假设:例如轨迹持续偏右前时,可将内部参考理解为偏左后。<b>但 IMU 只能测到实际姿态偏移,不能单独证明大脑内部模型或“身体以为的重心”</b>;只有多次测量方向稳定时才有参考意义。</div>
+  </div>
+
+  <div class="panel">
     <h2>历史记录 · 存本机浏览器</h2>
     <div class="row" style="margin-bottom:10px">
       <button id="btn-clear-hist" class="warn">清空历史</button>
@@ -695,6 +703,16 @@ function computeMetrics(samples, plannedDur) {
   let sumMl = 0, sumAp = 0;
   for (let i = 0; i < n; i++) { sumMl += mlArr[i]; sumAp += apArr[i]; }
   const meanMl = sumMl / n, meanAp = sumAp / n;
+  // 象限停留时间: 右前/左前/左后/右后; 仅统计偏移半径>0.15°的样本, 避免中心噪声主导
+  const qCount = [0, 0, 0, 0];
+  let qValid = 0;
+  for (let i = 0; i < n; i++) {
+    const ml = mlArr[i], ap = apArr[i];
+    if (Math.hypot(ml, ap) <= 0.15) continue;
+    const qi = ml >= 0 ? (ap >= 0 ? 0 : 3) : (ap >= 0 ? 1 : 2);
+    qCount[qi]++; qValid++;
+  }
+  const quadrantPct = qCount.map(v => qValid ? v / qValid * 100 : 0);
   let varMl = 0, varAp = 0, cov = 0, rms = 0, path = 0;
   let minMl = Infinity, maxMl = -Infinity, minAp = Infinity, maxAp = -Infinity;
   const vels = [];
@@ -735,6 +753,7 @@ function computeMetrics(samples, plannedDur) {
     rangeMl: maxMl - minMl,
     rangeAp: maxAp - minAp,
     meanMl, meanAp,
+    quadrantPct, qValid,                             // 四象限停留百分比与有效样本数
     varMl, varAp, cov,                               // 供椭圆绘制
     dur,
     fs,
@@ -765,6 +784,10 @@ function aggregateRuns(runs) {
   const out = {};
   const keys = Object.keys(runs[0]);
   for (const k of keys) {
+    if (k === 'quadrantPct') {
+      out[k] = [0, 1, 2, 3].map(i => runs.reduce((s, r) => s + ((r.quadrantPct && r.quadrantPct[i]) || 0), 0) / runs.length);
+      continue;
+    }
     const vals = runs.map(r => r[k]).filter(v => typeof v === 'number');
     out[k] = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
   }
@@ -1084,6 +1107,40 @@ function renderSensoryPanel(sess) {
   el.textContent = text + ' 该分析不是肌电测量。';
 }
 
+/* ---- 四象限姿势偏移统计(实际姿态) + 反向内部参考(假设) ---- */
+const Q_NAMES = ['右前', '左前', '左后', '右后'];
+const Q_OPPOSITE = [2, 3, 0, 1];
+function quadrantOf(ml, ap) { return ml >= 0 ? (ap >= 0 ? 0 : 3) : (ap >= 0 ? 1 : 2); }
+function renderQuadrantPanel(sess) {
+  const results = sess ? sess.results : {};
+  let html = '<tr><th>条件</th><th>右前</th><th>左前</th><th>左后</th><th>右后</th><th>平均偏移方向</th><th>平均向量 ML/AP(°)</th></tr>';
+  const candidates = [];
+  for (const tr of TRIALS) {
+    const m = results[tr.id];
+    if (!m) {
+      html += `<tr><td>${tr.name}</td><td colspan="6" style="text-align:center;color:var(--faint)">— 未测 —</td></tr>`;
+      continue;
+    }
+    const q = Array.isArray(m.quadrantPct) ? m.quadrantPct : null;
+    const ml = typeof m.meanMl === 'number' ? m.meanMl : 0, ap = typeof m.meanAp === 'number' ? m.meanAp : 0;
+    const mag = Math.hypot(ml, ap);
+    const dir = mag < 0.15 ? '中心附近' : Q_NAMES[quadrantOf(ml, ap)];
+    html += `<tr><td>${tr.name}</td>` +
+      (q ? q.map(v => `<td>${v.toFixed(0)}%</td>`).join('') : '<td>—</td><td>—</td><td>—</td><td>—</td>') +
+      `<td>${dir}</td><td>${ml.toFixed(2)} / ${ap.toFixed(2)}</td></tr>`;
+    if (mag >= 0.15 && q) candidates.push({ tr, ml, ap, mag, dir: quadrantOf(ml, ap) });
+  }
+  $('quadrant-table').innerHTML = html;
+  const el = $('quadrant-summary');
+  if (!candidates.length) {
+    el.textContent = '各条件平均偏移均接近中心,未见稳定单向偏移。';
+    return;
+  }
+  candidates.sort((a, b) => b.mag - a.mag);
+  const c = candidates[0];
+  el.textContent = `${c.tr.name} 的持续偏移最明显: 实际姿态偏${Q_NAMES[c.dir]}(ML ${c.ml.toFixed(2)}°, AP ${c.ap.toFixed(2)}°)。按反向内部参考假设,内部重心参考可能偏${Q_NAMES[Q_OPPOSITE[c.dir]]}(解释模型,非直接测量)。`;
+}
+
 /* ================= 报告 ================= */
 function renderReport() {
   const sess = currentSession();
@@ -1104,6 +1161,7 @@ function renderReport() {
     $('v-quotients').textContent = '';
     renderStatoCharts(sess);
     renderSensoryPanel(sess);
+    renderQuadrantPanel(sess);
     return;
   }
   const isDisp = unitMode === 'disp';
@@ -1159,6 +1217,7 @@ function renderReport() {
   }
   renderStatoCharts(sess);
   renderSensoryPanel(sess);
+  renderQuadrantPanel(sess);
 }
 
 /* ================= 历史 ================= */
@@ -1228,7 +1287,7 @@ $('btn-csv-summary').onclick = () => {
   const sess = currentSession();
   if (!sess) { log('暂无报告可导出'); return; }
   const hasDisp = sess.resultsDisp && Object.keys(sess.resultsDisp).length;
-  const head = ['会话时间', '条件', '次数', '95%椭圆面积(deg2)', '总路径长(deg)', '均速(deg/s)', '峰值速度95分位(deg/s)', 'RMS(deg)', 'AP_RMS(deg)', 'ML_RMS(deg)', 'AP范围(deg)', 'ML范围(deg)', '样本数', '有效时长(s)', '单项分', '最大间隔ms', '质量', '频率重心Hz', 'Jerk_RMS'];
+  const head = ['会话时间', '条件', '次数', '95%椭圆面积(deg2)', '总路径长(deg)', '均速(deg/s)', '峰值速度95分位(deg/s)', 'RMS(deg)', 'AP_RMS(deg)', 'ML_RMS(deg)', 'AP范围(deg)', 'ML范围(deg)', '样本数', '有效时长(s)', '单项分', '最大间隔ms', '质量', '频率重心Hz', 'Jerk_RMS', '右前%', '左前%', '左后%', '右后%', '平均ML(deg)', '平均AP(deg)'];
   if (hasDisp) head.push('CoM面积(cm2)', 'CoM均速(cm/s)', 'CoM_RMS(cm)');
   const rows = [head];
   const fnum = (v, d) => typeof v === 'number' ? v.toFixed(d) : '';
@@ -1236,7 +1295,9 @@ $('btn-csv-summary').onclick = () => {
     const r = [new Date(sess.id).toLocaleString(), tr.name, tag, fnum(m.area, 3), fnum(m.path, 2), fnum(m.speed, 3),
       fnum(m.peak, 2), fnum(m.rms, 3), fnum(m.apRms, 3), fnum(m.mlRms, 3), fnum(m.rangeAp, 3), fnum(m.rangeMl, 3),
       m.n, fnum(m.dur, 1), scoreOf(m), fnum(m.maxGapMs, 0), m.quality === 'warn' ? '数据不足' : m.quality === 'ok' ? '正常' : '',
-      fnum(m.centroidHz, 3), fnum(m.jerkRms, 3)];
+      fnum(m.centroidHz, 3), fnum(m.jerkRms, 3),
+      ...(Array.isArray(m.quadrantPct) ? m.quadrantPct.map(v => fnum(v, 1)) : ['', '', '', '']),
+      fnum(m.meanMl, 3), fnum(m.meanAp, 3)];
     if (hasDisp) {
       const md = mdOverride !== undefined ? mdOverride : sess.resultsDisp[tr.id];
       r.push(md ? fnum(md.area, 3) : '', md ? fnum(md.speed, 3) : '', md ? fnum(md.rms, 3) : '');
@@ -1330,6 +1391,21 @@ function drawStato(cvs, runsArr, agg, maxAbs) {
   }
   // 95% 椭圆(聚合协方差; 历史会话也保留 var 字段)
   if (typeof agg.varMl === 'number') drawEllipse(c, cx, cy, agg, scale);
+  // 平均偏移向量箭头(实际姿态偏移)
+  if (typeof agg.meanMl === 'number' && typeof agg.meanAp === 'number') {
+    const dx = agg.meanMl * scale, dy = -agg.meanAp * scale;
+    if (Math.hypot(dx, dy) > 4) {
+      const tx = cx + dx, ty = cy + dy, ang = Math.atan2(dy, dx);
+      c.strokeStyle = '#0f766e'; c.fillStyle = '#0f766e'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(cx, cy); c.lineTo(tx, ty); c.stroke();
+      c.beginPath();
+      c.moveTo(tx, ty);
+      c.lineTo(tx - 7 * Math.cos(ang - 0.45), ty - 7 * Math.sin(ang - 0.45));
+      c.lineTo(tx - 7 * Math.cos(ang + 0.45), ty - 7 * Math.sin(ang + 0.45));
+      c.closePath(); c.fill();
+      c.lineWidth = 1;
+    }
+  }
 }
 function renderStatoCharts(sess) {
   const grid = $('stato-grid');

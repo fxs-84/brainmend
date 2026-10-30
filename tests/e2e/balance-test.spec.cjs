@@ -294,6 +294,24 @@ function assert(name, cond, detail = '') {
     assert('自动生成三系统症状解读', auto.som.length > 5 && auto.vis.length > 5 && auto.vest.length > 5,
       `${auto.som} | ${auto.vis} | ${auto.vest}`);
     assert('不再要求用户主观紧绷打分', auto.effortInputs === 0);
+    const quadDom = await page.evaluate(() => ({
+      rows: document.getElementById('quadrant-table').querySelectorAll('tr').length,
+      summary: document.getElementById('quadrant-summary').textContent,
+    }));
+    assert('报告含四象限统计和主偏向解释', quadDom.rows === 5 && quadDom.summary.length > 5, quadDom.summary);
+    const quad = await page.evaluate(() => {
+      const s = [];
+      for (let i = 0; i <= 200; i++) {
+        const t = i / 50;
+        const rf = i < 150;   // 75% 右前, 25% 左后
+        s.push({ t, ml: rf ? 1 : -1, ap: rf ? 1 : -1 });
+      }
+      return window.__bt.computeMetrics(s, 4);
+    });
+    assert('象限时间占比正确(右前75% / 左后25%)', Math.abs(quad.quadrantPct[0] - 75) < 2 && Math.abs(quad.quadrantPct[2] - 25) < 2,
+      JSON.stringify(quad.quadrantPct));
+    assert('平均偏移向量正确(ML/AP 均约 +0.5)', Math.abs(quad.meanMl - 0.5) < 0.1 && Math.abs(quad.meanAp - 0.5) < 0.1,
+      `${quad.meanMl.toFixed(2)} / ${quad.meanAp.toFixed(2)}`);
 
     /* ---- 9) 等间隔重采样抗到达抖动 ---- */
     const rs = await page.evaluate(() => {
