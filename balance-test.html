@@ -229,6 +229,7 @@
     <div class="pbar"><div id="pbar-fill"></div></div>
     <div class="row" style="margin-top:8px;justify-content:center">
       <button id="btn-abort" class="warn" disabled>中止当前项</button>
+      <button id="btn-fall" class="warn" disabled title="迈步、扶持或跌倒时点击,本次记为无效">失去平衡/扶持</button>
     </div>
   </div>
 
@@ -277,6 +278,7 @@
     <div class="row">
       <button id="btn-csv-summary">导出报告 CSV</button>
       <button id="btn-csv-raw">导出当前原始数据 CSV</button>
+      <button id="btn-new-session" title="保存当前记录, 开始一次全新的测试会话">开始新会话</button>
       <span class="note" id="viewing"></span>
     </div>
   </div>
@@ -358,6 +360,7 @@ const S = {
   zero: { roll: 0, pitch: 0, yaw: 0 },
   rel: { roll: 0, pitch: 0, yaw: 0 },
   rateHz: 0, arrivals: [],
+  sensorOffset: null, lastTime: 0,
 };
 let device = null, writeChar = null;
 
@@ -370,6 +373,7 @@ const BT = {
   t0: 0,                  // 记录开始时刻
   rawByTrial: {},         // 当前会话各条件原始样本数组 {condId: [run1[], run2[], ...]} (仅本次,历史只存指标)
   runs: {},               // 当前会话每条件各次指标 {condId: [metrics, ...]} (角度单位)
+  runsDisp: {},           // 各条件每次位移指标 {condId: [metrics, ...]} (CoM 位移单位)
   results: {},            // 当前会话 {condId: 聚合指标} (角度单位, 报告/评分/历史用)
   resultsDisp: {},        // 当前会话 {condId: 聚合指标} (CoM 位移单位, 需身高)
   effort: {},             // 各条件主观紧绷感 0~3(自评, 非 IMU 测量)
@@ -395,6 +399,7 @@ let AC = null;
 function beep(freq = 880, ms = 80, vol = 0.12) {
   try {
     AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === 'suspended') AC.resume().catch(() => {});
     const o = AC.createOscillator(), g = AC.createGain();
     o.type = 'sine'; o.frequency.value = freq;
     g.gain.setValueAtTime(vol, AC.currentTime);
@@ -461,7 +466,7 @@ const P = {
         continue;
       }
       if (this.len - off < frameLen) break;
-      this.frame(this.buf.subarray(off, off + frameLen), flag);
+      this.frame(this.buf.subarray(off, off + frameLen), flag, frameLen);
       off += frameLen;
     }
     if (off > 0) { this.buf.copyWithin(0, off, this.len); this.len -= off; }
@@ -480,13 +485,17 @@ const P = {
     }
     return 0;
   },
-  frame(b, flag) {
+  frame(b, flag, frameLen) {
     if (flag === 0x61) {
       const s16 = o => { const v = b[o + 1] << 8 | b[o]; return v >= 0x8000 ? v - 0x10000 : v; };
+      const sensorMs = frameLen === 28
+        ? Date.UTC(2000 + b[20], b[21] - 1, b[22], b[23], b[24], b[25], b[26] | b[27] << 8)
+        : null;
       onSample({
         ax: s16(2) / 32768 * 16, ay: s16(4) / 32768 * 16, az: s16(6) / 32768 * 16,
         wx: s16(8) / 32768 * 2000, wy: s16(10) / 32768 * 2000, wz: s16(12) / 32768 * 2000,
         roll: s16(14) / 32768 * 180, pitch: s16(16) / 32768 * 180, yaw: s16(18) / 32768 * 180,
+        sensorMs,
       });
     } else {
       const reg = b[2] | b[3] << 8;
@@ -504,7 +513,19 @@ function wrapDelta(d) { if (d > 180) return d - 360; if (d < -180) return d + 36
 
 /* ================= 采样处理 ================= */
 function onSample(smp) {
-  const now = performance.now();
+  const hostNow = performance.now();
+  let now = hostNow;
+  if (smp.sensorMs != null) {
+    // 28 字节帧使用传感器时间; 换算到 performance.now 同一时间轴, 传感器校时突变时重新对齐
+    if (S.sensorOffset === null) S.sensorOffset = smp.sensorMs - hostNow;
+    let candidate = smp.sensorMs - S.sensorOffset;
+    if (S.lastTime && (candidate < S.lastTime - 1000 || candidate > S.lastTime + 10000)) {
+      S.sensorOffset = smp.sensorMs - hostNow;
+      candidate = smp.sensorMs - S.sensorOffset;
+    }
+    now = candidate;
+  }
+  S.lastTime = now;
   S.arrivals.push(now);
   if (S.arrivals.length > 100) S.arrivals.shift();
   if (S.arrivals.length >= 2) {
@@ -574,6 +595,24 @@ const liveTrail = [];
  * 单位: deg / deg² / deg/s(躯干倾斜角空间; 非测力台 COP, 两者相关 r≈0.5~0.9 但不可直接比绝对值)
  * ================================================================================ */
 const RATE_HZ = { '0x07': 20, '0x08': 50, '0x09': 100 };
+/* 把 BLE 不规则到达的样本线性插值到固定频率, 避免投递抖动影响路径/速度 */
+function resampleUniform(samples, fs) {
+  const n = samples.length;
+  if (n < 3 || !(fs > 0)) return samples.map(s => ({ ...s }));
+  const t0 = samples[0].t, t1 = samples[n - 1].t;
+  if (!(t1 > t0)) return samples.map(s => ({ ...s }));
+  const count = Math.max(2, Math.floor((t1 - t0) * fs) + 1);
+  const out = new Array(count);
+  let j = 0;
+  for (let i = 0; i < count; i++) {
+    const t = Math.min(t0 + i / fs, t1);
+    while (j < n - 2 && samples[j + 1].t < t) j++;
+    const a = samples[j], b = samples[j + 1];
+    const span = b.t - a.t, u = span > 0 ? (t - a.t) / span : 0;
+    out[i] = { t, ml: a.ml + (b.ml - a.ml) * u, ap: a.ap + (b.ap - a.ap) * u };
+  }
+  return out;
+}
 function lowpassZeroPhase(y, fs, fc) {
   /* 4阶 Butterworth(fc Hz)零相位: 两级 biquad,每级正反各滤一次 */
   const n = y.length;
@@ -600,10 +639,23 @@ function lowpassZeroPhase(y, fs, fc) {
   return Array.from(ext.subarray(pad, pad + n));
 }
 function computeMetrics(samples, plannedDur) {
+  // 标准时长测试剔除最初 2s 稳定段; 短测试不剔除
+  if (samples.length > 1 && samples[samples.length - 1].t - samples[0].t >= 10) {
+    const t0 = samples[0].t;
+    samples = samples.filter(s => s.t - t0 >= 2);
+  }
+  let maxGapMs = 0, gapCount = 0;
+  for (let i = 1; i < samples.length; i++) {
+    const gap = (samples[i].t - samples[i - 1].t) * 1000;
+    if (gap > maxGapMs) maxGapMs = gap;
+    if (gap > 100) gapCount++;
+  }
+  const targetFs = RATE_HZ[$('rate') ? $('rate').value : '0x08'] || 50;
+  samples = resampleUniform(samples, targetFs);
   const n = samples.length;
   if (n < 10) return null;
   const dur = samples[n - 1].t - samples[0].t;
-  const fs = dur > 0 ? (n - 1) / dur : 50;
+  const fs = dur > 0 ? (n - 1) / dur : targetFs;
   const mlArr = lowpassZeroPhase(samples.map(s => s.ml), fs, 5);
   const apArr = lowpassZeroPhase(samples.map(s => s.ap), fs, 5);
   let sumMl = 0, sumAp = 0;
@@ -633,8 +685,10 @@ function computeMetrics(samples, plannedDur) {
   vels.sort((a, b) => a - b);
   const peak = vels.length ? vels[Math.min(vels.length - 1, Math.floor(vels.length * 0.95))] : 0;  // 95分位,抗离群
   const expected = Math.round(plannedDur * (RATE_HZ[$('rate') ? $('rate').value : '0x08'] || 50));
+  const quality = (n < expected * 0.5 || maxGapMs > 500) ? 'warn' : 'ok';
   return {
     n,
+    maxGapMs, gapCount, quality,
     area: Math.PI * 5.991 * Math.sqrt(det),          // 95% 置信椭圆面积 (χ²₂(0.95)=5.991)
     path,
     speed: dur > 0 ? path / dur : 0,                  // 平均摇摆速度
@@ -685,8 +739,13 @@ function aggregateRuns(runs) {
 function trialById(id) { return TRIALS.find(t => t.id === id); }
 
 function startTrial(idx) {
-  if (!S.connected && !SIM) { log('请先连接设备'); return; }
+  if (!S.connected && !SIM) { statusShow('请先连接陀螺仪'); log('请先连接设备'); return; }
   if (BT.phase === 'countdown' || BT.phase === 'recording') { log('当前有进行中的测试项,请先等待完成或中止'); return; }
+  if ($('src-x').value === $('src-y').value) {
+    statusShow('左右(ML)轴与前后(AP)轴不能相同,请调整后再开始');
+    log('ML/AP 轴冲突,测试未开始');
+    return;
+  }
   const tr = TRIALS[idx];
   BT.activeIdx = idx;
   BT.phase = 'countdown';
@@ -700,6 +759,7 @@ function startTrial(idx) {
   const cdSec = Math.max(3, +$('cd').value || 5);
   setCardState();
   $('btn-abort').disabled = false;
+  $('btn-fall').disabled = false;
   log(`开始 ${tr.name}:${cdSec} 秒倒计时(自动归零后记录)`);
   let left = cdSec;
   statusShow(`${tr.name}<br><span class="cd">${left}</span><br><span style="font-size:13px;color:#8b949e">${tr.hint}</span>`);
@@ -730,11 +790,23 @@ function beginRecording(tr) {
   setTimeout(() => speak(tr.eyes === 'closed' ? '请闭眼，开始记录' : '开始记录'), 250);
   BT.timers.push(setTimeout(() => finishTrial(false), dur * 1000));
 }
-function finishTrial(aborted) {
+function finishTrial(aborted, invalid = false) {
   BT.timers.forEach(clearTimeout);
   BT.timers = [];
   $('btn-abort').disabled = true;
+  $('btn-fall').disabled = true;
   const tr = TRIALS[BT.activeIdx];
+  if (invalid) {
+    // 迈步/扶持/跌倒: 本次无效, 不进入均值与历史
+    BT.phase = 'idle';
+    BT.samples = [];
+    statusShow(`${tr.name}: 失去平衡/扶持,本次无效 — 请休息后重测`);
+    log(`${tr.name}: 失去平衡/扶持,本次无效`);
+    setTimeout(() => speak(tr.eyes === 'closed' ? '失去平衡，本次无效，请睁眼' : '失去平衡，本次无效'), 100);
+    BT.activeIdx = -1;
+    setCardState();
+    return;
+  }
   if (aborted) {
     BT.phase = 'idle';
     BT.samples = [];
@@ -761,7 +833,11 @@ function finishTrial(aborted) {
     BT.rawByTrial[tr.id].push(BT.samples.slice());
     BT.results[tr.id] = aggregateRuns(BT.runs[tr.id]);
     const h = getHeightCm();
-    if (h) BT.resultsDisp[tr.id] = aggregateRuns(BT.rawByTrial[tr.id].map(run => computeMetrics(toDispSamples(run, h), dur)));
+    if (h) {
+      if (!BT.runsDisp[tr.id]) BT.runsDisp[tr.id] = [];
+      BT.runsDisp[tr.id].push(computeMetrics(toDispSamples(BT.samples, h), dur));
+      BT.resultsDisp[tr.id] = aggregateRuns(BT.runsDisp[tr.id]);
+    }
     BT.lastDone = { samples: BT.samples.slice(), metrics: m };
     ensureSession();
     saveCurrentSession();
@@ -786,6 +862,18 @@ function ensureSession() {
     log(`新建会话 #${BT.sessionId}`);
   }
 }
+function startNewSession() {
+  if (BT.phase === 'countdown' || BT.phase === 'recording') { log('请先完成或中止当前测试'); return; }
+  BT.sessionId = 0;
+  BT.results = {}; BT.resultsDisp = {};
+  BT.runs = {}; BT.runsDisp = {}; BT.rawByTrial = {};
+  BT.effort = {}; BT.lastDone = null; BT.samples = [];
+  document.querySelectorAll('.effort-select').forEach(sel => { sel.value = ''; });
+  viewingId = 0;
+  setCardState(); renderReport(); renderHistory();
+  statusShow('新会话就绪 — 选择测试项开始');
+  log('已开始新会话(历史记录保留)');
+}
 function currentSession() {
   return history.find(h => h.id === viewingId) || null;
 }
@@ -799,9 +887,10 @@ function saveCurrentSession() {
   let hasDisp = false;
   for (const [k, m] of Object.entries(BT.results)) results[k] = stripMetric(m);
   for (const [k, m] of Object.entries(BT.resultsDisp)) { if (m) { resultsDisp[k] = stripMetric(m); hasDisp = true; } }
-  const runs = {};
+  const runs = {}, runsDisp = {};
   for (const [k, arr] of Object.entries(BT.runs)) runs[k] = arr.map(stripMetric);
-  const sess = { id: BT.sessionId, date: new Date(BT.sessionId).toISOString(), height: getHeightCm() || null, results, runs, effort: { ...BT.effort } };
+  for (const [k, arr] of Object.entries(BT.runsDisp)) runsDisp[k] = arr.map(stripMetric);
+  const sess = { id: BT.sessionId, date: new Date(BT.sessionId).toISOString(), height: getHeightCm() || null, results, runs, runsDisp, effort: { ...BT.effort } };
   if (hasDisp) sess.resultsDisp = resultsDisp;
   const i = history.findIndex(h => h.id === sess.id);
   if (i >= 0) history[i] = sess; else history.unshift(sess);
@@ -850,12 +939,19 @@ function buildCards() {
     if (BT.results[tr.id]) delete BT.results[tr.id];
     if (BT.resultsDisp[tr.id]) delete BT.resultsDisp[tr.id];
     if (BT.runs[tr.id]) delete BT.runs[tr.id];
+    if (BT.runsDisp[tr.id]) delete BT.runsDisp[tr.id];
     if (BT.rawByTrial[tr.id]) delete BT.rawByTrial[tr.id];
     delete BT.effort[tr.id];
     const effSel = document.querySelector(`.effort-select[data-cond="${tr.id}"]`);
     if (effSel) effSel.value = '';
     log(`跳过/清除 ${tr.name}`);
-    ensureSession(); saveCurrentSession();
+    if (Object.keys(BT.results).length || Object.keys(BT.effort).length) {
+      ensureSession(); saveCurrentSession();
+    } else if (BT.sessionId) {
+      // 最后一项被清除时移除空会话, 避免历史出现 0/4 项
+      history = history.filter(h => h.id !== BT.sessionId);
+      try { localStorage.setItem(HIST_KEY, JSON.stringify(history)); } catch {}
+    }
     renderReport(); renderHistory(); setCardState();
   });
 }
@@ -975,6 +1071,7 @@ function renderReport() {
     ['speed', `均速(${U.vel})`, 2], ['peak', `峰值速度95%分位(${U.vel})`, 1],
     ['rms', `RMS(${U.len})`, 2], ['apRms', `AP RMS(${U.len})`, 2], ['mlRms', `ML RMS(${U.len})`, 2],
     ['rangeAp', `AP范围(${U.len})`, 2], ['rangeMl', `ML范围(${U.len})`, 2],
+    ['quality', '数据质量', 0],
     ['score', '单项分(角度口径)', 0],
   ];
   let html = '<tr><th>条件</th>' + cols.map(c => `<th>${c[1]}</th>`).join('') + '</tr>';
@@ -982,12 +1079,19 @@ function renderReport() {
   for (const tr of TRIALS) {
     const mA = angle[tr.id];
     if (!mA) { html += `<tr><td>${tr.name}</td><td colspan="${cols.length}" style="color:#484f58;text-align:center">— 未测 —</td></tr>`; continue; }
-    const m = resSet[tr.id] || mA;
+    // 位移口径缺数据时显示 —, 不把角度值放进 cm/cm² 表头
+    const m = isDisp ? (resSet[tr.id] || {}) : mA;
     const sc = scoreOf(mA);
     scoreSum += sc; scoreCnt++;
     const hl = tr.id === 'eo_firm' ? ' class="hl"' : '';
-    html += `<tr${hl}><td>${tr.name}</td>` + cols.map(([k, , d]) =>
-      k === 'score' ? `<td>${sc}</td>` : `<td>${typeof m[k] === 'number' ? m[k].toFixed(d) : '—'}</td>`).join('') + `</tr>`;
+    html += `<tr${hl}><td>${tr.name}</td>` + cols.map(([k, , d]) => {
+      if (k === 'score') return `<td>${sc}</td>`;
+      if (k === 'quality') {
+        const qText = m.quality === 'warn' ? `⚠ 最大间隔 ${Math.round(m.maxGapMs)}ms` : m.quality === 'ok' ? '✓' : '—';
+        return `<td style="color:${m.quality === 'warn' ? 'var(--amber)' : 'inherit'}">${qText}</td>`;
+      }
+      return `<td>${typeof m[k] === 'number' ? m[k].toFixed(d) : '—'}</td>`;
+    }).join('') + `</tr>`;
   }
   // 商值行(Romberg / 软垫; 商值与单位无关); 文献参考: 健康人群 IMU 闭眼/睁眼面积商约 1.3~1.9 (Ferrari 2024)
   const q = [];
@@ -1080,23 +1184,24 @@ $('btn-csv-summary').onclick = () => {
   const sess = currentSession();
   if (!sess) { log('暂无报告可导出'); return; }
   const hasDisp = sess.resultsDisp && Object.keys(sess.resultsDisp).length;
-  const head = ['会话时间', '条件', '次数', '95%椭圆面积(deg2)', '总路径长(deg)', '均速(deg/s)', '峰值速度95分位(deg/s)', 'RMS(deg)', 'AP_RMS(deg)', 'ML_RMS(deg)', 'AP范围(deg)', 'ML范围(deg)', '样本数', '有效时长(s)', '单项分'];
+  const head = ['会话时间', '条件', '次数', '95%椭圆面积(deg2)', '总路径长(deg)', '均速(deg/s)', '峰值速度95分位(deg/s)', 'RMS(deg)', 'AP_RMS(deg)', 'ML_RMS(deg)', 'AP范围(deg)', 'ML范围(deg)', '样本数', '有效时长(s)', '单项分', '最大间隔ms', '质量'];
   if (hasDisp) head.push('CoM面积(cm2)', 'CoM均速(cm/s)', 'CoM_RMS(cm)');
   const rows = [head];
   const fnum = (v, d) => typeof v === 'number' ? v.toFixed(d) : '';
-  const pushRow = (tr, tag, m) => {
+  const pushRow = (tr, tag, m, mdOverride) => {
     const r = [new Date(sess.id).toLocaleString(), tr.name, tag, fnum(m.area, 3), fnum(m.path, 2), fnum(m.speed, 3),
       fnum(m.peak, 2), fnum(m.rms, 3), fnum(m.apRms, 3), fnum(m.mlRms, 3), fnum(m.rangeAp, 3), fnum(m.rangeMl, 3),
-      m.n, fnum(m.dur, 1), scoreOf(m)];
+      m.n, fnum(m.dur, 1), scoreOf(m), fnum(m.maxGapMs, 0), m.quality === 'warn' ? '数据不足' : m.quality === 'ok' ? '正常' : ''];
     if (hasDisp) {
-      const md = sess.resultsDisp[tr.id];
+      const md = mdOverride !== undefined ? mdOverride : sess.resultsDisp[tr.id];
       r.push(md ? fnum(md.area, 3) : '', md ? fnum(md.speed, 3) : '', md ? fnum(md.rms, 3) : '');
     }
     rows.push(r);
   };
   for (const tr of TRIALS) {
     const runArr = sess.runs && sess.runs[tr.id];
-    if (runArr && runArr.length > 1) runArr.forEach((m, i) => pushRow(tr, `第${i + 1}次`, m));
+    const dispArr = sess.runsDisp && sess.runsDisp[tr.id];
+    if (runArr && runArr.length > 1) runArr.forEach((m, i) => pushRow(tr, `第${i + 1}次`, m, dispArr ? dispArr[i] : null));
     const m = sess.results[tr.id];
     if (m) pushRow(tr, runArr && runArr.length > 1 ? '均值' : '第1次', m);
   }
@@ -1325,7 +1430,11 @@ function render() {
 
 /* ================= BLE ================= */
 async function bleConnect(acceptAll) {
-  if (!navigator.bluetooth) { log('错误: 当前浏览器不支持 Web Bluetooth(请用 Chrome/Edge 桌面版或安卓)'); return; }
+  if (!navigator.bluetooth) {
+    statusShow('当前浏览器不支持 Web Bluetooth: 请用 Chrome/Edge(桌面或安卓), iOS 用 Bluefy');
+    log('错误: 当前浏览器不支持 Web Bluetooth');
+    return;
+  }
   try {
     log('扫描设备...');
     const opts = acceptAll
@@ -1336,6 +1445,7 @@ async function bleConnect(acceptAll) {
     device.addEventListener('gattserverdisconnected', () => {
       setConn(false);
       S.prevRaw = null;   // 重连后首帧重新初始化并自动归零
+      S.sensorOffset = null; S.lastTime = 0;
       log('设备已断开');
       if (BT.phase === 'recording' || BT.phase === 'countdown') {
         log('⚠ 测试被连接中断终止,数据弃用');
@@ -1355,6 +1465,7 @@ async function bleConnect(acceptAll) {
     await sendHex('FF AA 03 ' + $('rate').value.slice(2) + ' 00');
     await sendHex('FF AA 27 64 00');
   } catch (e) {
+    statusShow('连接失败: ' + e.message);
     log('连接失败: ' + e.message);
   }
 }
@@ -1448,7 +1559,11 @@ function buildSimFrame(v, fmt) {
 $('btn-connect').onclick = () => bleConnect(false);
 $('btn-connect-all').onclick = () => bleConnect(true);
 $('btn-disconnect').onclick = () => { if (device && device.gatt.connected) device.gatt.disconnect(); };
+$('btn-new-session').onclick = startNewSession;
 $('btn-abort').onclick = abortTrial;
+$('btn-fall').onclick = () => {
+  if (BT.phase === 'countdown' || BT.phase === 'recording') finishTrial(false, true);
+};
 $('btn-zero').onclick = () => {
   if (BT.phase !== 'idle') { log('倒计时/记录中不能归零,请等待完成或先中止'); return; }
   if (!S.prevRaw) { log('暂无传感器数据,无法归零'); return; }
@@ -1518,7 +1633,7 @@ if (SIM) {
 } else {
   log('就绪。请用 Chrome/Edge (安卓或桌面) 连接维特陀螺仪; iOS 请用 Bluefy 浏览器。');
 }
-window.__bt = { S, P, BT, TRIALS, sim, startTrial, finishTrial, computeMetrics, scoreOf, aggregateRuns, toDispSamples, getHeightCm, swayLevel, ringThresholds, LEVEL_STYLE, liveTrail, get history() { return history; }, get unitMode() { return unitMode; } };
+window.__bt = { S, P, BT, TRIALS, sim, startTrial, finishTrial, computeMetrics, resampleUniform, scoreOf, aggregateRuns, toDispSamples, getHeightCm, swayLevel, ringThresholds, LEVEL_STYLE, liveTrail, get history() { return history; }, get unitMode() { return unitMode; } };
 render();
 </script>
 </body>

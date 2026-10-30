@@ -162,6 +162,13 @@ function assert(name, cond, detail = '') {
       const ratio = a2.disp.area / a2.aggArea;
       assert('位移面积与角度面积比例合理(≈(h_com·π/180)²)', ratio > expectRatio * 0.8 && ratio < expectRatio * 1.3,
         `ratio=${ratio.toFixed(2)} 期望≈${expectRatio.toFixed(2)}`);
+      const runsDisp = await page.evaluate(() => ({
+        areas: window.__bt.BT.runsDisp.eo_firm.map(m => m.area),
+        agg: window.__bt.BT.resultsDisp.eo_firm.area,
+      }));
+      assert('逐次位移指标独立保存且均值为两次平均', runsDisp.areas.length === 2 &&
+        Math.abs(runsDisp.agg - (runsDisp.areas[0] + runsDisp.areas[1]) / 2) < 1e-9,
+        `${runsDisp.areas.map(v => v.toFixed(3)).join('/')} → ${runsDisp.agg.toFixed(3)}`);
     }
     await page.click('#unit-disp');
     await page.waitForTimeout(300);
@@ -282,6 +289,65 @@ function assert(name, cond, detail = '') {
       JSON.stringify(effort.saved));
     assert('自评汇总显示两项均值与放松建议', effort.summary.includes('平均 2.5/3') && effort.summary.includes('放松'),
       effort.summary.slice(-100));
+
+    /* ---- 9) 等间隔重采样抗到达抖动 ---- */
+    const rs = await page.evaluate(() => {
+      const mk = t => ({ t, ml: Math.sin(2 * Math.PI * 0.4 * t), ap: 0.6 * Math.sin(2 * Math.PI * 0.7 * t + 0.5) });
+      const uni = [], jit = [];
+      for (let i = 0; i <= 200; i++) uni.push(mk(i / 50));
+      const steps = [0.007, 0.031, 0.013, 0.047, 0.019, 0.005, 0.037, 0.023];
+      let t = 0, k = 0;
+      while (t < 4) { jit.push(mk(t)); t += steps[k++ % steps.length]; }
+      const a = window.__bt.computeMetrics(uni, 4), b = window.__bt.computeMetrics(jit, 4);
+      return { a, b };
+    });
+    assert('重采样后面积基本不受到达抖动影响(<5%)', Math.abs(rs.a.area - rs.b.area) / rs.a.area < 0.05,
+      `${rs.a.area.toFixed(3)} vs ${rs.b.area.toFixed(3)}`);
+    assert('重采样后均速基本不受到达抖动影响(<5%)', Math.abs(rs.a.speed - rs.b.speed) / rs.a.speed < 0.05,
+      `${rs.a.speed.toFixed(3)} vs ${rs.b.speed.toFixed(3)}`);
+    const quality = await page.evaluate(() => {
+      const s = [];
+      for (let i = 0; i < 100; i++) s.push({ t: i === 99 ? 3.0 : i * 0.02, ml: 0, ap: 0 });
+      return window.__bt.computeMetrics(s, 2);
+    });
+    assert('大丢包间隔标记数据质量不足', quality.quality === 'warn' && quality.maxGapMs > 500,
+      `quality=${quality.quality} maxGap=${quality.maxGapMs.toFixed(0)}ms`);
+
+    /* ---- 10) 失去平衡判定、新会话与空会话保护 ---- */
+    await page.click('.btn-start[data-i="0"]');
+    await page.waitForTimeout(400);
+    await page.click('#btn-fall');
+    await page.waitForTimeout(300);
+    const fall = await page.evaluate(() => ({
+      phase: window.__bt.BT.phase,
+      runsA: window.__bt.BT.runs.eo_firm.length,
+      status: document.getElementById('trial-status').textContent,
+      disabled: document.getElementById('btn-fall').disabled,
+    }));
+    assert('失去平衡本次无效且不新增试验', fall.phase === 'idle' && fall.runsA === 2 && fall.status.includes('无效') && fall.disabled,
+      `runsA=${fall.runsA} status=${fall.status}`);
+    await page.click('#btn-new-session');
+    await page.waitForTimeout(300);
+    const newSess = await page.evaluate(() => ({
+      id: window.__bt.BT.sessionId,
+      results: Object.keys(window.__bt.BT.results).length,
+      hist: window.__bt.history.length,
+    }));
+    assert('新会话清空当前结果但保留历史', newSess.id === 0 && newSess.results === 0 && newSess.hist === 1,
+      JSON.stringify(newSess));
+    await page.click('.btn-skip[data-i="0"]');
+    await page.waitForTimeout(200);
+    const noEmpty = await page.evaluate(() => window.__bt.history.length);
+    assert('未测试跳过不生成空会话', noEmpty === 1, `hist=${noEmpty}`);
+    await page.selectOption('#src-y', 'pitch');
+    await page.click('.btn-start[data-i="0"]');
+    await page.waitForTimeout(200);
+    const axis = await page.evaluate(() => ({
+      phase: window.__bt.BT.phase,
+      status: document.getElementById('trial-status').textContent,
+    }));
+    assert('ML/AP 同轴时阻止测试并提示', axis.phase === 'idle' && axis.status.includes('不能相同'), axis.status);
+    await page.selectOption('#src-y', 'roll');
 
     await page.screenshot({ path: path.join(__dirname, '..', '..', 'screenshots', 'balance-test-sim.png') });
     await page.close();
