@@ -27,7 +27,12 @@ function assert(name, cond, detail = '') {
 
   const browser = await chromium.launch();
   const errors = [];
+  async function showView(page, name) {
+    await page.evaluate(n => window.__bt.switchView(n), name);
+    await page.waitForTimeout(120);
+  }
   async function runTrial(page, i, expectRuns) {
+    await showView(page, 'test');
     await page.click(`.btn-start[data-i="${i}"]`);
     await page.waitForFunction(
       ([k, n]) => window.__bt.BT.phase === 'idle' && ((window.__bt.BT.runs[k] || []).length === n),
@@ -105,6 +110,7 @@ function assert(name, cond, detail = '') {
     await page1.waitForFunction(() => window.__bt && window.__bt.sim.timer, null, { timeout: 5000 });
     await page1.click('.btn-start[data-i="0"]');
     await page1.waitForFunction(() => window.__bt.BT.phase === 'idle' && (window.__bt.BT.runs.eo_firm || []).length === 1, null, { timeout: 15000 });
+    await showView(page1, 'report');
     const dis0 = await page1.evaluate(() => document.getElementById('unit-disp').disabled);
     assert('未填身高: 位移单位禁用', dis0 === true);
     await page1.evaluate(() => { const e = document.getElementById('height'); e.value = '170'; e.dispatchEvent(new Event('change')); });
@@ -155,6 +161,14 @@ function assert(name, cond, detail = '') {
       spokenA.join(' | '));
 
     /* ---- 4) CoM 位移口径 ---- */
+    await showView(page, 'report');
+    const viewState = await page.evaluate(() => ({
+      current: window.__bt.currentView,
+      testHidden: document.getElementById('view-test').hidden,
+      reportHidden: document.getElementById('view-report').hidden,
+    }));
+    assert('检查/报告视图可独立切换', viewState.current === 'report' && viewState.testHidden && !viewState.reportHidden,
+      JSON.stringify(viewState));
     const hcom = 0.552 * 170;
     const expectRatio = Math.pow(hcom * Math.PI / 180, 2);   // deg²→cm² 近似比例(小角 tan≈线性)
     assert('位移指标已生成(身高170)', a2.disp && a2.disp.area > 0, a2.disp ? `area=${a2.disp.area.toFixed(2)}cm²` : 'null');
@@ -211,6 +225,7 @@ function assert(name, cond, detail = '') {
 
     /* ---- 6) 条件B(闭眼,仿真增益1.7) ---- */
     await runTrial(page, 1, 1);
+    await showView(page, 'report');
     const b1 = await page.evaluate(() => ({
       agg: window.__bt.BT.results.ec_firm,
       quot: document.getElementById('v-quotients').textContent,
@@ -228,6 +243,7 @@ function assert(name, cond, detail = '') {
     assert('历史同会话合并(1个会话存2项)', b1.storedKeys.length === 2, b1.storedKeys.join(','));
 
     /* ---- 7) 中止不产生结果; 记录/倒计时中归零禁用 ---- */
+    await showView(page, 'test');
     await page.click('.btn-start[data-i="2"]');
     await page.waitForTimeout(500);
     const zeroDisabled = await page.evaluate(() => document.getElementById('btn-zero').disabled);
@@ -347,6 +363,7 @@ function assert(name, cond, detail = '') {
       `centroid=${freq.centroidHz.toFixed(3)}Hz`);
 
     /* ---- 10) 失去平衡判定、新会话与空会话保护 ---- */
+    await showView(page, 'test');
     await page.click('.btn-start[data-i="0"]');
     await page.waitForTimeout(400);
     await page.click('#btn-fall');
@@ -359,6 +376,7 @@ function assert(name, cond, detail = '') {
     }));
     assert('失去平衡本次无效且不新增试验', fall.phase === 'idle' && fall.runsA === 2 && fall.status.includes('无效') && fall.disabled,
       `runsA=${fall.runsA} status=${fall.status}`);
+    await showView(page, 'report');
     await page.click('#btn-new-session');
     await page.waitForTimeout(300);
     const newSess = await page.evaluate(() => ({
@@ -368,6 +386,7 @@ function assert(name, cond, detail = '') {
     }));
     assert('新会话清空当前结果但保留历史', newSess.id === 0 && newSess.results === 0 && newSess.hist === 1,
       JSON.stringify(newSess));
+    await showView(page, 'test');
     await page.click('.btn-skip[data-i="0"]');
     await page.waitForTimeout(200);
     const noEmpty = await page.evaluate(() => window.__bt.history.length);
