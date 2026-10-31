@@ -191,6 +191,7 @@
   <link rel="modulepreload" crossorigin href="./assets/scene-base-CyDX7Q2w.js">
   <link rel="modulepreload" crossorigin href="./assets/sound-manager-D69fGs02.js">
   <link rel="stylesheet" crossorigin href="./assets/index-CA2quyDM.css">
+  <link rel="stylesheet" href="./assets/gait-analysis.css?v=20260809f">
   <!-- 3D 公路赛车集成 (与游戏面板同链路, 走 bundle 的 setGyroInput 模式) -->
   <script type="importmap">
   {
@@ -390,9 +391,11 @@
         <!-- 阶段化内容动态渲染 -->
       </div>
       <div id="gait-footer" style="text-align:center;padding:20px;background:#fff;border-top:1px solid #e0e0e0;margin-top:20px;">
-        <button id="gait-export-pdf" style="padding:10px 30px;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">📄 导出 PDF</button>
-        <button id="gait-qr-btn" style="padding:10px 30px;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">📱 分享</button>
-        <button id="gait-history-btn" style="padding:10px 30px;background:linear-gradient(135deg,#636e72,#2d3436);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">📋 历史记录</button>
+        <button id="gait-export-pdf" disabled style="padding:10px 24px;background:linear-gradient(135deg,#0f7b6c,#095c52);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:15px;margin:0 6px;">导出 PDF</button>
+        <button id="gait-export-csv" disabled style="padding:10px 24px;background:#fff;color:#0f7b6c;border:1px solid #0f7b6c;border-radius:8px;cursor:pointer;font-size:15px;margin:0 6px;">逐帧 CSV</button>
+        <button id="gait-export-json" disabled style="padding:10px 24px;background:#fff;color:#0f7b6c;border:1px solid #0f7b6c;border-radius:8px;cursor:pointer;font-size:15px;margin:0 6px;">审核 JSON</button>
+        <button id="gait-qr-btn" style="padding:10px 30px;background:linear-gradient(135deg,#00D9A5,#0086FF);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">分享</button>
+        <button id="gait-history-btn" style="padding:10px 30px;background:linear-gradient(135deg,#636e72,#2d3436);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">历史记录</button>
         <button id="gait-close-btn" style="padding:10px 30px;background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin:0 10px;">返回首页</button>
       </div>
     </div>
@@ -1068,9 +1071,14 @@
 <script src="./assets/cognitive/cognitive-observation.js"></script>
 <script src="./assets/vendor/html2canvas-1.4.1.min.js" crossorigin="anonymous"></script>
 <script src="./assets/vendor/jspdf-2.5.1.umd.min.js" crossorigin="anonymous"></script>
-<!-- 步态分析模块 (基于 ANRM 步态分析手册) -->
+<!-- 步态分析：双视频逐帧识别、人工时相审核与确认报告 -->
 <script src="./assets/gait-params.js"></script>
-<script src="./assets/gait-analysis.js?v=20260808a"></script>
+<script src="./assets/gait-kinematics.js"></script>
+<script src="./assets/gait-media.js"></script>
+<script src="./assets/gait-storage.js"></script>
+<script src="./assets/gait-neuro.js"></script>
+<script src="./assets/gait-analysis.js?v=20260809f"></script>
+<script src="./assets/gait-report-v2.js"></script>
 <script src="./assets/gait-report.js"></script>
 <script>
     // 全局点击分发 (认知模块)

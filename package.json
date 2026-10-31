@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node tools/copy-static-assets.mjs",
     "preview": "vite preview",
     "test": "node --test src/game-3d/biomes/__tests__/scenery-factory.test.js tests/reports/classify.test.js src/vor/input/__tests__/ble-imu-parse.test.js src/vor/core/__tests__/vor-quality-drill.test.js",
-    "test:gait": "node --test tests/gait/gait-params-velocity-gate.test.js",
+    "test:gait": "node --test tests/gait/gait-params-velocity-gate.test.js tests/gait/gait-kinematics.test.js tests/gait/gait-confirmed-report.test.js tests/gait/gait-phase-ranges.test.js tests/gait/gait-neuro.test.js",
+    "test:e2e:gait": "node tests/e2e/gait-manual-review.spec.mjs",
     "test:reports": "node --test tests/reports/classify.test.js",
     "test:e2e:report": "node tests/e2e/report-categorize.spec.mjs",
     "test:e2e:xss": "node tests/e2e/report-xss.spec.mjs",

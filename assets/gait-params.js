@@ -6,6 +6,8 @@
  * 事件检测主流程 (v3):
  *   detectGaitEvents (Zeni et al. 2008 骨盆相对坐标法) 为主路径:
  *     HS = heel_rel 局部极大值 (真实脚跟触地 IC), TO = toe_rel 局部极小值
+ *   预处理链: 速度门 velocityGateSeries (瞬移坏帧→NaN, 移植 FreeMoCap point gate)
+ *     → 短洞≤0.25s 插值 → 中值滤波 → 4 阶 Butterworth 零相位低通
  *   旧 Y 轨迹法 detectHeelStrikes/detectToeOffs 保留为 fallback
  *     (usedMethod='none' 时启用, 如原地站立/骨盆轨迹无效)
  *
@@ -1381,6 +1383,17 @@
     }
     if (points.length < 5) return [];
 
+    // ---------- 0a. 速度门: 瞬移坏帧 (score 够但位置飞) 剔除 → 防假摆动顶点/假 HS ----------
+    // (与 Zeni 主路径同一门限; 坏帧点直接移出序列, 不产生空洞插值)
+    var gateMaxV = Math.max(600, (estimateBodyHeightPx(frames) || 300) * 3.0);
+    var sparseY = new Array(frames.length).fill(NaN);
+    var sparseT = new Array(frames.length);
+    for (var gi = 0; gi < frames.length; gi++) sparseT[gi] = frames[gi].t;
+    for (var gp = 0; gp < points.length; gp++) sparseY[points[gp].frame] = points[gp].y;
+    var gateRes = velocityGateSeries(sparseY, sparseT, gateMaxV, { label: 'Y-HS ' + side });
+    points = points.filter(function (p) { return !isNaN(gateRes.series[p.frame]); });
+    if (points.length < 5) return [];
+
     // ---------- 0. 从全部关键点估算人体像素身高 (共用函数, 中位数) ----------
     var bodyH = estimateBodyHeightPx(frames);
     var anklePts = points.length;
@@ -1558,6 +1571,15 @@
       }
     }
     if (points.length < 3) return [];
+    // ---------- 速度门: 瞬移坏帧剔除 (与 Zeni 主路径同一门限; 防尖峰伪造最大 vy) ----------
+    var gateMaxV = Math.max(600, (estimateBodyHeightPx(frames) || 300) * 3.0);
+    var sparseY = new Array(frames.length).fill(NaN);
+    var sparseT = new Array(frames.length);
+    for (var gi = 0; gi < frames.length; gi++) sparseT[gi] = frames[gi].t;
+    for (var gp = 0; gp < points.length; gp++) sparseY[points[gp].frame] = points[gp].y;
+    var gateRes = velocityGateSeries(sparseY, sparseT, gateMaxV, { label: 'Y-TO ' + side });
+    points = points.filter(function (p) { return !isNaN(gateRes.series[p.frame]); });
+    if (points.length < 3) return [];
     // 平滑
     var smoothed = [];
     for (var p = 0; p < points.length; p++) {
@@ -1620,6 +1642,110 @@
     return results;
   }
 
+  /**
+   * 4 阶 Butterworth 低通双二阶级联系数 (Sallen-Key 原型, RBJ 匹配法)
+   * 级联两段二阶 = 4 阶/方向; 配合前向+反向使用 = 零相位 (极值帧位置不偏移),
+   * 离线步态分析的标准做法 (Winter 建议步态数据 ~6Hz 截止)
+   */
+  function butterworthCoeffs4(cutoffHz, fs) {
+    var K = Math.tan(Math.PI * cutoffHz / fs);
+    var norm = 1 / (1 + Math.SQRT2 * K + K * K);
+    return {
+      b0: K * K * norm,
+      b1: 2 * K * K * norm,
+      b2: K * K * norm,
+      a1: 2 * (K * K - 1) * norm,
+      a2: (1 - Math.SQRT2 * K + K * K) * norm
+    };
+  }
+
+  function biquadPass(seg, c) {
+    var out = new Array(seg.length);
+    var x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+    for (var i = 0; i < seg.length; i++) {
+      var x0 = seg[i];
+      var y0 = c.b0 * x0 + c.b1 * x1 + c.b2 * x2 - c.a1 * y1 - c.a2 * y2;
+      out[i] = y0;
+      x2 = x1; x1 = x0; y2 = y1; y1 = y0;
+    }
+    return out;
+  }
+
+  /**
+   * 零相位 Butterworth 低通 (4 阶, 前向+反向各一次)
+   * NaN 分段滤波, 不跨洞; 零初始状态 (段首/尾 ~0.3s 过渡带, 影响限于序列边缘).
+   * @param arr      等长数组, 缺失帧 NaN
+   * @param cutoffHz 截止频率 (Hz)
+   * @param fs       采样率 (fps)
+   */
+  function butterworthZeroPhase(arr, cutoffHz, fs) {
+    if (!cutoffHz || !fs || cutoffHz >= fs * 0.5) return arr.slice();
+    var c = butterworthCoeffs4(cutoffHz, fs);
+    var out = new Array(arr.length).fill(NaN);
+    var m = arr.length, i = 0;
+    while (i < m) {
+      if (isNaN(arr[i])) { i++; continue; }
+      var j = i;
+      while (j < m && !isNaN(arr[j])) j++;
+      var seg = arr.slice(i, j);
+      var fwd = biquadPass(biquadPass(seg, c), c);
+      var bwd = biquadPass(biquadPass(fwd.slice().reverse(), c), c).reverse();
+      for (var k = 0; k < seg.length; k++) out[i + k] = bwd[k];
+      i = j;
+    }
+    return out;
+  }
+
+  /**
+   * 速度门 (velocity gate) — 移植自 FreeMoCap realtime_point_gate 的思路
+   * (freemocap/core/tasks/mocap/realtime_filtering/realtime_point_gate.py)
+   *
+   * 逐点帧间速度门限: |x[i] - x[lastAccepted]| / dt 超过 maxVel 的观测判为坏帧 → NaN,
+   * 交由后续 interpolateShortGaps 补洞; 坏帧不移动参考点, 单个尖峰不会造成级联拒绝.
+   * 连续拒绝 maxRejectedStreak 帧后强制接受下一有效帧, 防门限与真实运动失配时永久锁死
+   * (dt 按 lastAccepted 实际间隔计算, 长遮挡复现后 dt 大、速度自然变小, 不会误拒).
+   *
+   * 定位: 专杀"瞬移"级坏帧 (左右脚互换/ID 跳变, 单帧 40px+ 的跳变);
+   * 单帧小尖峰由中值滤波覆盖, 二者互补.
+   *
+   * @param values  等长数组, 缺失帧必须为 NaN (不能跳过 — 下标即帧号)
+   * @param times   等长数组, 每帧时间戳 (秒)
+   * @param maxVel  门限 (像素/秒), 建议 max(600, 3×bodyH_px)
+   * @param opts    { maxRejectedStreak=5, label: 日志前缀 }
+   * @returns { series, rejectedCount }
+   */
+  function velocityGateSeries(values, times, maxVel, opts) {
+    opts = opts || {};
+    var maxStreak = opts.maxRejectedStreak || 5;
+    var out = values.slice();
+    var m = values.length;
+    var lastIdx = -1, streak = 0, rejected = 0;
+    for (var i = 0; i < m; i++) {
+      var v = values[i];
+      if (v == null || isNaN(v)) { out[i] = NaN; continue; }
+      if (lastIdx < 0) { lastIdx = i; continue; }
+      var dt = times[i] - times[lastIdx];
+      if (dt > 0) {
+        var vel = Math.abs(v - values[lastIdx]) / dt;
+        if (vel > maxVel) {
+          if (streak + 1 >= maxStreak) {
+            // 防锁死: 强制接受 (门限失配兜底, 步态场景实际极少触发)
+            lastIdx = i; streak = 0;
+          } else {
+            out[i] = NaN; streak++; rejected++;
+          }
+          continue;
+        }
+      }
+      lastIdx = i; streak = 0;
+    }
+    if (opts.label) {
+      console.log('[gait] velocity gate ' + opts.label + ': rejected ' + rejected +
+                  ' pts (vMax=' + Math.round(maxVel) + 'px/s)');
+    }
+    return { series: out, rejectedCount: rejected };
+  }
+
   // ============================================================
   // 步态事件检测 (HS/TO) — Zeni et al. (2008) 骨盆相对坐标法 [主路径]
   //
@@ -1633,8 +1759,9 @@
   //   1) 每帧 pelvis = mid(left_hip, right_hip) (单 hip 可用则用之)
   //   2) 分段步向 dir = computeLocalDirections (与左右归侧共用)
   //   3) heel_rel / toe_rel 序列 (foot_index 缺失/低分退回 ankle)
-  //   4) 预处理: 短洞 (≤0.25s) 线性插值, 长洞保留 NaN; 中值滤波(win=3)
-  //      → 前向+后向各一次滑动平均(win=5, 零相位不偏移极值)
+  //   4) 预处理: 速度门(瞬移坏帧→NaN, 移植 FreeMoCap point gate) → 短洞 (≤0.25s)
+  //      线性插值, 长洞保留 NaN; 中值滤波(win=3, 抗脉冲)
+  //      → 4 阶 Butterworth 零相位低通 (fc=min(6, 0.22×fps), Winter 步态标准)
   //   5) HS = heel_rel 局部极大值 (prominence ≥ max(3px, 1.5%×bodyH), 最小间隔 0.40s)
   //   6) TO = 每个 HS→HS 周期 [15%,85%] 区间内 toe_rel 最深局部极小值
   //   7) 双脚交替一致性检查 (相邻异侧 HS 相位差应在周期的 30%-70%)
@@ -1656,6 +1783,22 @@
     };
     if (!frames || frames.length < 10) return result;
     var n = frames.length;
+
+    // ---------- 0. 人体像素身高 + 速度门门限 + 实际帧率 (全函数共用) ----------
+    var bodyHGlobal = estimateBodyHeightPx(frames);
+    // 速度门门限: 真实摆动脚峰值 ~1.4×体高/秒 (≈2.5m/s), 取 3×体高/秒 (~5m/s 等效),
+    // 专杀瞬移级坏帧; 像素地板 600px/s 防远景小人形门限过松
+    var vMaxPxPerSec = Math.max(600, (bodyHGlobal || 300) * 3.0);
+    var timesAll = new Array(n);
+    for (var ti = 0; ti < n; ti++) timesAll[ti] = frames[ti].t;
+    // 实际帧率 (中位帧间隔) — Butterworth 截止频率按真实采样率折算
+    var dts = [];
+    for (var di = 1; di < n; di++) dts.push(frames[di].t - frames[di - 1].t);
+    dts.sort(function (a, b) { return a - b; });
+    var fpsEst = (dts.length && dts[Math.floor(dts.length / 2)] > 0)
+      ? 1 / dts[Math.floor(dts.length / 2)] : 30;
+    // Winter 建议步态数据 ~6Hz 截止; 低帧率时按 0.22×fs 收缩 (20fps → 4.4Hz)
+    var butterFc = Math.min(6, fpsEst * 0.22);
 
     // ---------- 1. 每帧骨盆中心 (两 hip score≥0.2 取中点; 单 hip 可用则用之) ----------
     var pelvisX = new Array(n).fill(NaN);
@@ -1686,6 +1829,9 @@
         var d = dirArr[i];
         if (d === 0 || isNaN(pelvisX[i])) continue;
         var hk = getKp(frames[i], side + '_heel');
+        // 脚跟低可见时退回踝: 入镜/转身窗口 heel visibility 常仅 0.05-0.4 (实测),
+        // 硬弃导致序列断洞丢事件; 踝的可见性显著更好, 且踝-跟垂直差 ~8-10cm 在地面容差内
+        if (!hk || hk.score < 0.25) hk = getKp(frames[i], side + '_ankle');
         if (hk && hk.score >= 0.25) {
           heelX[i] = (hk.x - pelvisX[i]) * d;
           heelY[i] = hk.y;
@@ -1701,7 +1847,9 @@
     }
 
     // ---------- 4. 序列预处理 ----------
-    // ≤0.25s 的洞: 在洞边界有效帧之间线性插值; 更长洞保留 NaN 不参与极值检测
+    // 速度门 (瞬移坏帧→NaN) → ≤0.25s 的洞线性插值; 更长洞保留 NaN 不参与极值检测
+    // → 中值滤波 win=3 (抗脉冲) → 4 阶 Butterworth 零相位低通 (替代滑动平均:
+    //   频域截止更干净, 零相位不偏移极值帧)
     function interpolateShortGaps(arr) {
       var out = arr.slice();
       var i = 0;
@@ -1737,30 +1885,20 @@
       }
       return out;
     }
-    // 前向/后向滑动平均 win=5 (前向+后向各一次 = 零相位, 不偏移极值位置)
-    // NaN 洞处窗口重置, 不跨洞平均
-    function movingAvgPass(arr, forward) {
-      var out = new Array(n).fill(NaN);
-      var queue = [], qSum = 0;
-      for (var k = 0; k < n; k++) {
-        var i = forward ? k : (n - 1 - k);
-        if (isNaN(arr[i])) { queue = []; qSum = 0; continue; }
-        queue.push(arr[i]); qSum += arr[i];
-        if (queue.length > 5) qSum -= queue.shift();
-        out[i] = qSum / queue.length;
-      }
-      return out;
-    }
-    function preprocessSeries(arr) {
-      return movingAvgPass(movingAvgPass(medianFilter3(interpolateShortGaps(arr)), true), false);
+    function preprocessSeries(arr, label) {
+      var gated = velocityGateSeries(arr, timesAll, vMaxPxPerSec,
+                                     label ? { label: label } : null).series;
+      var interp = interpolateShortGaps(gated);
+      var med = medianFilter3(interp);
+      return butterworthZeroPhase(med, butterFc, fpsEst);
     }
 
-    // ---------- 5. 人体像素身高 (prominence 阈值 + 逐事件 bodyH) ----------
-    var bodyHGlobal = estimateBodyHeightPx(frames);
+    // ---------- 5. prominence 阈值 (人体像素身高在步骤 0 已算) ----------
     var minProm = Math.max(3, (bodyHGlobal || 0) * 0.015);
 
     // ---------- 6. HS = heel_rel 局部极大值 (带 prominence 与最小间隔约束) ----------
-    function findPeaks(series, minIntervalSec, minPromOverride) {
+    // isPlausible: 假阳性过滤须在最小间隔合并之前应用 — 否则伪峰会挤掉 0.5s 内的真实峰
+    function findPeaks(series, minIntervalSec, minPromOverride, isPlausible) {
       var minPromUse = minPromOverride != null ? minPromOverride : minProm;
       var cands = [];
       for (var i = 1; i < n - 1; i++) {
@@ -1769,6 +1907,7 @@
         var vm = series[i - 1], vp = series[i + 1];
         if (isNaN(vm) || isNaN(vp)) continue;
         if (!(v >= vm && v >= vp && (v > vm || v > vp))) continue;
+        if (isPlausible && !isPlausible(i)) continue;
         // prominence: 左右两侧"更高点 / NaN 洞 / 序列端"之间的最小值, 取两侧较大者
         var leftMin = v, rightMin = v;
         for (var l = i - 1; l >= 0; l--) {
@@ -1811,7 +1950,7 @@
     // 期望周期由调用方传入 (双侧合并中位数) — 单侧中位数会被漏检合并周期污染
     // (真实视频确诊: 右脚 spans 0.7,0.95,1.7,2.1,2.76 → 单侧中位 1.7s 过宽, 缺口不触发)
     // 超过 3× 期望周期的缺口是转身/站立, 不补
-    function fillMissedPeaks(series, peaks, fullProm, expectedGap) {
+    function fillMissedPeaks(series, peaks, fullProm, expectedGap, isPlausible) {
       var maxFill = expectedGap * 3.0;
       for (var round = 0; round < 3; round++) {
         if (peaks.length < 2) break;
@@ -1826,6 +1965,7 @@
             if (frames[k].t - frames[i0].t < 0.5 || frames[i1].t - frames[k].t < 0.5) continue;
             var v = series[k];
             if (isNaN(v)) continue;
+            if (isPlausible && !isPlausible(k)) continue;  // 假阳性过滤同样约束补检
             var vm = series[k - 1], vp = series[k + 1];
             if (isNaN(vm) || isNaN(vp)) continue;
             if (!(v >= vm && v >= vp && (v > vm || v > vp))) continue;
@@ -1849,13 +1989,14 @@
     }
 
     // ---------- 7. TO = 周期 [15%,85%] 窗口内 toe_rel 最深局部极小值 ----------
-    function findDeepestTrough(series, t0, t1) {
+    function findDeepestTrough(series, t0, t1, isPlausible) {
       var best = null;
       for (var i = 1; i < n - 1; i++) {
         var t = frames[i].t;
         if (t < t0 || t > t1) continue;
         var v = series[i];
         if (isNaN(v)) continue;
+        if (isPlausible && !isPlausible(i)) continue;  // 假阳性过滤同样约束 TO
         var vm = series[i - 1], vp = series[i + 1];
         if (isNaN(vm) || isNaN(vp)) continue;
         if (!(v <= vm && v <= vp && (v < vm || v < vp))) continue;
@@ -1886,11 +2027,11 @@
     var sideData = {};
     ['left', 'right'].forEach(function (side) {
       var ser = extractSideSeries(side);
-      var heelRelX = preprocessSeries(ser.heelX);
-      var toeRelX  = preprocessSeries(ser.toeX);
+      var heelRelX = preprocessSeries(ser.heelX, side + ' heelRel');
+      var toeRelX  = preprocessSeries(ser.toeX, side + ' toeRel');
       // Y 序列同样预处理 (旧 Y 轨迹 fallback 与调试视图用)
-      var heelYs = preprocessSeries(ser.heelY);
-      var toeYs  = preprocessSeries(ser.toeY);
+      var heelYs = preprocessSeries(ser.heelY, side + ' heelY');
+      var toeYs  = preprocessSeries(ser.toeY, side + ' toeY');
       // debug 轨迹 (含 NaN)
       for (var i = 0; i < n; i++) {
         if (side === 'left') result.debug.t.push(frames[i].t);
@@ -1905,8 +2046,59 @@
       var amp = seriesAmplitude(heelRelX);
       var baseProm = Math.max(3, (bodyHGlobal || 0) * 0.008);
       var sideProm = amp > 0 ? Math.min(baseProm, amp * 0.25) : baseProm;
+      // ---------- 假阳性过滤: 解剖学可达范围 + 地面接触 ----------
+      // 真实视频确诊: 背景海报/静物伪影的 "heel_rel" 被真实骨盆运动驱动成周期性
+      // 波形 (x≈540px 静止伪影连出 5 个假 HS, 把步幅均值拖到 0.125m)。两类硬约束:
+      //  1) 腿长约束: 真实足跟/脚尖相对骨盆 |rel| ≤ ~0.6×体高, 伪影可达 1-2.4×
+      //  2) 地面接触: HS/TO 瞬间脚在地面附近 (y 向下 ≥ 该侧地面线 - 10%体高),
+      //     悬空 300px+ 的伪影直接判假 (前掌着地者跟部离地 ≤ ~12cm, 容差覆盖)
+      var GROUND_TOL = Math.max(12, (bodyHGlobal || 400) * 0.10);
+      var REACH_MAX = (bodyHGlobal || 400) * 0.60;
+      function pctValid(arr, q) {
+        var vals = [];
+        for (var vi = 0; vi < arr.length; vi++) if (!isNaN(arr[vi])) vals.push(arr[vi]);
+        if (!vals.length) return NaN;
+        vals.sort(function (a, b) { return a - b; });
+        return vals[Math.min(vals.length - 1, Math.floor(vals.length * q))];
+      }
+      var yBaseHeel = pctValid(heelYs, 0.65);  // 支撑相地面线 (该侧 heelY 65 分位)
+      var yBaseToe = pctValid(toeYs, 0.65);
+      var rejReach = 0, rejGround = 0, rejToReach = 0, rejToGround = 0;
+      var rejTimes = [], rejToTimes = [];
+      function plausibleHS(idx) {
+        var hr = heelRelX[idx];
+        if (!isNaN(hr) && Math.abs(hr) > REACH_MAX) {
+          rejReach++; rejTimes.push(frames[idx].t.toFixed(1));
+          return false;
+        }
+        var hy = heelYs[idx];
+        if (!isNaN(yBaseHeel) && !isNaN(hy) && hy < yBaseHeel - GROUND_TOL) {
+          rejGround++; rejTimes.push(frames[idx].t.toFixed(1) + 'g');
+          return false;
+        }
+        return true;
+      }
+      function plausibleTO(idx) {
+        var tr = toeRelX[idx];
+        if (!isNaN(tr) && Math.abs(tr) > REACH_MAX) {
+          rejToReach++; rejToTimes.push(frames[idx].t.toFixed(1));
+          return false;
+        }
+        var ty = toeYs[idx];
+        if (!isNaN(yBaseToe) && !isNaN(ty) && ty < yBaseToe - GROUND_TOL) {
+          rejToGround++; rejToTimes.push(frames[idx].t.toFixed(1) + 'g');
+          return false;
+        }
+        return true;
+      }
+      var rawPeaks = findPeaks(heelRelX, 0.50, sideProm, plausibleHS);  // 步行同脚触地间隔 ≥0.6s, 0.40s 下限会收进假峰
+      console.log('[gait] anti-fake HS ' + side + ': reach拒=' + rejReach + ' ground拒=' + rejGround +
+                  ' | 存活峰 t=[' + rawPeaks.map(function (p) { return frames[p.i].t.toFixed(2); }).join(',') + ']' +
+                  (rejTimes.length ? ' | 拒 t=[' + rejTimes.slice(0, 24).join(',') + ']' : ''));
       sideData[side] = { heelRelX: heelRelX, toeRelX: toeRelX, sideProm: sideProm,
-                         peaks: findPeaks(heelRelX, 0.50, sideProm) };  // 步行同脚触地间隔 ≥0.6s, 0.40s 下限会收进假峰
+                         plausibleHS: plausibleHS, plausibleTO: plausibleTO,
+                         rejTo: { reach: rejToReach, ground: rejToGround, times: rejToTimes },
+                         peaks: rawPeaks };
     });
 
     // 漏检补检的期望周期: 双侧合并间隔的中位数
@@ -1925,13 +2117,15 @@
 
     ['left', 'right'].forEach(function (side) {
       var heelRelX = sideData[side].heelRelX, toeRelX = sideData[side].toeRelX;
-      var peaks = fillMissedPeaks(heelRelX, sideData[side].peaks, sideData[side].sideProm, pooledMed);
+      var peaks = fillMissedPeaks(heelRelX, sideData[side].peaks, sideData[side].sideProm,
+                                  pooledMed, sideData[side].plausibleHS);
       peaks.forEach(function (p) {
         var kp = getKp(frames[p.i], side + '_heel') || getKp(frames[p.i], side + '_ankle') || { x: NaN, y: NaN };
         result[side].hs.push({
           time: refinedTime(heelRelX, p.i),
           frameIndex: p.i,
           confidence: p.recovered ? 'low' : 'high',
+          prom: p.prom,                       // 供同时-HS 去重比较
           bodyH: bodyHeightAtFrame(frames[p.i]) || bodyHGlobal,
           x: kp.x, y: kp.y
         });
@@ -1941,19 +2135,47 @@
         var hs0 = result[side].hs[h], hs1 = result[side].hs[h + 1];
         var cyc = hs1.time - hs0.time;
         if (cyc < 0.2 || cyc > 3.0) continue;
-        var trough = findDeepestTrough(toeRelX, hs0.time + cyc * 0.15, hs0.time + cyc * 0.85);
+        var trough = findDeepestTrough(toeRelX, hs0.time + cyc * 0.15, hs0.time + cyc * 0.85,
+                                       sideData[side].plausibleTO);
         if (!trough) continue;  // 找不到则该周期 TO 缺失
         var tkp = getKp(frames[trough.i], side + '_foot_index') || getKp(frames[trough.i], side + '_ankle') || { x: NaN, y: NaN };
         result[side].to.push({
           time: refinedTime(toeRelX, trough.i),
           frameIndex: trough.i,
           confidence: 'high',
+          prom: trough.v,
           bodyH: bodyHeightAtFrame(frames[trough.i]) || bodyHGlobal,
           x: tkp.x, y: tkp.y,
           cycleIndex: h
         });
       }
+      var rj = sideData[side].rejTo;
+      console.log('[gait] anti-fake TO ' + side + ': reach拒=' + rj.reach + ' ground拒=' + rj.ground +
+                  (rj.times.length ? ' | 拒 t=[' + rj.times.slice(0, 24).join(',') + ']' : ''));
     });
+
+    // ---------- 8b. 异侧同时 HS 去重: Δt<0.12s 物理不可能 (最快交替 ≥0.25s) ----------
+    // 真实视频确诊: 归侧混淆帧会让左右通道在同一帧各产出一个 HS (3.35s 双脚"同时"着地)
+    (function dedupeSimultaneousHS() {
+      var merged = [];
+      result.left.hs.forEach(function (h) { merged.push({ side: 'left', ev: h }); });
+      result.right.hs.forEach(function (h) { merged.push({ side: 'right', ev: h }); });
+      merged.sort(function (a, b) { return a.ev.time - b.ev.time; });
+      var removed = 0;
+      for (var m = 1; m < merged.length; m++) {
+        var prev = merged[m - 1], cur = merged[m];
+        if (prev.side === cur.side) continue;
+        if (cur.ev.time - prev.ev.time >= 0.12) continue;
+        var loser = (prev.ev.prom || 0) >= (cur.ev.prom || 0) ? cur : prev;
+        loser.ev._drop = true;
+        removed++;
+      }
+      if (removed) {
+        result.left.hs = result.left.hs.filter(function (h) { return !h._drop; });
+        result.right.hs = result.right.hs.filter(function (h) { return !h._drop; });
+        console.log('[gait] dedupe simultaneous HS: removed ' + removed);
+      }
+    })();
 
     // ---------- 8. 双脚交替一致性: 相邻异侧 HS 相位差应在周期的 30%-70% ----------
     (function checkAlternation() {
@@ -3674,6 +3896,8 @@
     detectHeelStrikes: detectHeelStrikes,
     detectToeOffs: detectToeOffs,
     detectGaitEvents: detectGaitEvents,
+    velocityGateSeries: velocityGateSeries,
+    butterworthZeroPhase: butterworthZeroPhase,
     computeGaitCyclePhases: computeGaitCyclePhases,
     computePhaseTimestamps: computePhaseTimestamps,
     computeStepLengths: computeStepLengths,

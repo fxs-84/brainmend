@@ -286,6 +286,10 @@
   // 主入口: 在指定容器渲染完整报告
   // ============================================================
   function renderReport(data, containerEl) {
+    if (data && data.type === 'gait-confirmed-report' && window.__gaitReportV2) {
+      window.__gaitReportV2.renderReport(data, containerEl);
+      return;
+    }
     if (!data || !data.parameters) {
       containerEl.innerHTML = '<p style="color:#888;text-align:center;padding:40px;">暂无报告数据 (此记录无参数)</p>';
       return;
