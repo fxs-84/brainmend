@@ -156,6 +156,9 @@ async function injectAndConfirm(page, side) {
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+const actionTimeout = Number(process.env.TEST_TIMEOUT || 30000);
+page.setDefaultTimeout(actionTimeout);
+page.setDefaultNavigationTimeout(actionTimeout);
 const errors = [];
 page.on('pageerror', error => errors.push(String(error)));
 
