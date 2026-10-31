@@ -360,7 +360,7 @@
     view.progress = 0;
     view.control = { cancelled: false };
     state.activeSide = side;
-    setMessage('', '');
+    setMessage('', '首次加载姿态模型可能需要几分钟，请保持页面打开，识别完成前不要重复点击。');
     render();
     try {
       var frames = await window.__gaitMedia.analyzeVideo(view, function (count, fraction) {

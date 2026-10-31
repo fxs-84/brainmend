@@ -33,12 +33,17 @@
               baseOptions: { modelAssetPath: MODEL_URLS[m], delegate: delegate },
               runningMode: 'VIDEO', numPoses: 1
             });
+            var timeoutId;
             var timeout = new Promise(function (_, reject) {
-              setTimeout(function () { reject(new Error('模型创建超时')); }, 20000);
+              timeoutId = setTimeout(function () { reject(new Error('模型创建超时')); }, 300000);
             });
-            landmarker = await Promise.race([creating, timeout]);
-            var match = /pose_landmarker_(heavy|full|lite)/.exec(MODEL_URLS[m]);
-            if (onModel) onModel(match ? match[1] : 'unknown', delegate);
+            try {
+              landmarker = await Promise.race([creating, timeout]);
+              var match = /pose_landmarker_(heavy|full|lite)/.exec(MODEL_URLS[m]);
+              if (onModel) onModel(match ? match[1] : 'unknown', delegate);
+            } finally {
+              clearTimeout(timeoutId);
+            }
           } catch (error) {
             lastError = error;
             console.warn('[gait-media] 模型初始化回退', MODEL_URLS[m], delegate, error && error.message || error);
