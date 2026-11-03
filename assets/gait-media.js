@@ -16,6 +16,7 @@
     'left_heel', 'right_heel', 'left_foot_index', 'right_foot_index'
   ];
   var detectorPromise = null;
+  var analysisQueue = Promise.resolve();
 
   function loadDetector(onModel) {
     if (detectorPromise) return detectorPromise;
@@ -168,7 +169,7 @@
           context.drawImage(video, 0, 0, canvas.width, canvas.height);
           var keypoints = [];
           try {
-            keypoints = detector.estimate(canvas, Math.max(0, Math.round(mediaTime * 1000)));
+            keypoints = detector.estimate(canvas, performance.now());
           } catch (error) {
             keypoints = [];
           }
@@ -226,7 +227,7 @@
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
       var keypoints = [];
       try {
-        keypoints = detector.estimate(canvas, Math.max(0, Math.round(target * 1000)));
+        keypoints = detector.estimate(canvas, performance.now());
       } catch (error) {}
       frames.push({
         frameIndex: index, t: target, mediaTime: target,
@@ -238,20 +239,24 @@
     return frames;
   }
 
-  async function analyzeVideo(view, progress, control) {
-    var detector = await loadDetector(function (model, delegate) {
-      view.modelVersion = model + '/' + delegate;
+  function analyzeVideo(view, progress, control) {
+    var result = analysisQueue.then(async function () {
+      var detector = await loadDetector(function (model, delegate) {
+        view.modelVersion = model + '/' + delegate;
+      });
+      var frames = await analyzeByPresentedFrames(view, detector, progress, control);
+      var integrity = 'presented-frames';
+      if (!frames) {
+        frames = await analyzeBySeek(view, detector, progress, control);
+        integrity = 'estimated-30fps-seek';
+      }
+      if (frames.length < 9) throw new Error('有效帧不足，请上传包含完整步态周期的视频');
+      view.frameIntegrity = integrity;
+      view.fps = frames.length > 1 ? (frames.length - 1) / (frames[frames.length - 1].t - frames[0].t) : 30;
+      return frames;
     });
-    var frames = await analyzeByPresentedFrames(view, detector, progress, control);
-    var integrity = 'presented-frames';
-    if (!frames) {
-      frames = await analyzeBySeek(view, detector, progress, control);
-      integrity = 'estimated-30fps-seek';
-    }
-    if (frames.length < 9) throw new Error('有效帧不足，请上传包含完整步态周期的视频');
-    view.frameIntegrity = integrity;
-    view.fps = frames.length > 1 ? (frames.length - 1) / (frames[frames.length - 1].t - frames[0].t) : 30;
-    return frames;
+    analysisQueue = result.catch(function () {});
+    return result;
   }
 
   global.__gaitMedia = {

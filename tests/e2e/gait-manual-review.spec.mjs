@@ -29,66 +29,80 @@ function syntheticFrames(side) {
 }
 
 async function injectAndConfirm(page, side) {
-  await page.evaluate(({ side, frames }) => {
+  const otherSide = side === 'left' ? 'right' : 'left';
+  await page.evaluate(({ side, frames, otherSide, otherFrames }) => {
     const api = window.__gaitAnalysis;
-    const view = api.getState().session.views[side];
+    const session = api.getState().session;
+    const view = session.views[side];
     view.frames = frames;
     view.rawFrameCount = frames.length;
     view.status = 'review';
     view.fps = 30;
+    if (!session.views[otherSide].frames.length) {
+      session.views[otherSide].frames = otherFrames;
+      session.views[otherSide].status = 'review';
+    }
     api.showReview(side);
-  }, { side, frames: syntheticFrames(side) });
-  await page.waitForSelector('#gait-editor-canvas');
+  }, { side, frames: syntheticFrames(side), otherSide, otherFrames: syntheticFrames(otherSide) });
+  await page.waitForSelector(`#gait-editor-canvas-${side}`);
   await page.setViewportSize({ width: 1440, height: 800 });
-  const stageLayout = await page.locator('#gait-stage').evaluate(element => ({
-    width: element.getBoundingClientRect().width,
+  const dualLayout = await page.evaluate(() => {
+    const left = document.querySelector('#gait-stage-left').getBoundingClientRect();
+    const right = document.querySelector('#gait-stage-right').getBoundingClientRect();
+    return {
+      sameRow: Math.abs(left.top - right.top) < 2,
+      compact: left.width < 750 && right.width < 750,
+      separate: left.right <= right.left + 1,
+      count: document.querySelectorAll('.gait-v2-video-editor').length
+    };
+  });
+  check(`${side} 左右播放器同屏双栏排列`, dualLayout.count === 2 && dualLayout.sameRow && dualLayout.compact && dualLayout.separate, JSON.stringify(dualLayout));
+  const stageLayout = await page.locator(`#gait-stage-${side}`).evaluate(element => ({
     cropped: element.scrollHeight > element.clientHeight + 1,
     videoTop: element.querySelector('video').getBoundingClientRect().top,
     videoBottom: element.querySelector('video').getBoundingClientRect().bottom,
     viewportHeight: window.innerHeight
   }));
-  check(`${side} 审核视频区使用整行大画面`, stageLayout.width > 1200, `${stageLayout.width}px`);
   check(`${side} 默认画面不裁切人像`, !stageLayout.cropped);
   check(`${side} 非全屏完整显示人像`, stageLayout.videoTop >= 0 && stageLayout.videoBottom <= stageLayout.viewportHeight + 1, `视频 ${stageLayout.videoTop}–${stageLayout.videoBottom}px / 视口 ${stageLayout.viewportHeight}px`);
-  await page.waitForFunction(() => document.querySelector('#gait-stage').classList.contains('gait-v2-rails-space'));
-  const angleLayout = await page.evaluate(() => {
-    const video = document.querySelector('#gait-review-video').getBoundingClientRect();
-    const angles = [...document.querySelectorAll('[data-video-angle]')].map(element => {
-      const rect = element.getBoundingClientRect();
-      return { visible: rect.width > 0 && rect.height > 0, text: element.textContent, outside: rect.right <= video.left + 1 || rect.left >= video.right - 1 };
-    });
-    return { count: angles.length, angles, video: video.toJSON(), valid: angles.every(angle => angle.visible && angle.outside && angle.text !== '—') };
+  const angleLayout = await page.evaluate(side => {
+    const root = document.querySelector(`#gait-editor-${side}`);
+    const railAngles = [...root.querySelectorAll('[data-video-angle]')];
+    const grid = root.querySelector(`#gait-angle-grid-${side}`);
+    const angles = railAngles.length && railAngles[0].getBoundingClientRect().width > 0
+      ? railAngles.map(element => ({ text: element.textContent, visible: element.getBoundingClientRect().width > 0 }))
+      : [...grid.querySelectorAll('.gait-v2-angle-value')].map(element => ({ text: element.textContent, visible: element.getBoundingClientRect().width > 0 }));
+    return { count: angles.length, valid: angles.every(angle => angle.visible && angle.text !== '—') };
+  }, side);
+  check(`${side} 五个角度在各自播放区显示`, angleLayout.count === 5 && angleLayout.valid, JSON.stringify(angleLayout));
+  check(`${side} 不提供足跟标记`, await page.locator(`#gait-add-point-${side} option[value="heel"]`).count() === 0);
+  await page.click(`#gait-fullscreen-${side}`);
+  await page.waitForFunction(side => document.fullscreenElement && document.fullscreenElement.id === `gait-stage-${side}`, side);
+  const fitted = await page.locator(`#gait-review-video-${side}`).evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return rect.width <= window.innerWidth + 1 && rect.height <= window.innerHeight + 1;
   });
-  check(`${side} 五个角度显示在视频黑边且不遮挡人像`, angleLayout.count === 5 && angleLayout.valid, JSON.stringify(angleLayout));
-  check(`${side} 不提供足跟标记`, await page.locator('#gait-add-point option[value="heel"]').count() === 0);
-  const hasFullscreen = await page.locator('#gait-fullscreen').count() === 1;
-  check(`${side} 提供全屏放大按钮`, hasFullscreen);
-  if (hasFullscreen) {
-    await page.click('#gait-fullscreen');
-    await page.waitForFunction(() => document.fullscreenElement && document.fullscreenElement.id === 'gait-stage');
-    const fitted = await page.locator('#gait-review-video').evaluate(element => {
-      const rect = element.getBoundingClientRect();
-      return rect.width <= window.innerWidth + 1 && rect.height <= window.innerHeight + 1;
-    });
-    check(`${side} 全屏完整容纳视频`, fitted);
-    await page.evaluate(() => document.exitFullscreen());
-    await page.waitForFunction(() => !document.fullscreenElement && document.querySelector('#gait-stage').getBoundingClientRect().width > 1200);
-  }
-  if (side === 'left') await page.screenshot({ path: path.join(ROOT, 'screenshots', 'gait-v2-large-editor.png') });
-  check(`${side} 默认0.5倍速播放`, await page.locator('#gait-review-video').evaluate(video => video.playbackRate === 0.5));
-  await page.selectOption('#gait-playback-rate', '0.25');
-  await page.click('#gait-play');
-  await page.waitForFunction(() => {
-    const video = document.querySelector('#gait-review-video');
+  check(`${side} 全屏完整容纳视频`, fitted);
+  await page.evaluate(() => document.exitFullscreen());
+  await page.waitForFunction(side => !document.fullscreenElement && document.querySelector(`#gait-stage-${side}`).getBoundingClientRect().width < 750, side);
+  if (side === 'left') await page.screenshot({ path: path.join(ROOT, 'screenshots', 'gait-v2-dual-editor.png') });
+  check(`${side} 默认0.5倍速播放`, await page.locator(`#gait-review-video-${side}`).evaluate(video => video.playbackRate === 0.5));
+  await page.selectOption(`#gait-playback-rate-${side}`, '0.25');
+  await page.click(`#gait-play-${side}`);
+  await page.waitForFunction(side => {
+    const video = document.querySelector(`#gait-review-video-${side}`);
     return !video.paused && video.currentTime > 0;
-  });
-  check(`${side} 可切换0.25倍速并实际慢放`, await page.locator('#gait-review-video').evaluate(video => {
+  }, side);
+  const independentPlayback = await page.evaluate(side => {
+    const otherSide = side === 'left' ? 'right' : 'left';
+    const video = document.querySelector(`#gait-review-video-${side}`);
     const rate = video.playbackRate;
     video.pause();
-    return rate === 0.25 && video.currentTime > 0;
-  }));
-  await page.click('#gait-next-frame');
-  const current = await page.locator('#gait-frame-number').inputValue();
+    return rate === 0.25 && video.currentTime > 0 && document.querySelector(`#gait-review-video-${otherSide}`).paused;
+  }, side);
+  check(`${side} 独立慢放且不影响另一侧`, independentPlayback);
+  await page.click(`#gait-next-frame-${side}`);
+  const current = await page.locator(`#gait-frame-number-${side}`).inputValue();
   check(`${side} 支持逐帧导航`, current === '1', current);
   await page.click('#gait-add-cycle');
   const standards = await page.locator('.gait-v2-phase-standard').allTextContents();
@@ -96,7 +110,7 @@ async function injectAndConfirm(page, side) {
   check(`${side} 时相标准包含关键判定事件`, standards.some(text => text.includes('足尖离地')) && standards.some(text => text.includes('胫骨竖直')));
   await page.locator('[data-phase-start="LR"]').fill('2');
   await page.locator('[data-phase-end="LR"]').fill('6');
-  for (let step = 0; step < 4; step++) await page.click('#gait-next-frame');
+  for (let step = 0; step < 4; step++) await page.click(`#gait-next-frame-${side}`);
   await page.waitForFunction(side => window.__gaitAnalysis.getState().session.views[side].currentFrame === 4, side);
   const frameBeforeMark = await page.evaluate(side => window.__gaitAnalysis.getState().session.views[side].currentFrame, side);
   await page.click('[data-mark-phase="LR"]');
@@ -120,12 +134,12 @@ async function injectAndConfirm(page, side) {
     return cycles.length === 1 && cycles[0].confirmed === true;
   }, side);
   check(`${side} 人工周期可确认`, confirmed);
-  await page.locator('#gait-editor-canvas').scrollIntoViewIfNeeded();
+  await page.locator(`#gait-editor-canvas-${side}`).scrollIntoViewIfNeeded();
   const shoulder = await page.evaluate(side => {
     const view = window.__gaitAnalysis.getState().session.views[side];
     const point = view.frames[view.currentFrame].keypoints.find(item => item.name === `${side}_shoulder`);
-    const rect = document.querySelector('#gait-editor-canvas').getBoundingClientRect();
-    const canvas = document.querySelector('#gait-editor-canvas');
+    const rect = document.querySelector(`#gait-editor-canvas-${side}`).getBoundingClientRect();
+    const canvas = document.querySelector(`#gait-editor-canvas-${side}`);
     return { x: rect.left + point.x * rect.width / canvas.width, y: rect.top + point.y * rect.height / canvas.height };
   }, side);
   await page.mouse.move(shoulder.x, shoulder.y);
@@ -143,8 +157,8 @@ async function injectAndConfirm(page, side) {
     const frame = view.frames[view.currentFrame];
     frame.keypoints = frame.keypoints.filter(point => point.name !== `${side}_wrist`);
   }, side);
-  await page.selectOption('#gait-add-point', 'wrist');
-  await page.locator('#gait-editor-canvas').click({ position: { x: 210, y: 120 } });
+  await page.selectOption(`#gait-add-point-${side}`, 'wrist');
+  await page.locator(`#gait-editor-canvas-${side}`).click({ position: { x: 210, y: 120 } });
   const placed = await page.evaluate(side => {
     const view = window.__gaitAnalysis.getState().session.views[side];
     const point = view.frames[view.currentFrame].keypoints.find(item => item.name === `${side}_wrist`);
@@ -285,7 +299,7 @@ try {
   await page.screenshot({ path: path.join(ROOT, 'screenshots', 'gait-v2-neuro-mobile.png') });
   await mobileNeuroShotStyle.evaluate(element => element.remove());
   await page.click('#gait-back-review');
-  await page.waitForSelector('#gait-editor-canvas');
+  await page.waitForSelector('#gait-editor-canvas-right');
   const mobileEditorOverflow = await page.evaluate(() => document.querySelector('#gait-overlay').scrollWidth > window.innerWidth + 1);
   check('390px 人工时相页无横向溢出', !mobileEditorOverflow);
   await page.screenshot({ path: path.join(ROOT, 'screenshots', 'gait-v2-mobile-editor.png'), fullPage: true });
@@ -294,10 +308,10 @@ try {
 } catch (error) {
   const layout = await page.evaluate(() => ({
     body: document.querySelector('#gait-body')?.textContent.slice(0, 300),
-    canvas: document.querySelector('#gait-editor-canvas')?.getBoundingClientRect().toJSON(),
-    video: document.querySelector('#gait-review-video')?.getBoundingClientRect().toJSON(),
-    videoStyle: document.querySelector('#gait-review-video')?.getAttribute('style'),
-    stage: document.querySelector('#gait-stage-inner')?.getBoundingClientRect().toJSON()
+    canvas: document.querySelector('#gait-editor-canvas-right')?.getBoundingClientRect().toJSON(),
+    video: document.querySelector('#gait-review-video-right')?.getBoundingClientRect().toJSON(),
+    videoStyle: document.querySelector('#gait-review-video-right')?.getAttribute('style'),
+    stage: document.querySelector('#gait-stage-inner-right')?.getBoundingClientRect().toJSON()
   })).catch(() => null);
   await page.screenshot({ path: path.join(ROOT, 'screenshots', 'gait-v2-e2e-failure.png'), fullPage: true }).catch(() => {});
   check('端到端流程完成', false, String(error) + '\n' + JSON.stringify(layout));

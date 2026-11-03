@@ -276,7 +276,7 @@
     $('#gait-body').innerHTML = '<div class="gait-v2-shell">' +
       '<section class="gait-v2-hero"><div><h2>双侧步态，逐帧看清</h2><p>上传左右侧视视频，自动识别解剖点，再由您逐帧校正并确认标准时相。自动结果只作建议，报告只采用人工确认周期。</p></div><span class="gait-v2-step">二维侧视 · 人工审核</span></section>' +
       renderMessages() +
-      '<section class="gait-v2-panel"><h3>01 · 上传两段视频</h3><p>建议固定手机横屏拍摄，镜头与人体矢状面垂直。全身、足跟和足尖全程入镜，避免跑步机扶手遮挡。</p><div class="gait-v2-uploads">' +
+      '<section class="gait-v2-panel"><h3>01 · 上传两段视频</h3><p>固定手机竖屏或横屏拍摄，保持原始画幅，镜头与人体矢状面垂直。全身、足跟和足尖全程入镜，避免跑步机扶手遮挡。</p><div class="gait-v2-uploads">' +
       renderUploadCard('left', counts.left) + renderUploadCard('right', counts.right) + '</div></section>' +
       '<section class="gait-v2-panel"><h3>02 · 测试条件</h3><div class="gait-v2-actions"><label class="gait-v2-frame-label" for="gait-speed">跑步机设定速度</label><select class="gait-v2-select" id="gait-speed"><option value=""' + (speed == null ? ' selected' : '') + '>未记录</option><option value="5"' + (speed === 5 ? ' selected' : '') + '>5 km/h</option><option value="5.5"' + (speed === 5.5 ? ' selected' : '') + '>5.5 km/h</option></select></div><p style="margin-top:10px">5 km/h采用您提供的课程参考；5.5 km/h单独记录，待补充该速度参考后再判断偏离。</p></section>' +
       '<section class="gait-v2-panel"><h3>拍摄与审核原则</h3><ol class="gait-v2-guide"><li>纯侧面、固定机位，画面不要跟随人物移动。</li><li>光线均匀，穿贴身衣物，脚部与地面对比清晰。</li><li>每段包含至少一个完整同侧触地到再次触地周期。</li><li>先校正关键点，再确认时相；修改后需重新确认。</li></ol></section>' +
@@ -360,7 +360,7 @@
     view.progress = 0;
     view.control = { cancelled: false };
     state.activeSide = side;
-    setMessage('', '首次加载姿态模型可能需要几分钟，请保持页面打开，识别完成前不要重复点击。');
+    setMessage('', '首次加载姿态模型可能需要几分钟，请保持页面打开。两侧同时识别会自动排队，请等待识别完成。');
     render();
     try {
       var frames = await window.__gaitMedia.analyzeVideo(view, function (count, fraction) {
@@ -401,8 +401,24 @@
     $('#gait-overlay').scrollTop = 0;
   }
 
+  function renderVideoEditor(view) {
+    var side = view.side;
+    if (!view.frames.length) {
+      return '<main class="gait-v2-video-editor" id="gait-editor-' + side + '"><h3 class="gait-v2-player-title">' + sideLabel(side) + '</h3><div class="gait-v2-empty-player">尚未识别此侧视频</div></main>';
+    }
+    return '<main class="gait-v2-video-editor' + (state.activeSide === side ? ' active' : '') + '" id="gait-editor-' + side + '"><h3 class="gait-v2-player-title">' + sideLabel(side) + '</h3>' +
+      '<div class="gait-v2-stage" id="gait-stage-' + side + '"><div class="gait-v2-video-rail gait-v2-video-rail-left"><div><span>肩屈/伸</span><strong data-video-angle="shoulder">—</strong></div><div><span>肘屈</span><strong data-video-angle="elbow">—</strong></div></div><div class="gait-v2-stage-inner" id="gait-stage-inner-' + side + '"></div><div class="gait-v2-video-rail gait-v2-video-rail-right"><div><span>髋屈/伸</span><strong data-video-angle="hip">—</strong></div><div><span>膝屈/伸</span><strong data-video-angle="knee">—</strong></div><div><span>踝背/跖屈</span><strong data-video-angle="ankle">—</strong></div></div></div>' +
+      '<div class="gait-v2-transport"><button class="gait-v2-btn" id="gait-play-' + side + '">播放</button><label class="gait-v2-frame-label">速度 <select class="gait-v2-select" id="gait-playback-rate-' + side + '" title="仅改变播放速度，不影响逐帧和报告"><option value="0.25"' + (view.playbackRate === 0.25 ? ' selected' : '') + '>0.25×</option><option value="0.5"' + (view.playbackRate !== 1 && view.playbackRate !== 0.25 ? ' selected' : '') + '>0.5× 慢放</option><option value="1"' + (view.playbackRate === 1 ? ' selected' : '') + '>1× 原速</option></select></label><button class="gait-v2-btn" id="gait-fullscreen-' + side + '" title="按视频比例完整放大">全屏放大</button><button class="gait-v2-btn" id="gait-prev-frame-' + side + '">← 上一帧</button><button class="gait-v2-btn" id="gait-next-frame-' + side + '">下一帧 →</button><label class="gait-v2-frame-label">帧 <input class="gait-v2-input" id="gait-frame-number-' + side + '" type="number" min="0" max="' + (view.frames.length - 1) + '" value="' + view.currentFrame + '"> / ' + (view.frames.length - 1) + '</label><span class="gait-v2-frame-label" id="gait-frame-time-' + side + '">' + formatTime(currentFrame(view).t) + '</span></div>' +
+      '<div class="gait-v2-transport"><select class="gait-v2-select" id="gait-direction-' + side + '"><option value="1"' + (view.direction === 1 ? ' selected' : '') + '>前方朝画面右</option><option value="-1"' + (view.direction === -1 ? ' selected' : '') + '>前方朝画面左</option></select><select class="gait-v2-select" id="gait-zoom-' + side + '"><option value="1">适应窗口</option><option value="2">放大 200%</option><option value="3">300%</option></select><select class="gait-v2-select" id="gait-add-point-' + side + '"><option value="">补标缺失点…</option><option value="shoulder">肩</option><option value="elbow">肘</option><option value="wrist">腕</option><option value="hip">髋</option><option value="knee">膝</option><option value="ankle">踝</option><option value="foot_index">足尖</option></select><label class="gait-v2-frame-label"><input type="checkbox" id="gait-show-raw-' + side + '" ' + (view.showRaw ? 'checked' : '') + '> 显示 AI 原始点</label><button class="gait-v2-btn gait-v2-btn-small" id="gait-reset-frame-' + side + '">重置本帧</button><button class="gait-v2-btn gait-v2-btn-small" id="gait-undo-' + side + '">撤销</button><button class="gait-v2-btn gait-v2-btn-small" id="gait-redo-' + side + '">重做</button></div>' +
+      '<div class="gait-v2-angle-grid" id="gait-angle-grid-' + side + '">' + K.ANGLE_KEYS.map(function (key) { return '<div class="gait-v2-angle"><div class="gait-v2-angle-label">' + ANGLE_LABELS[key] + '</div><div class="gait-v2-angle-value" id="gait-angle-' + key + '-' + side + '">—</div></div>'; }).join('') + '</div></main>';
+  }
+
   function renderReview() {
     var view = currentView();
+    if (!view.frames.length && state.session.views[state.activeSide === 'left' ? 'right' : 'left'].frames.length) {
+      state.activeSide = state.activeSide === 'left' ? 'right' : 'left';
+      view = currentView();
+    }
     if (!view.frames.length) {
       state.phase = PHASE.UPLOAD;
       renderUpload();
@@ -412,16 +428,21 @@
     $('#gait-body').innerHTML = '<div class="gait-v2-shell">' +
       '<div class="gait-v2-side-tabs"><button class="gait-v2-btn gait-v2-side-tab ' + (state.activeSide === 'left' ? 'active' : '') + '" id="gait-tab-left">左侧视 · ' + viewCount('left') + '</button><button class="gait-v2-btn gait-v2-side-tab ' + (state.activeSide === 'right' ? 'active' : '') + '" id="gait-tab-right">右侧视 · ' + viewCount('right') + '</button></div>' +
       renderMessages() +
-      '<div class="gait-v2-editor"><main><div class="gait-v2-stage" id="gait-stage"><div class="gait-v2-video-rail gait-v2-video-rail-left"><div><span>肩屈/伸</span><strong data-video-angle="shoulder">—</strong></div><div><span>肘屈</span><strong data-video-angle="elbow">—</strong></div></div><div class="gait-v2-stage-inner" id="gait-stage-inner"></div><div class="gait-v2-video-rail gait-v2-video-rail-right"><div><span>髋屈/伸</span><strong data-video-angle="hip">—</strong></div><div><span>膝屈/伸</span><strong data-video-angle="knee">—</strong></div><div><span>踝背/跖屈</span><strong data-video-angle="ankle">—</strong></div></div></div>' +
-      '<div class="gait-v2-transport"><button class="gait-v2-btn" id="gait-play">播放</button><label class="gait-v2-frame-label">速度 <select class="gait-v2-select" id="gait-playback-rate" title="仅改变播放速度，不影响逐帧和报告"><option value="0.25"' + (view.playbackRate === 0.25 ? ' selected' : '') + '>0.25×</option><option value="0.5"' + (view.playbackRate !== 1 && view.playbackRate !== 0.25 ? ' selected' : '') + '>0.5× 慢放</option><option value="1"' + (view.playbackRate === 1 ? ' selected' : '') + '>1× 原速</option></select></label><button class="gait-v2-btn" id="gait-fullscreen" title="按视频比例完整放大">全屏放大</button><button class="gait-v2-btn" id="gait-prev-frame">← 上一帧</button><button class="gait-v2-btn" id="gait-next-frame">下一帧 →</button><label class="gait-v2-frame-label">帧 <input class="gait-v2-input" id="gait-frame-number" type="number" min="0" max="' + (view.frames.length - 1) + '" value="' + view.currentFrame + '"> / ' + (view.frames.length - 1) + '</label><span class="gait-v2-frame-label" id="gait-frame-time">' + formatTime(currentFrame(view).t) + '</span></div>' +
-      '<div class="gait-v2-transport"><select class="gait-v2-select" id="gait-direction"><option value="1"' + (view.direction === 1 ? ' selected' : '') + '>前方朝画面右</option><option value="-1"' + (view.direction === -1 ? ' selected' : '') + '>前方朝画面左</option></select><select class="gait-v2-select" id="gait-zoom"><option value="1">适应窗口</option><option value="2">放大 200%</option><option value="3">300%</option></select><select class="gait-v2-select" id="gait-add-point"><option value="">补标缺失点…</option><option value="shoulder">肩</option><option value="elbow">肘</option><option value="wrist">腕</option><option value="hip">髋</option><option value="knee">膝</option><option value="ankle">踝</option><option value="foot_index">足尖</option></select><label class="gait-v2-frame-label"><input type="checkbox" id="gait-show-raw" ' + (view.showRaw ? 'checked' : '') + '> 显示 AI 原始点</label><button class="gait-v2-btn gait-v2-btn-small" id="gait-reset-frame">重置本帧</button><button class="gait-v2-btn gait-v2-btn-small" id="gait-undo">撤销</button><button class="gait-v2-btn gait-v2-btn-small" id="gait-redo">重做</button></div>' +
-      '<div class="gait-v2-angle-grid" id="gait-angle-grid">' + K.ANGLE_KEYS.map(function (key) { return '<div class="gait-v2-angle"><div class="gait-v2-angle-label">' + ANGLE_LABELS[key] + '</div><div class="gait-v2-angle-value" id="gait-angle-' + key + '">—</div></div>'; }).join('') + '</div></main>' +
-      '<aside class="gait-v2-review-column"><section class="gait-v2-panel"><h3>人工时相</h3><p>先选周期，再把当前帧标记为对应时相。IC 是周期起点，下一次 IC 是终点。百分比仅作正常参考，以实际动作帧为准。</p><div class="gait-v2-actions" style="margin-bottom:10px"><button class="gait-v2-btn gait-v2-btn-small" id="gait-add-cycle">从当前帧新建周期</button></div><div class="gait-v2-cycle-list" id="gait-cycle-list">' + renderCycleChips(view) + '</div><div id="gait-cycle-editor">' + (cycle ? renderCycleEditor(view, cycle) : '<div class="gait-v2-note">尚未建立周期。移动到同侧初始触地帧，点击“从当前帧新建周期”。</div>') + '</div></section>' +
+      '<div class="gait-v2-editor">' + renderVideoEditor(state.session.views.left) + renderVideoEditor(state.session.views.right) +
+      '<aside class="gait-v2-review-column"><section class="gait-v2-panel"><h3>人工时相 · ' + sideLabel(view.side) + '</h3><p>先选周期，再把当前帧标记为对应时相。IC 是周期起点，下一次 IC 是终点。百分比仅作正常参考，以实际动作帧为准。</p><div class="gait-v2-actions" style="margin-bottom:10px"><button class="gait-v2-btn gait-v2-btn-small" id="gait-add-cycle">从当前帧新建周期</button></div><div class="gait-v2-cycle-list" id="gait-cycle-list">' + renderCycleChips(view) + '</div><div id="gait-cycle-editor">' + (cycle ? renderCycleEditor(view, cycle) : '<div class="gait-v2-note">尚未建立周期。移动到同侧初始触地帧，点击“从当前帧新建周期”。</div>') + '</div></section>' +
       '<section class="gait-v2-panel"><h3>确认人</h3><input class="gait-v2-input" style="width:100%" id="gait-reviewer" placeholder="输入姓名或 initials" value="' + esc(state.reviewer || view.confirmedBy || '') + '"><p style="margin:8px 0 0">点位或时相修改后，相关周期自动退回未确认。</p></section></aside></div>' + renderReportBar() + '</div>';
     $('#gait-tab-left').addEventListener('click', function () { showReview('left'); });
     $('#gait-tab-right').addEventListener('click', function () { showReview('right'); });
-    bindEditor(view);
+    ['left', 'right'].forEach(function (side) {
+      if (state.session.views[side].frames.length) bindEditor(state.session.views[side]);
+    });
     bindCycleEditor(view);
+    document.onkeydown = function (event) {
+      if (state.phase !== PHASE.REVIEW || /INPUT|SELECT|TEXTAREA/.test(event.target.tagName)) return;
+      var active = currentView();
+      if (event.key === 'ArrowLeft') { event.preventDefault(); seekFrame(active, active.currentFrame - 1); }
+      if (event.key === 'ArrowRight') { event.preventDefault(); seekFrame(active, active.currentFrame + 1); }
+    };
   }
 
   function viewCount(side) {
@@ -446,10 +467,12 @@
   }
 
   function bindEditor(view) {
+    var root = document.querySelector('#gait-editor-' + view.side);
+    function $(selector) { return root.querySelector(selector + '-' + view.side); }
     var stage = $('#gait-stage-inner');
     var video = view.videoElement;
     stage.appendChild(video);
-    video.id = 'gait-review-video';
+    video.id = 'gait-review-video-' + view.side;
     video.className = 'gait-v2-video';
     video.style.cssText = '';
     video.controls = false;
@@ -457,7 +480,7 @@
     video.playbackRate = view.playbackRate;
     video.defaultPlaybackRate = view.playbackRate;
     var canvas = document.createElement('canvas');
-    canvas.id = 'gait-editor-canvas';
+    canvas.id = 'gait-editor-canvas-' + view.side;
     canvas.className = 'gait-v2-canvas';
     canvas.width = view.video.width;
     canvas.height = view.video.height;
@@ -468,17 +491,17 @@
     stage.style.width = view.zoom === 1 ? '' : (view.zoom * 100) + '%';
     if (view.angleResizeObserver) view.angleResizeObserver.disconnect();
     if (window.ResizeObserver) {
-      view.angleResizeObserver = new ResizeObserver(updateAngleRailLayout);
+      view.angleResizeObserver = new ResizeObserver(function () { updateAngleRailLayout(view); });
       view.angleResizeObserver.observe($('#gait-stage'));
     }
-    updateAngleRailLayout();
+    updateAngleRailLayout(view);
     $('#gait-zoom').value = String(view.zoom);
     video.currentTime = currentFrame(view).t;
     video.addEventListener('seeked', function () { drawEditor(view); });
     video.addEventListener('play', function () {
       $('#gait-play').textContent = '暂停';
       requestAnimationFrame(function playFrame() {
-        if (video.paused || state.phase !== PHASE.REVIEW || currentView() !== view) return;
+        if (video.paused || state.phase !== PHASE.REVIEW || !video.isConnected) return;
         var nearest = nearestFrame(view, video.currentTime);
         if (nearest !== view.currentFrame) {
           view.currentFrame = nearest;
@@ -520,7 +543,7 @@
     $('#gait-zoom').addEventListener('change', function (event) {
       view.zoom = Number(event.target.value) || 1;
       stage.style.width = view.zoom === 1 ? '' : (view.zoom * 100) + '%';
-      updateAngleRailLayout();
+      updateAngleRailLayout(view);
     });
     $('#gait-add-point').addEventListener('change', function (event) {
       view.placingPoint = event.target.value ? view.side + '_' + event.target.value : null;
@@ -541,11 +564,6 @@
     canvas.addEventListener('pointermove', function (event) { moveDrag(event, view, canvas); });
     canvas.addEventListener('pointerup', endDrag);
     canvas.addEventListener('pointercancel', endDrag);
-    document.onkeydown = function (event) {
-      if (state.phase !== PHASE.REVIEW || /INPUT|SELECT|TEXTAREA/.test(event.target.tagName)) return;
-      if (event.key === 'ArrowLeft') { event.preventDefault(); seekFrame(view, view.currentFrame - 1); }
-      if (event.key === 'ArrowRight') { event.preventDefault(); seekFrame(view, view.currentFrame + 1); }
-    };
     updateFrameUI(view);
   }
 
@@ -570,25 +588,29 @@
   function updateFrameUI(view) {
     var frame = currentFrame(view);
     if (!frame) return;
-    var input = $('#gait-frame-number');
+    var root = document.querySelector('#gait-editor-' + view.side);
+    if (!root) return;
+    var input = root.querySelector('#gait-frame-number-' + view.side);
     if (input) input.value = frame.frameIndex;
-    var time = $('#gait-frame-time');
+    var time = root.querySelector('#gait-frame-time-' + view.side);
     if (time) time.textContent = formatTime(frame.t);
     var angles = K.computeFrameAngles(frame.keypoints, { side: view.side, direction: view.direction });
     K.ANGLE_KEYS.forEach(function (key) {
-      var node = $('#gait-angle-' + key);
+      var node = root.querySelector('#gait-angle-' + key + '-' + view.side);
       if (node) node.textContent = angleText(angles[key]);
-      document.querySelectorAll('[data-video-angle="' + key + '"]').forEach(function (railValue) {
+      root.querySelectorAll('[data-video-angle="' + key + '"]').forEach(function (railValue) {
         railValue.textContent = angleText(angles[key]);
       });
     });
     drawEditor(view);
   }
 
-  function updateAngleRailLayout() {
-    var stage = $('#gait-stage');
-    var inner = $('#gait-stage-inner');
-    var grid = $('#gait-angle-grid');
+  function updateAngleRailLayout(view) {
+    var root = document.querySelector('#gait-editor-' + view.side);
+    if (!root) return;
+    var stage = root.querySelector('#gait-stage-' + view.side);
+    var inner = root.querySelector('#gait-stage-inner-' + view.side);
+    var grid = root.querySelector('#gait-angle-grid-' + view.side);
     if (!stage || !inner || !grid) return;
     var gutter = Math.max(0, (stage.clientWidth - inner.clientWidth) / 2);
     var showRails = gutter >= 112;
@@ -634,7 +656,7 @@
   }
 
   function drawEditor(view) {
-    var canvas = $('#gait-editor-canvas');
+    var canvas = document.querySelector('#gait-editor-canvas-' + view.side);
     if (!canvas) return;
     drawSkeleton(canvas.getContext('2d'), currentFrame(view), view.side, canvas.width, canvas.height, view.showRaw);
   }
@@ -660,7 +682,7 @@
         frame.keypoints.push({ name: view.placingPoint, x: position.x, y: position.y, score: 1, source: 'manual' });
       }
       view.placingPoint = null;
-      $('#gait-add-point').value = '';
+      document.querySelector('#gait-add-point-' + view.side).value = '';
       canvas.style.cursor = 'crosshair';
       invalidateFrame(view, frame.frameIndex);
       updateFrameUI(view);
