@@ -57,7 +57,11 @@
   }
 
   function buildUploadUrl(session) {
-    var base = global.location.origin + global.location.pathname.replace(/[^/]*$/, '');
+    var origin = global.location.origin || '';
+    var local = !/^https?:\/\//.test(origin) || /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:|\/|$)/.test(origin);
+    var base = local
+      ? 'https://fxs-84.github.io/brainmend/'
+      : origin + global.location.pathname.replace(/[^/]*$/, '');
     var query = new URLSearchParams({
       session: session.sessionId || session.session_id,
       token: session.uploadToken || session.upload_token

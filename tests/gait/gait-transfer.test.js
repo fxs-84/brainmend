@@ -7,7 +7,7 @@ import { webcrypto } from 'node:crypto';
 const source = readFileSync(new URL('../../assets/gait-transfer.js', import.meta.url), 'utf8');
 const abcHash = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
 
-function loadTransfer({ fetchImpl, Xhr }) {
+function loadTransfer({ fetchImpl, Xhr, location }) {
   const context = {
     console,
     URL,
@@ -20,7 +20,7 @@ function loadTransfer({ fetchImpl, Xhr }) {
     XMLHttpRequest: Xhr,
     __SUPABASE_URL__: 'https://example.supabase.co',
     __SUPABASE_ANON_KEY__: 'public-key',
-    location: { origin: 'https://fxs-84.github.io', pathname: '/brainmend/gait-upload.html' }
+    location: location || { origin: 'https://fxs-84.github.io', pathname: '/brainmend/gait-upload.html' }
   };
   context.window = context;
   context.globalThis = context;
@@ -40,6 +40,12 @@ test('二维码地址包含指定会话和密钥且不依赖当前页面文件�
   const transfer = loadTransfer({});
   const url = transfer.buildUploadUrl({ sessionId: 'session id', uploadToken: 'token&value' });
   assert.equal(url, 'https://fxs-84.github.io/brainmend/gait-upload.html?session=session+id&token=token%26value');
+});
+
+test('本地或文件页面生成的二维码仍指向可公开访问的手机上传页', () => {
+  const transfer = loadTransfer({ location: { origin: 'null', pathname: '/E:/demo/index.html' } });
+  const url = transfer.buildUploadUrl({ sessionId: 'session', uploadToken: 'token' });
+  assert.match(url, /^https:\/\/fxs-84\.github\.io\/brainmend\/gait-upload\.html\?/);
 });
 
 test('手机上传依次准备、发送原文件并完成会话', async () => {
