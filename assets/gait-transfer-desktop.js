@@ -44,7 +44,14 @@
       qr.addData(url);
       qr.make();
       var image = document.getElementById('gait-qr-image');
-      if (image) image.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+      if (image) {
+        image.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4 });
+        var svg = image.querySelector('svg');
+        svg.style.display = 'block';
+        svg.style.width = '220px';
+        svg.style.height = '220px';
+        svg.style.maxWidth = '100%';
+      }
     });
   }
 

@@ -66,6 +66,8 @@ try {
   await desktop.click('#gait-qr-left');
   await desktop.waitForFunction(() => document.querySelector('#gait-qr-url')?.textContent.includes('gait-upload.html'));
   await desktop.waitForSelector('#gait-qr-image svg');
+  const qrBox = await desktop.locator('#gait-qr-image svg').boundingBox();
+  assert.ok(qrBox.width >= 200 && qrBox.height >= 200, '二维码必须有实际可见尺寸');
   const uploadUrl = await desktop.locator('#gait-qr-url').textContent();
   const mobile = await context.newPage();
   await mobile.setViewportSize({ width: 390, height: 844 });
