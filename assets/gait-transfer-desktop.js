@@ -3,13 +3,15 @@
 
   var active = null;
   var qrScript = null;
+  var SCRIPT_URL = document.currentScript && document.currentScript.src || global.location.href;
+  var QR_LIBRARY_URL = new URL('./vendor/qrcode-generator.js', SCRIPT_URL).href;
 
   function loadQrLibrary() {
     if (global.qrcode) return Promise.resolve();
     if (qrScript) return qrScript;
     qrScript = new Promise(function (resolve, reject) {
       var script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js';
+      script.src = QR_LIBRARY_URL;
       script.onload = resolve;
       script.onerror = function () { reject(new Error('二维码组件加载失败，请检查网络')); };
       document.head.appendChild(script);

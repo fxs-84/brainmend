@@ -41,11 +41,19 @@
     };
   }
 
-  function getSession(sessionId, token) {
-    return rpc('get_gait_video_upload_session', {
-      p_session_id: sessionId,
-      p_upload_token: token
-    }).then(one);
+  async function getSession(sessionId, token) {
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        return one(await rpc('get_gait_video_upload_session', {
+          p_session_id: sessionId,
+          p_upload_token: token
+        }));
+      } catch (error) {
+        var message = error.message || String(error);
+        if (attempt === 3 || (message.indexOf('PGRST202') < 0 && message.indexOf('Failed to fetch') < 0)) throw error;
+        await new Promise(function (resolve) { setTimeout(resolve, 800); });
+      }
+    }
   }
 
   function buildUploadUrl(session) {
@@ -115,7 +123,8 @@
   }
 
   async function receiveVideo(input) {
-    var session = await getSession(input.sessionId, input.token);
+    var token = input.token || input.uploadToken;
+    var session = await getSession(input.sessionId, token);
     if (!session || session.status !== 'ready') throw new Error('手机视频尚未上传完成');
     var response = await global.fetch(global.__SUPABASE_URL__.replace(/\/$/, '') + '/storage/v1/object/' + BUCKET + '/' + session.object_path, {
       method: 'GET', headers: headers(session.content_type || 'application/octet-stream')
@@ -127,7 +136,7 @@
     await deleteObject(session.object_path);
     await rpc('consume_gait_video_upload', {
       p_session_id: input.sessionId,
-      p_upload_token: input.token
+      p_upload_token: token
     });
     return {
       file: new File([blob], session.file_name || 'gait-video.mp4', {

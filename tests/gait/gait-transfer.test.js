@@ -15,6 +15,7 @@ function loadTransfer({ fetchImpl, Xhr }) {
     Blob,
     File,
     crypto: webcrypto,
+    setTimeout,
     fetch: fetchImpl,
     XMLHttpRequest: Xhr,
     __SUPABASE_URL__: 'https://example.supabase.co',
@@ -84,10 +85,11 @@ test('电脑接收原文件并校验后删除云端对象', async () => {
     throw new Error('unexpected fetch ' + url);
   };
   const transfer = loadTransfer({ fetchImpl });
-  const received = await transfer.receiveVideo({ sessionId: 'session', token: 'token' });
+  const received = await transfer.receiveVideo({ sessionId: 'session', uploadToken: 'token' });
   assert.equal(received.file.name, 'left.mp4');
   assert.equal(received.sha256, abcHash);
   assert.equal(await received.file.text(), 'abc');
+  assert.equal(JSON.parse(calls[0].options.body).p_upload_token, 'token');
   assert.deepEqual(calls.map(call => call.options.method || 'GET'), ['POST', 'GET', 'DELETE', 'POST']);
 });
 
@@ -105,4 +107,17 @@ test('校验值不一致时拒绝导入且保留云端对象', async () => {
   const transfer = loadTransfer({ fetchImpl });
   await assert.rejects(transfer.receiveVideo({ sessionId: 'session', token: 'token' }), /校验不一致/);
   assert.equal(deleted, false);
+});
+
+test('迁移后的 schema 缓存暂时异常会自动重试会话查询', async () => {
+  let calls = 0;
+  const fetchImpl = async url => {
+    calls++;
+    if (calls < 3) return response({ code: 'PGRST202', message: 'schema cache stale' }, 400);
+    return response([{ status: 'ready' }]);
+  };
+  const transfer = loadTransfer({ fetchImpl });
+  const session = await transfer.getSession('session', 'token');
+  assert.equal(session.status, 'ready');
+  assert.equal(calls, 3);
 });

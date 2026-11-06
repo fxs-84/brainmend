@@ -18,6 +18,7 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true });
 const context = await browser.newContext();
 const state = { uploaded: null, deleted: false, consumed: false };
 
+await context.route('https://cdn.jsdelivr.net/**', route => route.abort());
 await context.route('**/rest/v1/rpc/*', async route => {
   const name = route.request().url().split('/').pop();
   const body = JSON.parse(route.request().postData() || '{}');
@@ -64,6 +65,7 @@ try {
   await desktop.click('#gait-new-session');
   await desktop.click('#gait-qr-left');
   await desktop.waitForFunction(() => document.querySelector('#gait-qr-url')?.textContent.includes('gait-upload.html'));
+  await desktop.waitForSelector('#gait-qr-image svg');
   const uploadUrl = await desktop.locator('#gait-qr-url').textContent();
   const mobile = await context.newPage();
   await mobile.setViewportSize({ width: 390, height: 844 });

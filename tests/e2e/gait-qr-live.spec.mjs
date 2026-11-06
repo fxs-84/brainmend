@@ -25,17 +25,10 @@ try {
   await desktop.waitForFunction(() => window.__gaitAnalysis && window.__gaitMedia);
   await desktop.click('#page2-gait');
   await desktop.waitForFunction(() => window.__gaitAnalysis.getState().resumeReady);
-  desktop.on('console', message => { if (message.type() === 'error') console.error('DESKTOP', message.text()); });
   desktop.on('pageerror', error => console.error('PAGEERROR', error.message));
   desktop.once('dialog', dialog => dialog.accept());
   await desktop.click('#gait-new-session');
   await desktop.click('#gait-qr-left');
-  await desktop.waitForTimeout(6000);
-  console.log('QR STATE', await desktop.evaluate(() => ({
-    error: window.__gaitAnalysis.getState().error,
-    url: document.querySelector('#gait-qr-url')?.textContent || '',
-    status: document.querySelector('#gait-qr-status')?.textContent || ''
-  })));
   await desktop.waitForFunction(() => document.querySelector('#gait-qr-url')?.textContent.includes('gait-upload.html'), null, { timeout: 30000 });
   const uploadUrl = await desktop.locator('#gait-qr-url').textContent();
   const params = new URL(uploadUrl).searchParams;
@@ -54,7 +47,7 @@ try {
   await desktop.waitForFunction(() => {
     const view = window.__gaitAnalysis.getState().session.views.left;
     return view.videoElement && view.video?.width === 720;
-  }, null, { timeout: 300000, polling: 1000 });
+  }, null, { timeout: 120000, polling: 1000 });
 
   const result = await desktop.evaluate(async ({ sessionId, token, expectedHash }) => {
     const state = window.__gaitAnalysis.getState();

@@ -56,6 +56,7 @@
   "dependencies": {
     "@ffmpeg/core": "^0.12.10",
     "@ffmpeg/ffmpeg": "^0.12.15",
+    "qrcode-generator": "^1.4.4",
     "three": "^0.185.1"
   }
 }
