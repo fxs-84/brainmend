@@ -90,7 +90,7 @@
     });
   }
 
-  async function loadVideo(file) {
+  async function loadVideo(file, options) {
     if (!file || !/^video\//.test(file.type || '') && !/\.(mp4|mov|webm|m4v)$/i.test(file.name || '')) {
       throw new Error('请选择 MP4、MOV 或 WebM 视频');
     }
@@ -106,9 +106,13 @@
       if (video.readyState < 1) await waitEvent(video, 'loadedmetadata');
       if (!isFinite(video.duration) || video.duration <= 0) throw new Error('无法读取视频时长');
       if (video.readyState < 2) await waitEvent(video, 'loadeddata');
+      if (!video.videoWidth || !video.videoHeight) {
+        throw new Error('当前浏览器无法解码视频画面（0×0，常见于 H.265/HEVC）。请改用最新版 Chrome，或先转换为 H.264/MP4 后重新上传');
+      }
       return {
         url: url,
         element: video,
+        blob: file,
         info: {
           name: file.name, size: file.size, type: file.type, duration: video.duration,
           width: video.videoWidth, height: video.videoHeight
@@ -117,12 +121,35 @@
     } catch (error) {
       video.remove();
       URL.revokeObjectURL(url);
+      if ((!options || !options.skipTranscode) && global.__gaitTranscode && /0×0/.test(error.message || '')) {
+        if (options && options.onProgress) options.onProgress(0);
+        var converted = await global.__gaitTranscode.transcodeVideo(file, options && options.onProgress);
+        var loaded = await loadVideo(converted, { skipTranscode: true });
+        if (options && options.onProgress) options.onProgress(1);
+        return loaded;
+      }
       throw error;
     }
   }
 
   function clonePoints(points) {
     return (points || []).map(function (point) { return Object.assign({}, point); });
+  }
+
+  function recordInferenceError(view, error, frameIndex, time) {
+    var message = error && error.message || String(error || '未知推理错误');
+    view.inferenceErrors = view.inferenceErrors || [];
+    if (view.inferenceErrors.length < 5) view.inferenceErrors.push({ frameIndex: frameIndex, time: time, message: message });
+    console.error('[gait-media] 逐帧推理失败', frameIndex, time, error);
+  }
+
+  function ensureRecognizedFrames(view, frames) {
+    if (frames.length < 9) throw new Error('有效帧不足，请上传包含完整步态周期的视频');
+    var hasLandmarks = frames.some(function (frame) { return frame.keypoints && frame.keypoints.length > 0; });
+    if (hasLandmarks) return;
+    var firstError = view.inferenceErrors && view.inferenceErrors[0];
+    if (firstError) throw new Error('姿态推理失败：' + firstError.message);
+    throw new Error('所有帧均未返回人体关键点，请检查人物是否全身入镜，以及浏览器是否支持当前姿态模型');
   }
 
   async function analyzeByPresentedFrames(view, detector, progress, control) {
@@ -171,6 +198,7 @@
           try {
             keypoints = detector.estimate(canvas, performance.now());
           } catch (error) {
+            recordInferenceError(view, error, frames.length, mediaTime);
             keypoints = [];
           }
           frames.push({
@@ -228,7 +256,9 @@
       var keypoints = [];
       try {
         keypoints = detector.estimate(canvas, performance.now());
-      } catch (error) {}
+      } catch (error) {
+        recordInferenceError(view, error, index, target);
+      }
       frames.push({
         frameIndex: index, t: target, mediaTime: target,
         rawKeypoints: clonePoints(keypoints), keypoints: clonePoints(keypoints)
@@ -241,6 +271,7 @@
 
   function analyzeVideo(view, progress, control) {
     var result = analysisQueue.then(async function () {
+      view.inferenceErrors = [];
       var detector = await loadDetector(function (model, delegate) {
         view.modelVersion = model + '/' + delegate;
       });
@@ -250,7 +281,7 @@
         frames = await analyzeBySeek(view, detector, progress, control);
         integrity = 'estimated-30fps-seek';
       }
-      if (frames.length < 9) throw new Error('有效帧不足，请上传包含完整步态周期的视频');
+      ensureRecognizedFrames(view, frames);
       view.frameIntegrity = integrity;
       view.fps = frames.length > 1 ? (frames.length - 1) / (frames[frames.length - 1].t - frames[0].t) : 30;
       return frames;

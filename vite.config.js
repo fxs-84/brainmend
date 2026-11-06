@@ -15,7 +15,7 @@ export default defineConfig({
     // 多页入口: Vite 默认只打包 index.html, 独立页面必须在 rollupOptions.input 登记
     // (vor/runner/questionnaire 等旧页面未登记, 线上 404 —— 属既有遗留, 本次仅接入 balance-test)
     rollupOptions: {
-      input: ['index.html', 'balance-test.html'],
+      input: ['index.html', 'balance-test.html', 'gait-upload.html'],
     },
     assetsInlineLimit: 0,
     // Vite 8 默认 CSS 压缩器是 lightningcss，遇到项目里某些第三方 CSS 段会抛

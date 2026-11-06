@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>上传步态原始视频</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f3f7f6;color:#172b2a;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:560px;margin:0 auto;padding:32px 18px}section{background:#fff;border-radius:18px;padding:24px;box-shadow:0 12px 36px #173b3212}h1{font-size:24px;line-height:1.3;margin:0 0 12px}p{color:#5d706c;font-size:14px}label{display:block;margin:22px 0 8px;font-weight:700}.file{display:block;width:100%;padding:14px;border:1px solid #b8cbc6;border-radius:10px;background:#f9fcfb}.primary{width:100%;margin-top:20px;padding:14px;border:0;border-radius:10px;background:#087f6b;color:#fff;font-size:17px;font-weight:750;cursor:pointer}.primary:disabled{opacity:.45;cursor:not-allowed}.track{height:8px;background:#e4eeeb;border-radius:8px;overflow:hidden;margin-top:18px}.track span{display:block;width:0;height:100%;background:#087f6b;transition:width .2s}#gait-mobile-status{margin-top:16px;min-height:24px;color:#365b53;overflow-wrap:anywhere}.note{font-size:12px;color:#71847f;margin-top:20px}
+  </style>
+</head>
+<body>
+  <main><section>
+    <h1>上传步态原始视频</h1>
+    <p>从手机相册或文件管理器选择视频。页面只传输文件，不压缩、不转码；电脑会核对文件一致性。</p>
+    <label for="gait-mobile-file">选择视频</label>
+    <input class="file" id="gait-mobile-file" type="file" accept="video/*,.mp4,.mov,.webm,.m4v">
+    <div id="gait-mobile-file-info" class="note">支持 MP4、MOV、WebM，最大 500 MB</div>
+    <button class="primary" id="gait-mobile-upload" disabled>上传原视频</button>
+    <div class="track" aria-hidden="true"><span id="gait-mobile-progress"></span></div>
+    <div id="gait-mobile-status" role="status"></div>
+    <p class="note">上传完成前请保持本页打开。电脑接收并校验后会自动删除云端临时文件。</p>
+  </section></main>
+  <script src="./assets/config/supabase-config.js"></script>
+  <script src="./assets/gait-transfer.js"></script>
+  <script src="./assets/gait-upload.js"></script>
+</body>
+</html>

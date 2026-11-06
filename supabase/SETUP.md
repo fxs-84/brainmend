@@ -25,6 +25,11 @@
 3. 粘贴到 SQL Editor → Run
 4. 应该看到 "Success. No rows returned" × N (每个 CREATE/INSERT)
 
+### Step 2.5: 启用步态视频扫码上传 (2 分钟)
+1. 在 SQL Editor 执行 `supabase/migrations/0007_gait_video_uploads.sql`。
+2. 迁移会创建私有桶 `gait-video-uploads` 和一次性上传会话；不要把这个桶改成 public。
+3. 电脑接收成功后会立即删除云端对象。若需自动清理 30 分钟前的遗留文件，可在有权限的环境定时调用 `cleanup_gait_video_uploads()`；该函数只授权 `service_role`，不能从浏览器直接调用。
+
 ### Step 3: 配置 API Key (2 分钟)
 1. Settings → API → 复制:
    - **Project URL** (格式 `https://xxx.supabase.co`)

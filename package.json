@@ -8,8 +8,10 @@
     "build": "vite build && node tools/copy-static-assets.mjs",
     "preview": "vite preview",
     "test": "node --test src/game-3d/biomes/__tests__/scenery-factory.test.js tests/reports/classify.test.js src/vor/input/__tests__/ble-imu-parse.test.js src/vor/core/__tests__/vor-quality-drill.test.js",
-    "test:gait": "node --test tests/gait/gait-params-velocity-gate.test.js tests/gait/gait-kinematics.test.js tests/gait/gait-confirmed-report.test.js tests/gait/gait-phase-ranges.test.js tests/gait/gait-neuro.test.js tests/gait/gait-media.test.js",
+    "test:gait": "node --test tests/gait/gait-params-velocity-gate.test.js tests/gait/gait-kinematics.test.js tests/gait/gait-confirmed-report.test.js tests/gait/gait-phase-ranges.test.js tests/gait/gait-neuro.test.js tests/gait/gait-media.test.js tests/gait/gait-calibration.test.js tests/gait/gait-upload-migration.test.js tests/gait/gait-transfer.test.js tests/gait/gait-transcode.test.js",
     "test:e2e:gait": "node tests/e2e/gait-manual-review.spec.mjs",
+    "test:e2e:gait-qr": "node tests/e2e/gait-qr-upload.spec.mjs",
+    "test:e2e:gait-hevc": "node tests/e2e/gait-hevc-fallback.spec.mjs",
     "test:reports": "node --test tests/reports/classify.test.js",
     "test:e2e:report": "node tests/e2e/report-categorize.spec.mjs",
     "test:e2e:xss": "node tests/e2e/report-xss.spec.mjs",
@@ -52,6 +54,8 @@
     "vite": "^8.0.10"
   },
   "dependencies": {
+    "@ffmpeg/core": "^0.12.10",
+    "@ffmpeg/ffmpeg": "^0.12.15",
     "three": "^0.185.1"
   }
 }

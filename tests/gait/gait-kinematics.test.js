@@ -61,9 +61,9 @@ function makeView() {
   };
 }
 
-test('导出角度键和八时相常量', () => {
+test('导出角度键和三个人工时相常量', () => {
   assert.deepEqual(K.ANGLE_KEYS, ['shoulder', 'elbow', 'hip', 'knee', 'ankle']);
-  assert.deepEqual(K.PHASES, ['IC', 'LR', 'MSt', 'TSt', 'PSw', 'ISw', 'MSw', 'TSw']);
+  assert.deepEqual(K.PHASES, ['IC', 'LR', 'TSt']);
 });
 
 test('已知几何：完全伸直为 0，肩髋前屈、肘膝屈曲为正', () => {
@@ -144,16 +144,28 @@ test('缺点、低置信和零长度仅令相关角度为 null', () => {
   close(zeroAngles.shoulder, 0);
 });
 
-test('踝角只使用踝到足尖，足跟位置不得影响结果', () => {
+test('踝角使用膝到踝与足跟到足尖两轴，足跟位置参与计算', () => {
   const keypoints = points();
-  const expected = anglesFor(keypoints).ankle;
-  move(keypoints, 'heel', 500, 50);
-  close(anglesFor(keypoints).ankle, expected);
+  move(keypoints, 'heel', 50, 400);
+  move(keypoints, 'foot_index', 150, 350);
+  close(anglesFor(keypoints).ankle, 26.56505118);
+});
+
+test('缺失或低置信跟骨时仅踝角为 null', () => {
+  const missing = points().filter(p => p.name !== 'left_heel');
+  assert.equal(anglesFor(missing).ankle, null);
+  close(anglesFor(missing).knee, 0);
+
+  const low = points();
+  low.find(p => p.name === 'left_heel').score = 0.1;
+  assert.equal(anglesFor(low).ankle, null);
+  close(anglesFor(low).knee, 0);
 });
 
 test('踝角按两轴实际夹角计算，90度为0且胫骨倾斜时仍正确', () => {
   const keypoints = points();
   move(keypoints, 'ankle', 150, 400);
+  move(keypoints, 'heel', 150, 400);
   move(keypoints, 'foot_index', 250, 350);
   close(anglesFor(keypoints).ankle, 0);
   move(keypoints, 'foot_index', 250, 300);
@@ -162,29 +174,30 @@ test('踝角按两轴实际夹角计算，90度为0且胫骨倾斜时仍正确',
   close(anglesFor(keypoints).ankle, -63.43494882);
 });
 
-test('周期校验检查确认、边界、时相顺序及时间', () => {
+test('周期校验检查确认、边界、三个代表帧及时间', () => {
   const view = makeView();
   assert.deepEqual(K.validateCycle(view, makeCycle()), { valid: true, reason: null });
   assert.equal(K.validateCycle(view, makeCycle({ confirmed: false })).valid, false);
-  assert.equal(K.validateCycle(view, makeCycle({ endFrame: 0 })).valid, false);
-  assert.equal(K.validateCycle(view, makeCycle({ startFrame: 99 })).valid, false);
+  const withoutBounds = makeCycle();
+  delete withoutBounds.startFrame;
+  delete withoutBounds.endFrame;
+  assert.deepEqual(K.validateCycle(view, withoutBounds), { valid: true, reason: null });
   assert.equal(K.validateCycle(view, makeCycle({ phases: { ...makeCycle().phases, IC: 1 } })).valid, false);
   assert.equal(K.validateCycle(view, makeCycle({ phases: { ...makeCycle().phases, LR: 3 } })).valid, false);
-  assert.equal(K.validateCycle(view, makeCycle({ phases: { ...makeCycle().phases, TSw: 3 } })).valid, false);
   const missingPhase = makeCycle().phases;
-  delete missingPhase.MSw;
+  delete missingPhase.TSt;
   assert.equal(K.validateCycle(view, makeCycle({ phases: missingPhase })).valid, false);
   view.frames[2].t = view.frames[1].t;
   assert.equal(K.validateCycle(view, makeCycle()).valid, false);
 });
 
-test('逐帧序列只含确认周期，归属人工时相且不插值', () => {
+test('逐帧序列只含确认周期的三个代表帧且不插值', () => {
   const view = makeView();
   view.frames[1].keypoints = view.frames[1].keypoints.filter(p => p.name !== 'left_wrist');
   view.confirmedCycles.push(makeCycle({ id: 'other', confirmed: false }));
   const series = K.computeViewSeries(view, makeCycle());
-  assert.equal(series.length, 9);
-  assert.deepEqual(series.map(f => f.phase), ['IC', 'LR', 'MSt', 'TSt', 'PSw', 'ISw', 'MSw', 'TSw', null]);
+  assert.equal(series.length, 3);
+  assert.deepEqual(series.map(f => f.phase), ['IC', 'LR', 'TSt']);
   assert.ok(series.every(f => f.cycleId === 'c1'));
   assert.equal(series[1].angles.elbow, null);
   assert.equal(series[2].angles.elbow, 0);

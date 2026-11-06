@@ -17,13 +17,15 @@ function syntheticFrames(side) {
   return Array.from({ length: 40 }, (_, frameIndex) => {
     const names = ['shoulder', 'elbow', 'wrist', 'hip', 'knee', 'ankle', 'heel', 'foot_index'];
     const coordinates = [[100, 80], [110, 150], [120, 220], [100, 180], [105, 260], [100, 340], [95, 345], [150, 340]];
+    const keypoints = names.map((name, index) => ({
+      name: `${side}_${name}`, x: coordinates[index][0] + Math.sin(frameIndex / 8) * index,
+      y: coordinates[index][1], score: 0.95, source: 'ai'
+    }));
     return {
       frameIndex,
       t: frameIndex / 30,
-      keypoints: names.map((name, index) => ({
-        name: `${side}_${name}`, x: coordinates[index][0] + Math.sin(frameIndex / 8) * index,
-        y: coordinates[index][1], score: 0.95, source: 'ai'
-      }))
+      rawKeypoints: keypoints.map(point => ({ ...point })),
+      keypoints
     };
   });
 }
@@ -75,7 +77,8 @@ async function injectAndConfirm(page, side) {
     return { count: angles.length, valid: angles.every(angle => angle.visible && angle.text !== '—') };
   }, side);
   check(`${side} 五个角度在各自播放区显示`, angleLayout.count === 5 && angleLayout.valid, JSON.stringify(angleLayout));
-  check(`${side} 不提供足跟标记`, await page.locator(`#gait-add-point-${side} option[value="heel"]`).count() === 0);
+  check(`${side} 提供跟骨人工补标`, await page.locator(`#gait-add-point-${side} option[value="heel"]`).count() === 1);
+  check(`${side} 提供关键帧校准`, await page.locator(`#gait-calibrate-frame-${side}`).count() === 1);
   await page.click(`#gait-fullscreen-${side}`);
   await page.waitForFunction(side => document.fullscreenElement && document.fullscreenElement.id === `gait-stage-${side}`, side);
   const fitted = await page.locator(`#gait-review-video-${side}`).evaluate(element => {
@@ -106,15 +109,19 @@ async function injectAndConfirm(page, side) {
   check(`${side} 支持逐帧导航`, current === '1', current);
   await page.click('#gait-add-cycle');
   const standards = await page.locator('.gait-v2-phase-standard').allTextContents();
-  check(`${side} 显示八时相判定标准`, standards.length === 8 && standards.every(text => text.includes('参考') && text.length > 20));
-  check(`${side} 时相标准包含关键判定事件`, standards.some(text => text.includes('足尖离地')) && standards.some(text => text.includes('胫骨竖直')));
-  await page.locator('[data-phase-start="LR"]').fill('2');
-  await page.locator('[data-phase-end="LR"]').fill('6');
-  for (let step = 0; step < 4; step++) await page.click(`#gait-next-frame-${side}`);
+  check(`${side} 只显示三个时相判定标准`, standards.length === 3 && standards.every(text => text.includes('参考') && text.length > 20));
+  check(`${side} 不需要填写周期起止帧`, await page.locator('#gait-cycle-end, [data-phase-start], [data-phase-end]').count() === 0);
+  check(`${side} 时相标准包含关键判定事件`, standards.some(text => text.includes('足尖离地')) && standards.some(text => text.includes('足跟离地')));
+  await page.locator(`#gait-frame-number-${side}`).fill('4');
+  await page.locator(`#gait-frame-number-${side}`).press('Tab');
   await page.waitForFunction(side => window.__gaitAnalysis.getState().session.views[side].currentFrame === 4, side);
   const frameBeforeMark = await page.evaluate(side => window.__gaitAnalysis.getState().session.views[side].currentFrame, side);
   await page.click('[data-mark-phase="LR"]');
   const frameAfterMark = await page.evaluate(side => ({ frame: window.__gaitAnalysis.getState().session.views[side].currentFrame, representative: window.__gaitAnalysis.getState().session.views[side].confirmedCycles[0].phases.LR.representativeFrame }), side);
+  await page.waitForFunction(side => {
+    const snapshot = window.__gaitAnalysis.getState().session.views[side].confirmedCycles[0].phaseSnapshots?.LR;
+    return snapshot && snapshot.imageData && Number.isFinite(snapshot.angles.knee);
+  }, side);
   await page.click('#gait-confirm-cycle');
   const continuousPhase = await page.evaluate(side => {
     const view = window.__gaitAnalysis.getState().session.views[side];
@@ -122,13 +129,13 @@ async function injectAndConfirm(page, side) {
     const series = window.__gaitKinematics.computeViewSeries(view, cycle);
     const validation = window.__gaitKinematics.validateCycle(view, { ...cycle, confirmed: true });
     return {
-      pass: cycle.phases.LR.representativeFrame === 4 && series.filter(frame => frame.frameIndex >= 2 && frame.frameIndex <= 6).every(frame => frame.phase === 'LR') && series.find(frame => frame.frameIndex === 7).phase !== 'LR',
+      pass: cycle.phases.LR.representativeFrame === 4 && series.length === 3 && series.map(frame => frame.phase).join(',') === 'IC,LR,TSt' && cycle.phaseSnapshots.LR.frameIndex === 4,
       validation,
       lr: cycle.phases.LR,
       actualPhases: series.map(frame => frame.phase)
     };
   }, side);
-  check(`${side} 代表帧与连续时相区间分别生效`, continuousPhase.pass, JSON.stringify({ lr: continuousPhase.lr, actualPhases: continuousPhase.actualPhases, frameBeforeMark, frameAfterMark }));
+  check(`${side} 三个代表帧及截图角度同步保存`, continuousPhase.pass, JSON.stringify({ lr: continuousPhase.lr, actualPhases: continuousPhase.actualPhases, frameBeforeMark, frameAfterMark }));
   const confirmed = await page.evaluate(side => {
     const cycles = window.__gaitAnalysis.getState().session.views[side].confirmedCycles;
     return cycles.length === 1 && cycles[0].confirmed === true;
@@ -165,10 +172,29 @@ async function injectAndConfirm(page, side) {
     return point && point.source === 'manual' && view.confirmedCycles[0].confirmed === false;
   }, side);
   check(`${side} 可人工补标缺失解剖点`, placed);
+  await page.click(`#gait-calibrate-frame-${side}`);
+  await page.click(`#gait-next-frame-${side}`);
+  const calibrated = await page.evaluate(side => {
+    const view = window.__gaitAnalysis.getState().session.views[side];
+    const frame = view.frames[view.currentFrame];
+    const wrist = frame.keypoints.find(item => item.name === `${side}_wrist`);
+    const rawWrist = frame.rawKeypoints.find(item => item.name === `${side}_wrist`);
+    return view.calibrations.length === 1 && view.calibrations[0].frameIndex === 4 &&
+      wrist.source === 'calibrated' && wrist.calibrationFrame === 4 &&
+      (wrist.x !== rawWrist.x || wrist.y !== rawWrist.y) &&
+      view.confirmedCycles[0].confirmed === false;
+  }, side);
+  check(`${side} 关键帧人工偏移可传播到其他帧`, calibrated);
+  await page.click(`#gait-prev-frame-${side}`);
+  await page.click('[data-mark-phase="LR"]');
+  await page.waitForFunction(side => {
+    const snapshot = window.__gaitAnalysis.getState().session.views[side].confirmedCycles[0].phaseSnapshots?.LR;
+    return snapshot && snapshot.frameIndex === 4 && snapshot.imageData;
+  }, side);
   await page.click('#gait-confirm-cycle');
 }
 
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, channel: process.env.TEST_BROWSER_CHANNEL || undefined });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const actionTimeout = Number(process.env.TEST_TIMEOUT || 30000);
 page.setDefaultTimeout(actionTimeout);
@@ -204,6 +230,20 @@ try {
     return session.views.left.confirmedCycles[0].confirmed && session.views.right.confirmedCycles[0].confirmed;
   });
   check('刷新后恢复双视频草稿与人工确认', restored);
+  const restoredCalibrations = await page.evaluate(() => {
+    const views = window.__gaitAnalysis.getState().session.views;
+    return views.left.calibrations.length === 1 && views.right.calibrations.length === 1 &&
+      views.left.frames[5].keypoints.some(point => point.source === 'calibrated');
+  });
+  check('刷新后恢复关键帧校准及传播结果', restoredCalibrations);
+  const restoredSnapshots = await page.evaluate(() => {
+    const views = window.__gaitAnalysis.getState().session.views;
+    return ['left', 'right'].every(side => {
+      const snapshot = views[side].confirmedCycles[0].phaseSnapshots?.LR;
+      return snapshot && snapshot.frameIndex === 4 && snapshot.imageData && Number.isFinite(snapshot.angles.knee);
+    });
+  });
+  check('刷新后恢复代表帧截图和角度', restoredSnapshots);
   const restoredSpeed = await page.evaluate(() => window.__gaitAnalysis.getState().session.protocol.speedKmh);
   check('刷新后恢复5 km/h测试协议', restoredSpeed === 5, String(restoredSpeed));
   await page.evaluate(() => window.__gaitAnalysis.showReview('left'));
@@ -228,10 +268,9 @@ try {
   check('报告包含双侧神经调控解释', await page.locator('#gait-neuro-report [data-neuro-key]').count() === 16);
   check('肩伸课程参考为18–24°', await page.locator('#gait-neuro-report [data-neuro-key="shoulderExtension"]').evaluateAll(elements => elements.every(element => element.textContent.includes('18–24°'))));
   check('报告区分皮层小脑基底节与前庭', await page.locator('#gait-neuro-report').evaluate(element => ['皮层', '小脑', '基底节', '前庭'].every(text => element.textContent.includes(text))));
-  check('报告包含LR连续区间峰值', await page.locator('#gait-neuro-report [data-neuro-key="lrKneeFlexion"]').count() === 2);
-  check('报告包含五类关节曲线', await page.locator('#gait-report-v2 canvas').count() >= 5);
-  check('报告包含实际时间逐帧曲线', await page.locator('#gait-report-v2 canvas[aria-label$="实际时间曲线"]').count() === 10);
-  check('报告包含左右十六张时相截图', await page.locator('#gait-report-v2 .gait-v2-phase-shot').count() === 16);
+  check('报告使用LR代表帧膝角', await page.locator('#gait-neuro-report [data-neuro-key="lrKneeFlexion"]').count() === 2);
+  check('报告不包含周期曲线和逐帧曲线', await page.locator('#gait-report-v2 canvas').count() === 0);
+  check('报告包含左右六张时相截图', await page.locator('#gait-report-v2 .gait-v2-phase-shot').count() === 6);
   const snapshotMeans = await page.evaluate(async () => {
     const means = [];
     for (const snapshot of window.__gaitAnalysis.getState().results.views.left.phaseSnapshots) {

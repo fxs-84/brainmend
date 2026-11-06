@@ -3,21 +3,12 @@
 
   var K = window.__gaitKinematics;
   var PHASE = { UPLOAD: 'upload', REVIEW: 'review', REPORT: 'report' };
-  var PHASE_LABELS = {
-    IC: '初始触地', LR: '承重反应', MSt: '支撑中期', TSt: '支撑末期',
-    PSw: '摆动前期', ISw: '摆动初期', MSw: '摆动中期', TSw: '摆动末期'
-  };
+  var PHASE_LABELS = { IC: '初次着地', LR: '承重反应', TSt: '支撑末期' };
   var PHASE_STANDARDS = {
     IC: { range: '参考 0%', events: '本侧足跟或前足刚接触地面', cue: '确定触地瞬间，作为周期起点' },
-    LR: { range: '参考 0–12%', events: '本侧初始触地 → 对侧足尖离地', cue: '承重转移，膝屈曲缓冲' },
-    MSt: { range: '参考 12–31%', events: '对侧足尖离地 → 本侧足跟离地', cue: '躯干越过支撑足，单腿支撑' },
-    TSt: { range: '参考 31–50%', events: '本侧足跟离地 → 对侧初始触地', cue: '足跟抬起，身体越过前足' },
-    PSw: { range: '参考 50–60%', events: '对侧初始触地 → 本侧足尖离地', cue: '卸载并准备摆动，膝屈曲增加' },
-    ISw: { range: '参考 60–75%', events: '本侧足尖离地 → 双足相邻', cue: '摆动腿前进，膝屈曲帮助廓清' },
-    MSw: { range: '参考 75–87%', events: '双足相邻 → 摆动腿胫骨竖直', cue: '踝背屈保持足部廓清' },
-    TSw: { range: '参考 87–100%', events: '摆动腿胫骨竖直 → 下一次初始触地', cue: '伸膝准备触地，踝保持背屈' }
+    LR: { range: '参考 0–12%', events: '本侧初次着地 → 对侧足尖离地', cue: '承重转移，膝屈曲缓冲' },
+    TSt: { range: '参考 31–50%', events: '本侧足跟离地 → 对侧初次着地', cue: '足跟抬起，身体越过前足' }
   };
-  var PHASE_BOUNDS = [0, 2, 12, 31, 50, 60, 75, 87, 100];
   var ANGLE_LABELS = { shoulder: '肩屈/伸', elbow: '肘屈', hip: '髋屈/伸', knee: '膝屈/伸', ankle: '踝背/跖屈' };
   var STORAGE_KEY = 'gait_assessment_log';
   var state = {
@@ -71,6 +62,7 @@
       angleResizeObserver: null,
       undoStack: [],
       redoStack: [],
+      calibrations: [],
       suggestions: null
     };
   }
@@ -101,56 +93,30 @@
   function currentFrame(view) { return view.frames[view.currentFrame] || null; }
   function activeCycle(view) {
     var cycle = view.confirmedCycles.find(function (item) { return item.id === view.activeCycleId; }) || null;
-    if (cycle) ensureCycleRanges(view, cycle);
+    if (cycle) ensureCycleRepresentatives(view, cycle);
     return cycle;
   }
 
-  function defaultPhaseBoundaries(cycle) {
-    var length = cycle.endFrame - cycle.startFrame;
-    var boundaries = PHASE_BOUNDS.map(function (percent) {
-      return Math.round(cycle.startFrame + length * percent / 100);
-    });
-    boundaries[0] = cycle.startFrame;
-    boundaries[boundaries.length - 1] = cycle.endFrame;
-    for (var i = 1; i < boundaries.length - 1; i++) boundaries[i] = Math.max(boundaries[i], boundaries[i - 1] + 1);
-    for (var j = boundaries.length - 2; j > 0; j--) boundaries[j] = Math.min(boundaries[j], boundaries[j + 1] - 1);
-    return boundaries;
-  }
-
-  function ensureCycleRanges(view, cycle) {
+  function ensureCycleRepresentatives(view, cycle) {
     var changed = false;
-    var boundaries = defaultPhaseBoundaries(cycle);
-    K.PHASES.forEach(function (name, index) {
+    var offsets = { IC: 0, LR: 2, TSt: 4 };
+    var lastFrame = Math.max(0, view.frames.length - 1);
+    cycle.phases = cycle.phases || {};
+    K.PHASES.forEach(function (name) {
       var existing = cycle.phases[name];
-      var rangeStart = boundaries[index];
-      var rangeEnd = boundaries[index + 1] - 1;
+      var representative = Math.min(view.currentFrame + offsets[name], lastFrame);
       if (!existing || typeof existing !== 'object') {
-        var representative = typeof existing === 'number' ? existing : Math.round((rangeStart + rangeEnd) / 2);
-        cycle.phases[name] = { startFrame: rangeStart, endFrame: rangeEnd, representativeFrame: representative };
+        cycle.phases[name] = { representativeFrame: typeof existing === 'number' ? existing : representative };
         changed = true;
-      } else {
-        if (!Number.isInteger(existing.startFrame)) { existing.startFrame = rangeStart; changed = true; }
-        if (!Number.isInteger(existing.endFrame)) { existing.endFrame = rangeEnd; changed = true; }
-        if (!Number.isInteger(existing.representativeFrame)) { existing.representativeFrame = Math.round((existing.startFrame + existing.endFrame) / 2); changed = true; }
+      } else if (!Number.isInteger(existing.representativeFrame)) {
+        existing.representativeFrame = representative;
+        changed = true;
       }
     });
     if (changed) {
       cycle.confirmed = false;
       state.results = null;
       scheduleSave();
-    }
-  }
-
-  function adjustAdjacentPhase(cycle, phase, field) {
-    var index = K.PHASES.indexOf(phase);
-    var range = cycle.phases[phase];
-    if (field === 'endFrame' && index < K.PHASES.length - 1) {
-      var next = cycle.phases[K.PHASES[index + 1]];
-      if (next.startFrame <= range.endFrame) next.startFrame = range.endFrame + 1;
-    }
-    if (field === 'startFrame' && index > 0) {
-      var previous = cycle.phases[K.PHASES[index - 1]];
-      if (previous.endFrame >= range.startFrame) previous.endFrame = range.startFrame - 1;
     }
   }
 
@@ -192,6 +158,8 @@
         view.redoStack = [];
         view.control = null;
         view.angleResizeObserver = null;
+        view.calibrations = Array.isArray(view.calibrations) ? view.calibrations : [];
+        if (view.frames.length) view.frames = K.applyCalibrations(view.frames, view.calibrations, side);
         if (view.video && view.video.blob) {
           var file = new File([view.video.blob], view.video.name || side + '.mp4', { type: view.video.type || 'video/mp4' });
           window.__gaitMedia.loadVideo(file).then(function (loaded) {
@@ -287,6 +255,22 @@
         if (event.target.files[0]) importVideo(side, event.target.files[0]);
       });
       $('#gait-analyze-' + side).addEventListener('click', function () { analyzeSide(side); });
+      $('#gait-qr-' + side).addEventListener('click', function () {
+        window.__gaitQrDesktop.open(side, {
+          onFile: async function (file) {
+            await importVideo(side, file);
+            setMessage('', '手机原视频已接收，SHA-256 校验一致');
+            render();
+          },
+          onError: function (error) {
+            setMessage(error.message || String(error), '');
+            render();
+          }
+        }).catch(function (error) {
+          setMessage(error.message || String(error), '');
+          render();
+        });
+      });
       var review = $('#gait-review-' + side);
       if (review) review.addEventListener('click', function () { showReview(side); });
     });
@@ -309,15 +293,19 @@
   function renderUploadCard(side, confirmedCount) {
     var view = state.session.views[side];
     var video = view.video;
+    var busy = view.status === 'processing' || view.status === 'converting' || view.status === 'loading';
     var status = view.status === 'processing' ? '识别中 ' + Math.round(view.progress * 100) + '%' :
+      view.status === 'converting' ? '本地转码 ' + Math.round(view.progress * 100) + '%' :
+      view.status === 'loading' ? '读取视频中' :
       view.frames.length ? view.frames.length + ' 帧 · ' + confirmedCount + ' 个确认周期' :
       video ? '视频已就绪' : '等待上传';
     var meta = video ? esc(video.name) + '<br>' + video.width + '×' + video.height + ' · ' + video.duration.toFixed(2) + ' s' : '支持手机 MP4 / MOV / WebM';
     return '<div class="gait-v2-upload gait-v2-upload-' + side + '"><div class="gait-v2-upload-head"><span class="gait-v2-upload-title">' + sideLabel(side) + '</span><span class="gait-v2-status">' + esc(status) + '</span></div>' +
       '<input class="gait-v2-file" id="gait-file-' + side + '" type="file" accept="video/*,.mp4,.mov,.webm,.m4v">' +
       '<div class="gait-v2-meta">' + meta + '</div>' +
-      (view.status === 'processing' ? '<div class="gait-v2-progress"><span style="width:' + Math.min(100, view.progress * 100) + '%"></span></div>' : '') +
-      '<div class="gait-v2-actions" style="margin-top:12px"><button class="gait-v2-btn gait-v2-btn-primary" id="gait-analyze-' + side + '" ' + (!video || view.status === 'processing' ? 'disabled' : '') + '>' + (view.frames.length ? '重新识别' : '开始逐帧识别') + '</button>' +
+      (busy ? '<div class="gait-v2-progress"><span style="width:' + Math.min(100, (view.progress || 0) * 100) + '%"></span></div>' : '') +
+      '<div class="gait-v2-actions" style="margin-top:12px"><button class="gait-v2-btn" id="gait-qr-' + side + '" ' + (busy ? 'disabled' : '') + '>手机扫码上传</button>' +
+      '<button class="gait-v2-btn gait-v2-btn-primary" id="gait-analyze-' + side + '" ' + (!video || busy ? 'disabled' : '') + '>' + (view.frames.length ? '重新识别' : '开始逐帧识别') + '</button>' +
       (view.frames.length ? '<button class="gait-v2-btn" id="gait-review-' + side + '">进入人工审核</button>' : '') + '</div>' +
       (view.frameIntegrity === 'estimated-30fps-seek' ? '<div class="gait-v2-note" style="margin-top:10px">此浏览器无真实帧回调，当前按 30fps seek 解码；请核对帧号，推荐 H.264。</div>' : '') + '</div>';
   }
@@ -334,20 +322,33 @@
   async function importVideo(side, file) {
     var view = state.session.views[side];
     setMessage('', '');
+    view.status = 'loading';
+    view.progress = 0;
+    render();
     try {
       if (view.control) view.control.cancelled = true;
-      var loaded = await window.__gaitMedia.loadVideo(file);
+      var loaded = await window.__gaitMedia.loadVideo(file, {
+        onProgress: function (fraction) {
+          view.status = 'converting';
+          view.progress = fraction;
+          var status = document.querySelector('.gait-v2-upload-' + side + ' .gait-v2-status');
+          var bar = document.querySelector('.gait-v2-upload-' + side + ' .gait-v2-progress > span');
+          if (status) status.textContent = '本地转码 ' + Math.round(fraction * 100) + '%';
+          if (bar) bar.style.width = Math.min(100, fraction * 100) + '%';
+        }
+      });
       view.frames = [];
       view.confirmedCycles = [];
       view.activeCycleId = null;
       view.currentFrame = 0;
       view.undoStack = [];
       view.redoStack = [];
-      attachLoadedVideo(view, loaded, file);
+      attachLoadedVideo(view, loaded, loaded.blob || file);
       state.results = null;
       render();
       scheduleSave();
     } catch (error) {
+      view.status = view.video ? 'ready' : 'empty';
       setMessage(error.message || String(error), '');
       render();
     }
@@ -401,6 +402,26 @@
     $('#gait-overlay').scrollTop = 0;
   }
 
+  function calibrationSummary(view) {
+    var calibrations = Array.isArray(view.calibrations) ? view.calibrations : [];
+    if (!calibrations.length) return '先拖动校正解剖点，再设为校准帧';
+    return '校准帧 ' + calibrations.map(function (item) { return item.frameIndex; }).join('、') + ' · 紫色为传播点，黄色为人工点';
+  }
+
+  function calibrateCurrentFrame(view) {
+    try {
+      var calibration = K.createCalibration(currentFrame(view), view.side);
+      view.calibrations = K.upsertCalibration(view.calibrations, calibration);
+      view.frames = K.applyCalibrations(view.frames, view.calibrations, view.side);
+      invalidateAll(view);
+      setMessage('', '已将第 ' + calibration.frameIndex + ' 帧的 ' + Object.keys(calibration.corrections).length + ' 个人工修正传播到本侧视频，请抽查其他帧');
+      scheduleSave();
+    } catch (error) {
+      setMessage(error.message || String(error), '');
+    }
+    render();
+  }
+
   function renderVideoEditor(view) {
     var side = view.side;
     if (!view.frames.length) {
@@ -409,7 +430,8 @@
     return '<main class="gait-v2-video-editor' + (state.activeSide === side ? ' active' : '') + '" id="gait-editor-' + side + '"><h3 class="gait-v2-player-title">' + sideLabel(side) + '</h3>' +
       '<div class="gait-v2-stage" id="gait-stage-' + side + '"><div class="gait-v2-video-rail gait-v2-video-rail-left"><div><span>肩屈/伸</span><strong data-video-angle="shoulder">—</strong></div><div><span>肘屈</span><strong data-video-angle="elbow">—</strong></div></div><div class="gait-v2-stage-inner" id="gait-stage-inner-' + side + '"></div><div class="gait-v2-video-rail gait-v2-video-rail-right"><div><span>髋屈/伸</span><strong data-video-angle="hip">—</strong></div><div><span>膝屈/伸</span><strong data-video-angle="knee">—</strong></div><div><span>踝背/跖屈</span><strong data-video-angle="ankle">—</strong></div></div></div>' +
       '<div class="gait-v2-transport"><button class="gait-v2-btn" id="gait-play-' + side + '">播放</button><label class="gait-v2-frame-label">速度 <select class="gait-v2-select" id="gait-playback-rate-' + side + '" title="仅改变播放速度，不影响逐帧和报告"><option value="0.25"' + (view.playbackRate === 0.25 ? ' selected' : '') + '>0.25×</option><option value="0.5"' + (view.playbackRate !== 1 && view.playbackRate !== 0.25 ? ' selected' : '') + '>0.5× 慢放</option><option value="1"' + (view.playbackRate === 1 ? ' selected' : '') + '>1× 原速</option></select></label><button class="gait-v2-btn" id="gait-fullscreen-' + side + '" title="按视频比例完整放大">全屏放大</button><button class="gait-v2-btn" id="gait-prev-frame-' + side + '">← 上一帧</button><button class="gait-v2-btn" id="gait-next-frame-' + side + '">下一帧 →</button><label class="gait-v2-frame-label">帧 <input class="gait-v2-input" id="gait-frame-number-' + side + '" type="number" min="0" max="' + (view.frames.length - 1) + '" value="' + view.currentFrame + '"> / ' + (view.frames.length - 1) + '</label><span class="gait-v2-frame-label" id="gait-frame-time-' + side + '">' + formatTime(currentFrame(view).t) + '</span></div>' +
-      '<div class="gait-v2-transport"><select class="gait-v2-select" id="gait-direction-' + side + '"><option value="1"' + (view.direction === 1 ? ' selected' : '') + '>前方朝画面右</option><option value="-1"' + (view.direction === -1 ? ' selected' : '') + '>前方朝画面左</option></select><select class="gait-v2-select" id="gait-zoom-' + side + '"><option value="1">适应窗口</option><option value="2">放大 200%</option><option value="3">300%</option></select><select class="gait-v2-select" id="gait-add-point-' + side + '"><option value="">补标缺失点…</option><option value="shoulder">肩</option><option value="elbow">肘</option><option value="wrist">腕</option><option value="hip">髋</option><option value="knee">膝</option><option value="ankle">踝</option><option value="foot_index">足尖</option></select><label class="gait-v2-frame-label"><input type="checkbox" id="gait-show-raw-' + side + '" ' + (view.showRaw ? 'checked' : '') + '> 显示 AI 原始点</label><button class="gait-v2-btn gait-v2-btn-small" id="gait-reset-frame-' + side + '">重置本帧</button><button class="gait-v2-btn gait-v2-btn-small" id="gait-undo-' + side + '">撤销</button><button class="gait-v2-btn gait-v2-btn-small" id="gait-redo-' + side + '">重做</button></div>' +
+      '<div class="gait-v2-transport"><select class="gait-v2-select" id="gait-direction-' + side + '"><option value="1"' + (view.direction === 1 ? ' selected' : '') + '>前方朝画面右</option><option value="-1"' + (view.direction === -1 ? ' selected' : '') + '>前方朝画面左</option></select><select class="gait-v2-select" id="gait-zoom-' + side + '"><option value="1">适应窗口</option><option value="2">放大 200%</option><option value="3">300%</option></select><select class="gait-v2-select" id="gait-add-point-' + side + '"><option value="">补标缺失点…</option><option value="shoulder">肩</option><option value="elbow">肘</option><option value="wrist">腕</option><option value="hip">髋</option><option value="knee">膝</option><option value="ankle">踝</option><option value="heel">跟骨</option><option value="foot_index">足尖</option></select><label class="gait-v2-frame-label"><input type="checkbox" id="gait-show-raw-' + side + '" ' + (view.showRaw ? 'checked' : '') + '> 显示 AI 原始点</label><button class="gait-v2-btn gait-v2-btn-small" id="gait-reset-frame-' + side + '">重置本帧</button><button class="gait-v2-btn gait-v2-btn-small" id="gait-undo-' + side + '">撤销</button><button class="gait-v2-btn gait-v2-btn-small" id="gait-redo-' + side + '">重做</button></div>' +
+      '<div class="gait-v2-transport"><button class="gait-v2-btn gait-v2-btn-small" id="gait-calibrate-frame-' + side + '" title="把当前帧的人工修正按肢体方向和比例传播到本侧其他帧">设为校准帧</button><span class="gait-v2-frame-label" id="gait-calibration-status-' + side + '">' + calibrationSummary(view) + '</span></div>' +
       '<div class="gait-v2-angle-grid" id="gait-angle-grid-' + side + '">' + K.ANGLE_KEYS.map(function (key) { return '<div class="gait-v2-angle"><div class="gait-v2-angle-label">' + ANGLE_LABELS[key] + '</div><div class="gait-v2-angle-value" id="gait-angle-' + key + '-' + side + '">—</div></div>'; }).join('') + '</div></main>';
   }
 
@@ -429,7 +451,7 @@
       '<div class="gait-v2-side-tabs"><button class="gait-v2-btn gait-v2-side-tab ' + (state.activeSide === 'left' ? 'active' : '') + '" id="gait-tab-left">左侧视 · ' + viewCount('left') + '</button><button class="gait-v2-btn gait-v2-side-tab ' + (state.activeSide === 'right' ? 'active' : '') + '" id="gait-tab-right">右侧视 · ' + viewCount('right') + '</button></div>' +
       renderMessages() +
       '<div class="gait-v2-editor">' + renderVideoEditor(state.session.views.left) + renderVideoEditor(state.session.views.right) +
-      '<aside class="gait-v2-review-column"><section class="gait-v2-panel"><h3>人工时相 · ' + sideLabel(view.side) + '</h3><p>先选周期，再把当前帧标记为对应时相。IC 是周期起点，下一次 IC 是终点。百分比仅作正常参考，以实际动作帧为准。</p><div class="gait-v2-actions" style="margin-bottom:10px"><button class="gait-v2-btn gait-v2-btn-small" id="gait-add-cycle">从当前帧新建周期</button></div><div class="gait-v2-cycle-list" id="gait-cycle-list">' + renderCycleChips(view) + '</div><div id="gait-cycle-editor">' + (cycle ? renderCycleEditor(view, cycle) : '<div class="gait-v2-note">尚未建立周期。移动到同侧初始触地帧，点击“从当前帧新建周期”。</div>') + '</div></section>' +
+      '<aside class="gait-v2-review-column"><section class="gait-v2-panel"><h3>人工时相 · ' + sideLabel(view.side) + '</h3><p>先选周期，再分别把当前帧标记为 IC、LR、TSt 代表帧；点选后立即保存该帧角度和截图，无需设置起止帧。</p><div class="gait-v2-actions" style="margin-bottom:10px"><button class="gait-v2-btn gait-v2-btn-small" id="gait-add-cycle">从当前帧新建周期</button></div><div class="gait-v2-cycle-list" id="gait-cycle-list">' + renderCycleChips(view) + '</div><div id="gait-cycle-editor">' + (cycle ? renderCycleEditor(view, cycle) : '<div class="gait-v2-note">尚未建立周期。移动到同侧初始触地帧，点击“从当前帧新建周期”。</div>') + '</div></section>' +
       '<section class="gait-v2-panel"><h3>确认人</h3><input class="gait-v2-input" style="width:100%" id="gait-reviewer" placeholder="输入姓名或 initials" value="' + esc(state.reviewer || view.confirmedBy || '') + '"><p style="margin:8px 0 0">点位或时相修改后，相关周期自动退回未确认。</p></section></aside></div>' + renderReportBar() + '</div>';
     $('#gait-tab-left').addEventListener('click', function () { showReview('left'); });
     $('#gait-tab-right').addEventListener('click', function () { showReview('right'); });
@@ -457,12 +479,11 @@
   }
 
   function renderCycleEditor(view, cycle) {
-    return '<div class="gait-v2-actions" style="margin-bottom:10px"><label class="gait-v2-frame-label">结束 IC <input class="gait-v2-input" id="gait-cycle-end" type="number" min="' + (cycle.startFrame + 1) + '" max="' + (view.frames.length - 1) + '" value="' + cycle.endFrame + '"></label><span class="gait-v2-status">' + (cycle.confirmed ? '已确认' : '待确认') + '</span></div>' +
-      '<div class="gait-v2-phase-list">' + K.PHASES.map(function (phase) {
+    return '<div class="gait-v2-phase-list">' + K.PHASES.map(function (phase) {
         var standard = PHASE_STANDARDS[phase];
         var range = cycle.phases[phase];
-        return '<div class="gait-v2-phase-row"><span class="gait-v2-phase-code">' + phase + '</span><span class="gait-v2-phase-name"><strong>' + PHASE_LABELS[phase] + '</strong><small class="gait-v2-phase-standard">' + standard.events + ' · ' + standard.range + '<br>' + standard.cue + '</small></span><label class="gait-v2-phase-frame">代表<input class="gait-v2-input" data-phase-input="' + phase + '" type="number" min="' + range.startFrame + '" max="' + range.endFrame + '" value="' + range.representativeFrame + '"></label><label class="gait-v2-phase-frame">起始<input class="gait-v2-input" data-phase-start="' + phase + '" type="number" min="' + cycle.startFrame + '" max="' + (cycle.endFrame - 1) + '" value="' + range.startFrame + '"></label><label class="gait-v2-phase-frame">结束<input class="gait-v2-input" data-phase-end="' + phase + '" type="number" min="' + cycle.startFrame + '" max="' + (cycle.endFrame - 1) + '" value="' + range.endFrame + '"></label><span class="gait-v2-phase-actions"><button class="gait-v2-btn gait-v2-btn-small" data-mark-phase="' + phase + '">代表=当前</button><button class="gait-v2-btn gait-v2-btn-small" data-mark-start="' + phase + '">起点=当前</button><button class="gait-v2-btn gait-v2-btn-small" data-mark-end="' + phase + '">终点=当前</button></span></div>';
-      }).join('') + '</div><div class="gait-v2-actions" style="margin-top:12px"><button class="gait-v2-btn gait-v2-btn-primary" id="gait-confirm-cycle">' + (cycle.confirmed ? '重新确认' : '确认此周期') + '</button><button class="gait-v2-btn gait-v2-btn-danger" id="gait-delete-cycle">删除</button></div>' +
+        return '<div class="gait-v2-phase-row"><span class="gait-v2-phase-code">' + phase + '</span><span class="gait-v2-phase-name"><strong>' + PHASE_LABELS[phase] + '</strong><small class="gait-v2-phase-standard">' + standard.events + ' · ' + standard.range + '<br>' + standard.cue + '</small></span><label class="gait-v2-phase-frame">代表帧<input class="gait-v2-input" data-phase-input="' + phase + '" type="number" min="0" max="' + (view.frames.length - 1) + '" value="' + range.representativeFrame + '"></label><span class="gait-v2-phase-actions"><button class="gait-v2-btn gait-v2-btn-small" data-mark-phase="' + phase + '">代表=当前</button></span></div>';
+      }).join('') + '</div><div class="gait-v2-actions" style="margin-top:12px"><span class="gait-v2-status">' + (cycle.confirmed ? '已确认' : '待确认') + '</span><button class="gait-v2-btn gait-v2-btn-primary" id="gait-confirm-cycle">' + (cycle.confirmed ? '重新确认' : '确认此周期') + '</button><button class="gait-v2-btn gait-v2-btn-danger" id="gait-delete-cycle">删除</button></div>' +
       (cycle.confirmed ? '<div class="gait-v2-success" style="margin-top:10px">已确认 · ' + esc(cycle.confirmedBy || '未署名') + '<br>' + esc(cycle.confirmedAt || '') + '</div>' : '');
   }
 
@@ -560,6 +581,7 @@
     });
     $('#gait-undo').addEventListener('click', function () { undo(view); });
     $('#gait-redo').addEventListener('click', function () { redo(view); });
+    $('#gait-calibrate-frame').addEventListener('click', function () { calibrateCurrentFrame(view); });
     canvas.addEventListener('pointerdown', function (event) { startDrag(event, view, canvas); });
     canvas.addEventListener('pointermove', function (event) { moveDrag(event, view, canvas); });
     canvas.addEventListener('pointerup', endDrag);
@@ -627,7 +649,7 @@
       return p && (p.score == null || p.score >= 0.25) ? p : null;
     }
     if (!preserveBackground) context.clearRect(0, 0, width, height);
-    var links = [['shoulder', 'elbow'], ['elbow', 'wrist'], ['shoulder', 'hip'], ['hip', 'knee'], ['knee', 'ankle'], ['ankle', 'foot_index']];
+    var links = [['shoulder', 'elbow'], ['elbow', 'wrist'], ['shoulder', 'hip'], ['hip', 'knee'], ['knee', 'ankle'], ['ankle', 'heel'], ['heel', 'foot_index']];
     context.lineWidth = Math.max(2, width / 400);
     context.strokeStyle = '#5eead4';
     links.forEach(function (link) {
@@ -639,19 +661,19 @@
       context.lineTo(b.x, b.y);
       context.stroke();
     });
-    ['shoulder', 'elbow', 'wrist', 'hip', 'knee', 'ankle', 'foot_index'].forEach(function (name) {
+    ['shoulder', 'elbow', 'wrist', 'hip', 'knee', 'ankle', 'heel', 'foot_index'].forEach(function (name) {
       var p = point(name);
       if (!p) return;
       context.beginPath();
       context.arc(p.x, p.y, name === 'foot_index' ? width / 150 : width / 110, 0, Math.PI * 2);
-      context.fillStyle = p.source === 'manual' ? '#fbbf24' : (p.score == null || p.score >= 0.5 ? '#22d3ee' : '#fb7185');
+      context.fillStyle = p.source === 'manual' ? '#fbbf24' : (p.source === 'calibrated' ? '#a78bfa' : (p.score == null || p.score >= 0.5 ? '#22d3ee' : '#fb7185'));
       context.fill();
       context.lineWidth = Math.max(1, width / 600);
       context.strokeStyle = '#ffffff';
       context.stroke();
       context.fillStyle = '#ffffff';
       context.font = Math.max(11, width / 55) + 'px sans-serif';
-      context.fillText({ shoulder: '肩', elbow: '肘', wrist: '腕', hip: '髋', knee: '膝', ankle: '踝', foot_index: '足尖' }[name], p.x + 10, p.y - 10);
+      context.fillText({ shoulder: '肩', elbow: '肘', wrist: '腕', hip: '髋', knee: '膝', ankle: '踝', heel: '跟骨', foot_index: '足尖' }[name], p.x + 10, p.y - 10);
     });
   }
 
@@ -695,7 +717,7 @@
     frame.keypoints.forEach(function (point) {
       if (point.name.indexOf(view.side + '_') !== 0) return;
       var part = point.name.slice((view.side + '_').length);
-      if (['shoulder', 'elbow', 'wrist', 'hip', 'knee', 'ankle', 'foot_index'].indexOf(part) === -1) return;
+      if (['shoulder', 'elbow', 'wrist', 'hip', 'knee', 'ankle', 'heel', 'foot_index'].indexOf(part) === -1) return;
       var d = Math.hypot(point.x - position.x, point.y - position.y);
       if (d < distance) { distance = d; nearest = point; }
     });
@@ -760,11 +782,20 @@
 
   function invalidateFrame(view, frameIndex) {
     K.invalidateCycles(view, frameIndex);
+    view.confirmedCycles.forEach(function (cycle) {
+      if (!cycle.phaseSnapshots) return;
+      Object.keys(cycle.phaseSnapshots).forEach(function (phase) {
+        if (cycle.phaseSnapshots[phase].frameIndex === frameIndex) delete cycle.phaseSnapshots[phase];
+      });
+    });
     state.results = null;
   }
 
   function invalidateAll(view) {
-    view.confirmedCycles.forEach(function (cycle) { cycle.confirmed = false; });
+    view.confirmedCycles.forEach(function (cycle) {
+      cycle.confirmed = false;
+      delete cycle.phaseSnapshots;
+    });
     state.results = null;
   }
 
@@ -775,49 +806,30 @@
     $('#gait-add-cycle').addEventListener('click', function () { addCycle(view); });
     var cycle = activeCycle(view);
     if (!cycle) return;
-    $('#gait-cycle-end').addEventListener('change', function (event) {
-      pushHistory(view);
-      cycle.endFrame = Math.max(cycle.startFrame + 1, Math.min(view.frames.length - 1, Number(event.target.value)));
-      cycle.phases.TSw.endFrame = cycle.endFrame - 1;
-      cycle.confirmed = false;
-      state.results = null;
-      render();
-      scheduleSave();
-    });
     document.querySelectorAll('[data-phase-input]').forEach(function (input) {
       input.addEventListener('change', function () {
         pushHistory(view);
-        cycle.phases[input.dataset.phaseInput].representativeFrame = Number(input.value);
+        var phase = input.dataset.phaseInput;
+        cycle.phases[phase].representativeFrame = Number(input.value);
+        if (cycle.phaseSnapshots) delete cycle.phaseSnapshots[phase];
         cycle.confirmed = false;
         state.results = null;
         render();
         scheduleSave();
+        savePhaseSnapshot(view, cycle, phase);
       });
     });
-    document.querySelectorAll('[data-phase-start], [data-phase-end]').forEach(function (input) {
-      input.addEventListener('change', function () {
-        pushHistory(view);
-        var field = input.dataset.phaseStart !== undefined ? 'startFrame' : 'endFrame';
-        var phase = input.dataset.phaseStart !== undefined ? input.dataset.phaseStart : input.dataset.phaseEnd;
-        cycle.phases[phase][field] = Number(input.value);
-        adjustAdjacentPhase(cycle, phase, field);
-        cycle.confirmed = false;
-        state.results = null;
-        render();
-        scheduleSave();
-      });
-    });
-    document.querySelectorAll('[data-mark-phase], [data-mark-start], [data-mark-end]').forEach(function (button) {
+    document.querySelectorAll('[data-mark-phase]').forEach(function (button) {
       button.addEventListener('click', function () {
         pushHistory(view);
-        var field = button.dataset.markPhase !== undefined ? 'representativeFrame' : button.dataset.markStart !== undefined ? 'startFrame' : 'endFrame';
-        var phase = button.dataset.markPhase || button.dataset.markStart || button.dataset.markEnd;
-        cycle.phases[phase][field] = view.currentFrame;
-        adjustAdjacentPhase(cycle, phase, field);
+        var phase = button.dataset.markPhase;
+        cycle.phases[phase].representativeFrame = view.currentFrame;
+        if (cycle.phaseSnapshots) delete cycle.phaseSnapshots[phase];
         cycle.confirmed = false;
         state.results = null;
         render();
         scheduleSave();
+        savePhaseSnapshot(view, cycle, phase);
       });
     });
     $('#gait-delete-cycle').addEventListener('click', function () {
@@ -833,7 +845,7 @@
       var validation = K.validateCycle(view, cycle);
       if (!validation.valid) {
         cycle.confirmed = false;
-        setMessage('周期不能确认：' + validation.reason + '。请检查 IC、结束帧和 8 时相顺序。', '');
+        setMessage('周期不能确认：' + validation.reason + '。请检查 IC、LR、TSt 三个代表帧及其顺序。', '');
         render();
         return;
       }
@@ -850,27 +862,13 @@
   }
 
   function addCycle(view) {
-    var start = view.currentFrame;
-    var end = Math.min(view.frames.length - 1, start + Math.max(9, Math.round(view.fps || 30)));
-    if (end <= start) {
-      setMessage('当前已是最后一帧，无法新建完整周期', '');
-      render();
-      return;
-    }
-    var pcts = [0, 5, 20, 40, 55, 67, 80, 93];
+    var offsets = { IC: 0, LR: 2, TSt: 4 };
+    var lastFrame = Math.max(0, view.frames.length - 1);
     var phases = {};
-    var boundaries = defaultPhaseBoundaries({ startFrame: start, endFrame: end });
-    K.PHASES.forEach(function (phase, index) {
-      var rangeStart = boundaries[index];
-      var rangeEnd = boundaries[index + 1] - 1;
-      var representative = Math.round(start + (end - start) * pcts[index] / 100);
-      phases[phase] = {
-        startFrame: rangeStart,
-        endFrame: rangeEnd,
-        representativeFrame: Math.max(rangeStart, Math.min(rangeEnd, representative))
-      };
+    K.PHASES.forEach(function (phase) {
+      phases[phase] = { representativeFrame: Math.min(view.currentFrame + offsets[phase], lastFrame) };
     });
-    var cycle = { id: uid('cycle'), startFrame: start, endFrame: end, phases: phases, confirmed: false, source: 'manual-draft' };
+    var cycle = { id: uid('cycle'), phases: phases, confirmed: false, source: 'manual-draft' };
     view.confirmedCycles.push(cycle);
     view.activeCycleId = cycle.id;
     state.results = null;
@@ -893,6 +891,45 @@
     await waiting;
   }
 
+  function createSnapshot(view, cycle, phase, seriesFrame) {
+    var frameIndex = cycle.phases[phase].representativeFrame;
+    var frame = view.frames[frameIndex];
+    var sourceW = view.video.width;
+    var sourceH = view.video.height;
+    var scale = Math.min(1, 640 / sourceW);
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(sourceW * scale);
+    canvas.height = Math.round(sourceH * scale);
+    var context = canvas.getContext('2d');
+    context.drawImage(view.videoElement, 0, 0, canvas.width, canvas.height);
+    var scaledFrame = { keypoints: frame.keypoints.map(function (point) {
+      return Object.assign({}, point, { x: point.x * scale, y: point.y * scale });
+    }) };
+    drawSkeleton(context, scaledFrame, view.side, canvas.width, canvas.height, false, true);
+    return {
+      cycleId: cycle.id, phase: phase, label: PHASE_LABELS[phase], frameIndex: frameIndex,
+      time: frame.t, imageData: canvas.toDataURL('image/jpeg', 0.78),
+      angles: seriesFrame ? seriesFrame.angles : K.computeFrameAngles(frame.keypoints, { side: view.side, direction: view.direction })
+    };
+  }
+
+  async function savePhaseSnapshot(view, cycle, phase) {
+    var frameIndex = cycle.phases[phase].representativeFrame;
+    if (!view.frames[frameIndex]) return;
+    try {
+      await seekForSnapshot(view, frameIndex);
+      if (cycle.phases[phase].representativeFrame !== frameIndex) return;
+      var snapshot = createSnapshot(view, cycle, phase);
+      cycle.phaseSnapshots = cycle.phaseSnapshots || {};
+      cycle.phaseSnapshots[phase] = snapshot;
+      scheduleSave();
+    } catch (error) {
+      console.warn('[gait-v2] 代表帧截图保存失败', error);
+    } finally {
+      if (view.currentFrame !== frameIndex) await seekForSnapshot(view, view.currentFrame);
+    }
+  }
+
   async function captureSnapshots(view, reportView) {
     var cycle = reportView.cycles[0];
     if (!cycle) return [];
@@ -901,24 +938,8 @@
       var phase = K.PHASES[i];
       var frameIndex = cycle.phases[phase].representativeFrame;
       await seekForSnapshot(view, frameIndex);
-      var sourceW = view.video.width;
-      var sourceH = view.video.height;
-      var scale = Math.min(1, 640 / sourceW);
-      var canvas = document.createElement('canvas');
-      canvas.width = Math.round(sourceW * scale);
-      canvas.height = Math.round(sourceH * scale);
-      var context = canvas.getContext('2d');
-      context.drawImage(view.videoElement, 0, 0, canvas.width, canvas.height);
-      var frame = view.frames[frameIndex];
-      var scaledFrame = { keypoints: frame.keypoints.map(function (point) {
-        return Object.assign({}, point, { x: point.x * scale, y: point.y * scale });
-      }) };
-      drawSkeleton(context, scaledFrame, view.side, canvas.width, canvas.height, false, true);
       var seriesFrame = cycle.series.find(function (item) { return item.frameIndex === frameIndex; });
-      snapshots.push({
-        cycleId: cycle.id, phase: phase, label: PHASE_LABELS[phase], frameIndex: frameIndex,
-        time: frame.t, imageData: canvas.toDataURL('image/jpeg', 0.78), angles: seriesFrame && seriesFrame.angles
-      });
+      snapshots.push(createSnapshot(view, cycle, phase, seriesFrame));
     }
     return snapshots;
   }
@@ -1031,9 +1052,6 @@
       return;
     }
     var payload = clone(record);
-    ['left', 'right'].forEach(function (side) {
-      if (payload.views && payload.views[side]) delete payload.views[side].phaseSnapshots;
-    });
     Object.keys(payload).forEach(function (key) { if (key.indexOf('_cloud') === 0 || key === '_localId') delete payload[key]; });
     markCloud(record._localId, 'syncing');
     window.SupabaseClient.submitGaitAssessment({

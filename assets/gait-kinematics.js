@@ -2,7 +2,7 @@
   'use strict';
 
   var ANGLE_KEYS = ['shoulder', 'elbow', 'hip', 'knee', 'ankle'];
-  var PHASES = ['IC', 'LR', 'MSt', 'TSt', 'PSw', 'ISw', 'MSw', 'TSw'];
+  var PHASES = ['IC', 'LR', 'TSt'];
   var RAD_TO_DEG = 180 / Math.PI;
 
   function finite(value) {
@@ -74,6 +74,7 @@
     var hip = point('hip');
     var knee = point('knee');
     var ankle = point('ankle');
+    var heel = point('heel');
     var footIndex = point('foot_index');
 
     var trunk = vectorAngle(vector(shoulder, hip), direction);
@@ -81,7 +82,7 @@
     var forearm = vectorAngle(vector(elbow, wrist), direction);
     var thigh = vectorAngle(vector(hip, knee), direction);
     var shank = vectorAngle(vector(knee, ankle), direction);
-    var ankleIncluded = includedAngle(vector(ankle, knee), vector(ankle, footIndex));
+    var ankleIncluded = includedAngle(vector(ankle, knee), vector(heel, footIndex));
 
     return {
       shoulder: relativeAngle(upperArm, trunk),
@@ -90,6 +91,115 @@
       knee: relativeAngle(thigh, shank),
       ankle: finite(ankleIncluded) ? 90 - ankleIncluded : null
     };
+  }
+
+  var CALIBRATION_BONES = {
+    shoulder: ['shoulder', 'hip'],
+    elbow: ['shoulder', 'elbow'],
+    wrist: ['elbow', 'wrist'],
+    hip: ['shoulder', 'hip'],
+    knee: ['hip', 'knee'],
+    ankle: ['knee', 'ankle'],
+    heel: ['heel', 'foot_index'],
+    foot_index: ['heel', 'foot_index']
+  };
+
+  function calibrationBasis(keypoints, side, part) {
+    var map = pointMap(keypoints);
+    var bone = CALIBRATION_BONES[part];
+    if (!bone) return null;
+    var from = usablePoint(map, side + '_' + bone[0], 0);
+    var to = usablePoint(map, side + '_' + bone[1], 0);
+    var boneVector = vector(from, to);
+    if (!boneVector) return null;
+    var length = Math.hypot(boneVector.x, boneVector.y);
+    var unit = { x: boneVector.x / length, y: boneVector.y / length };
+    return {
+      length: length,
+      unit: unit,
+      perpendicular: { x: -unit.y, y: unit.x }
+    };
+  }
+
+  function createCalibration(frame, side) {
+    side = side === 'right' ? 'right' : 'left';
+    var raw = frame && Array.isArray(frame.rawKeypoints) ? frame.rawKeypoints : [];
+    var current = frame && Array.isArray(frame.keypoints) ? frame.keypoints : [];
+    var rawMap = pointMap(raw);
+    var corrections = {};
+    current.forEach(function (manual) {
+      if (!manual || manual.source !== 'manual' || manual.name.indexOf(side + '_') !== 0) return;
+      var part = manual.name.slice(side.length + 1);
+      var rawPoint = usablePoint(rawMap, manual.name, 0);
+      var basis = calibrationBasis(raw, side, part);
+      if (!rawPoint || !basis || !finite(manual.x) || !finite(manual.y)) return;
+      var dx = manual.x - rawPoint.x;
+      var dy = manual.y - rawPoint.y;
+      corrections[part] = {
+        along: (dx * basis.unit.x + dy * basis.unit.y) / basis.length,
+        across: (dx * basis.perpendicular.x + dy * basis.perpendicular.y) / basis.length
+      };
+    });
+    if (!Object.keys(corrections).length) throw new Error('请先拖动校正至少一个解剖点，再设为校准帧');
+    return { frameIndex: frame.frameIndex, corrections: corrections };
+  }
+
+  function upsertCalibration(calibrations, calibration) {
+    var result = (Array.isArray(calibrations) ? calibrations : []).filter(function (item) {
+      return item && item.frameIndex !== calibration.frameIndex;
+    });
+    result.push(calibration);
+    return result.sort(function (a, b) { return a.frameIndex - b.frameIndex; });
+  }
+
+  function calibrationAt(calibrations, frameIndex, part) {
+    var valid = (Array.isArray(calibrations) ? calibrations : []).filter(function (item) {
+      return item && item.corrections && item.corrections[part];
+    });
+    if (!valid.length) return null;
+    var before = null;
+    var after = null;
+    valid.forEach(function (item) {
+      if (item.frameIndex <= frameIndex) before = item;
+      if (item.frameIndex >= frameIndex && !after) after = item;
+    });
+    var selected = before || after;
+    var correction = selected.corrections[part];
+    if (before && after && after.frameIndex > before.frameIndex) {
+      var ratio = (frameIndex - before.frameIndex) / (after.frameIndex - before.frameIndex);
+      correction = {
+        along: before.corrections[part].along + (after.corrections[part].along - before.corrections[part].along) * ratio,
+        across: before.corrections[part].across + (after.corrections[part].across - before.corrections[part].across) * ratio
+      };
+    }
+    return { correction: correction, referenceFrame: selected.frameIndex };
+  }
+
+  function applyCalibrations(frames, calibrations, side) {
+    side = side === 'right' ? 'right' : 'left';
+    return (Array.isArray(frames) ? frames : []).map(function (frame) {
+      if (!frame || !Array.isArray(frame.rawKeypoints)) return frame;
+      var current = Array.isArray(frame.keypoints) ? frame.keypoints : [];
+      var map = pointMap(frame.rawKeypoints);
+      current.forEach(function (point) {
+        if (point && point.source === 'manual') map[point.name] = point;
+      });
+      var keypoints = Object.keys(map).map(function (name) {
+        var point = Object.assign({}, map[name]);
+        if (point.source === 'manual' || name.indexOf(side + '_') !== 0) return point;
+        var part = name.slice(side.length + 1);
+        var selected = calibrationAt(calibrations, frame.frameIndex, part);
+        var basis = calibrationBasis(frame.rawKeypoints, side, part);
+        if (!selected || !basis) return point;
+        var correction = selected.correction;
+        point.x += basis.length * (correction.along * basis.unit.x + correction.across * basis.perpendicular.x);
+        point.y += basis.length * (correction.along * basis.unit.y + correction.across * basis.perpendicular.y);
+        point.source = 'calibrated';
+        point.calibrationFrame = selected.referenceFrame;
+        return point;
+      });
+      return Object.assign({}, frame, { keypoints: keypoints });
+    });
   }
 
   function invalid(reason) {
@@ -103,47 +213,22 @@
     view.frames.forEach(function (frame) {
       if (frame && finite(frame.frameIndex)) framesByIndex.set(frame.frameIndex, frame);
     });
-    if (!Number.isInteger(cycle.startFrame) || !framesByIndex.has(cycle.startFrame)) {
-      return invalid('invalid-start-frame');
-    }
-    if (!Number.isInteger(cycle.endFrame) || !framesByIndex.has(cycle.endFrame)) {
-      return invalid('invalid-end-frame');
-    }
-    if (cycle.endFrame <= cycle.startFrame) return invalid('invalid-frame-range');
     if (!cycle.phases || typeof cycle.phases !== 'object') return invalid('missing-phases');
 
-    var previousEnd = null;
+    var previousFrameIndex = -Infinity;
+    var previousTime = -Infinity;
     for (var i = 0; i < PHASES.length; i++) {
       var name = PHASES[i];
       var range = cycle.phases[name];
       if (!range || typeof range !== 'object') return invalid('missing-phase-range-' + name);
-      if (!Number.isInteger(range.startFrame) || !framesByIndex.has(range.startFrame) ||
-          !Number.isInteger(range.endFrame) || !framesByIndex.has(range.endFrame) ||
-          !Number.isInteger(range.representativeFrame) || !framesByIndex.has(range.representativeFrame)) {
+      if (!Number.isInteger(range.representativeFrame) || !framesByIndex.has(range.representativeFrame)) {
         return invalid('invalid-phase-frame-' + name);
       }
-      if (range.startFrame < cycle.startFrame || range.endFrame >= cycle.endFrame || range.startFrame > range.endFrame) {
-        return invalid('phase-out-of-range-' + name);
-      }
-      if (range.representativeFrame < range.startFrame || range.representativeFrame > range.endFrame) {
-        return invalid('phase-representative-out-of-range-' + name);
-      }
-      if (i === 0 && range.startFrame !== cycle.startFrame) return invalid('ic-not-at-start');
-      if (previousEnd !== null) {
-        if (range.startFrame > previousEnd + 1) return invalid('phase-range-gap-' + name);
-        if (range.startFrame < previousEnd + 1) return invalid('phase-range-overlap-' + name);
-      }
-      previousEnd = range.endFrame;
-    }
-    if (previousEnd !== cycle.endFrame - 1) return invalid('phase-range-end-TSw');
-
-    var cycleFrames = view.frames.filter(function (frame) {
-      return frame && frame.frameIndex >= cycle.startFrame && frame.frameIndex <= cycle.endFrame;
-    }).sort(function (a, b) { return a.frameIndex - b.frameIndex; });
-    var previousTime = -Infinity;
-    for (var j = 0; j < cycleFrames.length; j++) {
-      if (!finite(cycleFrames[j].t) || cycleFrames[j].t <= previousTime) return invalid('non-increasing-time');
-      previousTime = cycleFrames[j].t;
+      if (range.representativeFrame <= previousFrameIndex) return invalid('phase-order-' + name);
+      var frame = framesByIndex.get(range.representativeFrame);
+      if (!finite(frame.t) || frame.t <= previousTime) return invalid('non-increasing-time');
+      previousFrameIndex = range.representativeFrame;
+      previousTime = frame.t;
     }
     return { valid: true, reason: null };
   }
@@ -165,16 +250,14 @@
     var side = view.side === 'right' ? 'right' : 'left';
     var direction = view.direction === -1 ? -1 : 1;
     var options = { side: side, direction: direction, minScore: view.minScore };
-    return view.frames.filter(function (frame) {
-      return frame && frame.frameIndex >= cycle.startFrame && frame.frameIndex <= cycle.endFrame;
-    }).sort(function (a, b) {
-      return a.frameIndex - b.frameIndex;
-    }).map(function (frame) {
-      var phase = null;
-      PHASES.forEach(function (name) {
-        var range = cycle.phases && cycle.phases[name];
-        if (range && frame.frameIndex >= range.startFrame && frame.frameIndex <= range.endFrame) phase = name;
-      });
+    var framesByIndex = new Map();
+    view.frames.forEach(function (frame) {
+      if (frame && finite(frame.frameIndex)) framesByIndex.set(frame.frameIndex, frame);
+    });
+    return PHASES.map(function (phase) {
+      var range = cycle.phases && cycle.phases[phase];
+      var frame = range && framesByIndex.get(range.representativeFrame);
+      if (!frame) return null;
       return {
         frameIndex: frame.frameIndex,
         time: frame.t,
@@ -183,7 +266,7 @@
         angles: computeFrameAngles(frame.keypoints, options),
         sources: frameSources(frame.keypoints)
       };
-    });
+    }).filter(Boolean);
   }
 
   function emptyAngleArrays(bins) {
@@ -270,14 +353,6 @@
         if (!flexion || sample.value > flexion.value) flexion = sample;
         if (!extension || sample.value < extension.value) extension = sample;
       });
-      var normalizedMean = new Array(101).fill(null);
-      if (cycles.length) {
-        for (var bin = 0; bin < 101; bin++) {
-          normalizedMean[bin] = mean(cycles.map(function (cycle) {
-            return cycle.normalized[key][bin];
-          }));
-        }
-      }
       summary[key] = {
         maxFlexion: flexion ? flexion.value : null,
         maxExtension: extension ? extension.value : null,
@@ -290,8 +365,7 @@
         maxExtensionTime: extension ? extension.frame.time : null,
         maxFlexionCycleId: flexion ? flexion.cycleId : null,
         maxExtensionCycleId: extension ? extension.cycleId : null,
-        sampleCount: samples.length,
-        normalizedMean: normalizedMean
+        sampleCount: samples.length
       };
     });
     return summary;
@@ -342,11 +416,8 @@
         var savedCycle = {
           id: cycle.id,
           side: side,
-          startFrame: cycle.startFrame,
-          endFrame: cycle.endFrame,
           phases: cycle.phases,
-          series: series,
-          normalized: normalizeSeries(series)
+          series: series
         };
         viewReport.cycles.push(savedCycle);
         series.forEach(function (frame) {
@@ -395,7 +466,11 @@
     var affected = [];
     if (!view || !Array.isArray(view.confirmedCycles) || !finite(frameIndex)) return affected;
     view.confirmedCycles.forEach(function (cycle) {
-      if (cycle && cycle.confirmed === true && frameIndex >= cycle.startFrame && frameIndex <= cycle.endFrame) {
+      if (!cycle || cycle.confirmed !== true || !cycle.phases) return;
+      var isRepresentative = PHASES.some(function (phase) {
+        return cycle.phases[phase] && cycle.phases[phase].representativeFrame === frameIndex;
+      });
+      if (isRepresentative) {
         cycle.confirmed = false;
         affected.push(cycle.id);
       }
@@ -412,6 +487,9 @@
     normalizeSeries: normalizeSeries,
     buildConfirmedReport: buildConfirmedReport,
     buildCSV: buildCSV,
-    invalidateCycles: invalidateCycles
+    invalidateCycles: invalidateCycles,
+    createCalibration: createCalibration,
+    upsertCalibration: upsertCalibration,
+    applyCalibrations: applyCalibrations
   };
 })(typeof window !== 'undefined' ? window : globalThis);

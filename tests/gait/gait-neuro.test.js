@@ -24,7 +24,7 @@ function makeReport(speedKmh = 5) {
     },
     phaseTable: {
       IC: { knee: { mean: 0 }, ankle: { mean: 0 } },
-      LR: { knee: { mean: 99 } }
+      LR: { knee: { mean: 15 } }
     },
     cycles: [{
       series: [12, 16, 18].map((angle, index) => ({
@@ -54,7 +54,7 @@ test('5 km/h 使用课程参考并正确转换伸展角与解剖膝伸位', () =
   assert.equal(observation(result, 'left', 'shoulderExtension').status, 'within');
   assert.equal(observation(result, 'left', 'hipExtension').value, 20);
   assert.equal(observation(result, 'left', 'icKneeExtension').value, 180);
-  assert.equal(observation(result, 'left', 'lrKneeFlexion').value, 18);
+  assert.equal(observation(result, 'left', 'lrKneeFlexion').value, 15);
   assert.equal(observation(result, 'left', 'lrKneeFlexion').status, 'within');
   assert.equal(observation(result, 'left', 'icAnkle').value, 0);
   assert.equal(result.references.length >= 3, true);
@@ -77,8 +77,7 @@ test('课程参考偏离分别判断，双侧大幅摆臂只生成补偿机制�
   input.views.left.summary.hip = { maxFlexion: 19, maxExtension: -18 };
   input.views.left.phaseTable.IC.knee.mean = 6;
   input.views.left.phaseTable.IC.ankle.mean = -4;
-  input.views.left.cycles[0].series[1].angles.knee = 8;
-  input.views.left.cycles[0].series[2].angles.knee = 8;
+  input.views.left.phaseTable.LR.knee.mean = 8;
   const result = N.buildNeuroInterpretation(input);
   assert.equal(observation(result, 'left', 'shoulderFlexion').status, 'above');
   assert.equal(observation(result, 'left', 'shoulderExtension').status, 'above');
@@ -87,7 +86,7 @@ test('课程参考偏离分别判断，双侧大幅摆臂只生成补偿机制�
   assert.equal(observation(result, 'left', 'hipExtension').status, 'below');
   assert.equal(observation(result, 'left', 'icKneeExtension').value, 174);
   assert.equal(observation(result, 'left', 'icKneeExtension').status, 'below');
-  assert.equal(observation(result, 'left', 'lrKneeFlexion').value, 12);
+  assert.equal(observation(result, 'left', 'lrKneeFlexion').value, 8);
   assert.equal(observation(result, 'left', 'icAnkle').status, 'below');
   assert.match(result.sides.left.notes[0], /30°/);
   assert.match(result.sides.left.notes[0], /稳定|补偿/);
@@ -108,6 +107,7 @@ test('未记录速度或缺失角度时不补零、不判断偏离', () => {
   const input = makeReport(null);
   input.views.left.summary.shoulder.maxFlexion = null;
   input.views.left.phaseTable.IC.knee.mean = null;
+  input.views.left.phaseTable.LR.knee.mean = null;
   input.views.left.cycles = [];
   const result = N.buildNeuroInterpretation(input);
   assert.equal(result.protocol.speedKmh, null);

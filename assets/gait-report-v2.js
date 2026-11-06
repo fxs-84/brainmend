@@ -9,14 +9,9 @@
     { key: 'ankle', label: '踝关节', short: '踝' }
   ];
   var PHASES = [
-    { key: 'IC', label: '初始触地' },
+    { key: 'IC', label: '初次着地' },
     { key: 'LR', label: '承重反应' },
-    { key: 'MSt', label: '站立中期' },
-    { key: 'TSt', label: '站立末期' },
-    { key: 'PSw', label: '预摆动期' },
-    { key: 'ISw', label: '摆动初期' },
-    { key: 'MSw', label: '摆动中期' },
-    { key: 'TSw', label: '摆动末期' }
+    { key: 'TSt', label: '支撑末期' }
   ];
   var SIDES = [
     { key: 'left', label: '左侧', color: '#2563eb' },
@@ -419,7 +414,7 @@
   }
 
   function renderSummary(report, parent) {
-    var block = section('关节活动摘要', '最大屈曲与最大伸展分别取全部已确认帧中的角度最大值与最小值；差值统一为左侧减右侧。');
+    var block = section('关节活动摘要', '最大屈曲与最大伸展分别取 IC、LR、TSt 三个代表帧中的角度最大值与最小值；差值统一为左侧减右侧。');
     var table = tableElement();
     var head = element('thead');
     var headings = ['关节', '侧别', '最大屈曲（°）', '屈曲时相', '最大伸展（°）', '伸展时相', 'ROM（°）', '左右差值（左−右）'];
@@ -532,7 +527,7 @@
   }
 
   function renderPhaseTable(report, parent) {
-    var block = section('八时相人工标记帧角度', '数值单位为角度（°）；先取每个人工标记时相帧的精确角度，再对已确认周期求均值。');
+    var block = section('三时相人工标记帧角度', '数值单位为角度（°）；先取每个人工标记时相帧的精确角度，再对已确认周期求均值。');
     var table = tableElement();
     var head = element('thead');
     var first = element('tr');
@@ -626,7 +621,7 @@
   }
 
   function renderSnapshots(report, parent) {
-    var block = section('八时相骨架截图', '按侧别与周期展示主控附加的 phaseSnapshots；图像仅接受内嵌图片数据，缺失时相保留占位。');
+    var block = section('三时相骨架截图', '按侧别与周期展示主控附加的 phaseSnapshots；图像仅接受内嵌图片数据，缺失时相保留占位。');
     SIDES.forEach(function (side) {
       var view = viewFor(report, side.key);
       var groups = snapshotGroups(view.phaseSnapshots);
@@ -738,10 +733,7 @@
         lineHeight: '1.7'
       }, '当前为预览状态，暂不可导出。' + (missing.length ? '缺失侧：' + missing.map(sideName).join('、') + '。' : '') + '已有数据仍可正常查看。'));
     }
-    var pendingCharts = [];
     renderMetadata(report, root);
-    renderCurves(report, root, pendingCharts);
-    renderTimeCurves(report, root, pendingCharts);
     renderSummary(report, root);
     renderNeuroscience(report, root);
     renderPhaseTable(report, root);
@@ -755,15 +747,11 @@
       lineHeight: '1.8'
     }, [
       element('strong', { color: COLORS.ink }, '报告说明'),
-      element('div', { marginTop: '5px' }, '本报告基于单目视频的二维图像平面关键点计算相对角度：肩关节为上臂相对躯干，肘关节为前臂相对上臂，髋关节为大腿相对躯干，膝关节为大腿与小腿的相对角，踝关节为足部相对小腿并采用 90° 参考修正。结果受拍摄方向、遮挡及关键点质量影响，不等同于三维关节角度。'),
-      element('div', { marginTop: '5px' }, '各周期按时间归一化至 0–100%，均值只统计有效角度；曲线空洞表示数据缺失，不将缺失值当作 0°。'),
+      element('div', { marginTop: '5px' }, '本报告基于单目视频的二维图像平面关键点计算相对角度：肩关节为上臂相对躯干，肘关节为前臂相对上臂，髋关节为大腿相对躯干，膝关节为大腿与小腿的相对角，踝关节为膝—踝连线与跟骨—足尖连线的夹角，并采用 90° 为中立 0°、背屈为正、跖屈为负的参考修正。结果受拍摄方向、遮挡及关键点质量影响，不等同于三维关节角度。'),
+      element('div', { marginTop: '5px' }, '每侧仅分析人工选择的 IC、LR、TSt 三个代表帧，不使用其他视频帧或插值曲线；缺失角度不按 0° 统计。'),
       element('div', { marginTop: '5px', fontWeight: '600', color: '#9a3412' }, '本报告仅用于康复训练记录与专业人员参考，不构成医学诊断、疾病筛查结论或治疗依据。')
     ]));
     container.appendChild(root);
-    pendingCharts.forEach(function (chart) {
-      if (chart.type === 'time') drawTimeChart(chart.canvas, report, chart.angle, chart.side, chart.range);
-      else drawJointChart(chart.canvas, report, chart.angle, chart.side, chart.range);
-    });
     return container;
   }
 

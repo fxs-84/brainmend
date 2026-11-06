@@ -52,13 +52,13 @@
       key: 'lrKneeFlexion', label: 'LR最大膝屈',
       reference: { min: 10, max: 20, text: '10–20°' },
       mechanism: '屈膝缓冲与预期性姿势调整、动作幅度调节和本体感觉反馈有关；基底节参与自动化运动控制，可作为理论延伸。',
-      factors: '取整个LR连续区间的峰值，结合落地方式、躯干起伏、支撑时间及左右差异。'
+      factors: '取人工选择的LR代表帧，结合落地方式、躯干起伏、支撑时间及左右差异。'
     },
     {
       key: 'icAnkle', label: 'IC踝角',
       reference: { min: 0, text: '0°为中立位；背屈10°为课程观察目标' },
       mechanism: '触地前的足部定位可从胫骨前肌控制、足部感觉反馈和放足过程的协调角度观察。',
-      factors: '结合踝活动度、小腿后侧张力、鞋和足尖标记位置；背屈10°不是所有人的统一目标。'
+      factors: '结合踝活动度、小腿后侧张力、鞋和跟骨/足尖标记位置；背屈10°不是所有人的统一目标。'
     }
   ];
   var NETWORKS = [
@@ -108,17 +108,6 @@
     return entry && finite(entry.mean) ? entry.mean : null;
   }
 
-  function loadingResponsePeak(view) {
-    var peak = null;
-    (Array.isArray(view.cycles) ? view.cycles : []).forEach(function (cycle) {
-      (Array.isArray(cycle.series) ? cycle.series : []).forEach(function (frame) {
-        var value = frame.angles && frame.angles.knee;
-        if (frame.phase === 'LR' && finite(value) && (peak == null || value > peak)) peak = value;
-      });
-    });
-    return peak;
-  }
-
   function valuesFor(view) {
     var summary = view.summary && typeof view.summary === 'object' ? view.summary : {};
     var shoulder = summary.shoulder || {};
@@ -132,7 +121,7 @@
       hipFlexion: finite(hip.maxFlexion) ? Math.max(0, hip.maxFlexion) : null,
       hipExtension: finite(hip.maxExtension) ? Math.max(0, -hip.maxExtension) : null,
       icKneeExtension: finite(icKnee) ? 180 - icKnee : null,
-      lrKneeFlexion: loadingResponsePeak(view),
+      lrKneeFlexion: phaseMean(view, 'LR', 'knee'),
       icAnkle: phaseMean(view, 'IC', 'ankle')
     };
   }
@@ -171,7 +160,7 @@
         shoulder.maxFlexion > 30 && -shoulder.maxExtension > 30) {
       notes.push('本侧肩屈、肩伸均大于30°，可观察是否为主动用力或通过增大上肢与躯干运动维持动态稳定，并结合小脑参与的感觉校准与姿势补偿分析。');
     }
-    if (values.lrKneeFlexion == null) notes.push('LR连续区间没有有效膝角，未计算承重缓冲峰值。');
+    if (values.lrKneeFlexion == null) notes.push('LR代表帧没有有效膝角，未计算承重缓冲角度。');
     return { side: side, observations: observations, notes: notes };
   }
 

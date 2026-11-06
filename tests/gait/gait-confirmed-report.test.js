@@ -56,7 +56,7 @@ function session() {
   };
 }
 
-test('报告只纳入有效确认周期并保留原始及归一化曲线', () => {
+test('报告只纳入有效确认周期的三个代表帧且不生成插值曲线', () => {
   const input = session();
   input.views.left.confirmedCycles.push(cycle('unconfirmed', false));
   input.views.left.confirmedCycles.push({ ...cycle('bad-phase'), phases: { ...cycle().phases, IC: 1 } });
@@ -72,15 +72,16 @@ test('报告只纳入有效确认周期并保留原始及归一化曲线', () =>
   assert.equal(report.views.right.cycleCount, 1);
   assert.deepEqual(report.excludedCycles.map(c => c.cycleId).sort(), ['bad-phase', 'unconfirmed']);
   const saved = report.views.left.cycles[0];
-  assert.equal(saved.series.length, 9);
-  assert.equal(saved.normalized.shoulder.length, 101);
-  assert.equal(report.views.left.frames.length, 9);
+  assert.equal(saved.series.length, 3);
+  assert.equal(saved.normalized, undefined);
+  assert.equal(report.views.left.frames.length, 3);
   assert.equal(report.views.left.frames[0].side, 'left');
   assert.equal(report.views.left.phaseTable.IC.shoulder.values.length, 1);
   assert.equal(report.views.left.phaseTable.IC.shoulder.mean, 0);
   assert.equal(report.views.left.summary.shoulder.maxFlexion, 0);
   assert.equal(report.views.left.summary.shoulder.maxExtension, 0);
   assert.equal(report.views.left.summary.shoulder.rom, 0);
+  assert.equal(report.views.left.summary.shoulder.normalizedMean, undefined);
 });
 
 test('时相表读取人工标记帧角度而不是后续区间均值', () => {
@@ -91,7 +92,7 @@ test('时相表读取人工标记帧角度而不是后续区间均值', () => {
   input.views.left.frames[2].keypoints.find(point => point.name === 'left_wrist').y = 200;
   const report = K.buildConfirmedReport(input);
   assert.equal(report.views.left.phaseTable.LR.elbow.mean, 90);
-  assert.equal(report.views.left.phaseTable.MSt.elbow.mean, -90);
+  assert.equal(report.views.left.phaseTable.TSt.elbow.mean, -90);
 });
 
 test('缺失角度不按零统计，极值带有时相和周期信息', () => {
@@ -157,7 +158,7 @@ test('CSV 含原帧、质量及修正来源并正确转义', () => {
   const csv = K.buildCSV(report);
   const lines = csv.split('\n');
   assert.equal(lines[0], 'side,frameIndex,time,cycleId,phase,shoulder,elbow,hip,knee,ankle,quality,correctionSource');
-  assert.equal(lines.length, 19);
+  assert.equal(lines.length, 7);
   assert.ok(lines[1].startsWith('left,0,0,"cycle,""1""",IC,'));
   const cells = parseCSVRow(lines[1]);
   assert.equal(cells.length, 12);
@@ -170,8 +171,9 @@ test('CSV 含原帧、质量及修正来源并正确转义', () => {
 test('修改帧使覆盖该帧的已确认周期失效并返回 id', () => {
   const gaitView = view('left');
   gaitView.confirmedCycles.push(cycle('outside'));
-  gaitView.confirmedCycles[1].startFrame = 3;
-  gaitView.confirmedCycles[1].endFrame = 4;
+  gaitView.confirmedCycles[1].phases.IC.representativeFrame = 3;
+  gaitView.confirmedCycles[1].phases.LR.representativeFrame = 4;
+  gaitView.confirmedCycles[1].phases.TSt.representativeFrame = 5;
   gaitView.confirmedCycles.push(cycle('already-invalid', false));
   const affected = K.invalidateCycles(gaitView, 1);
   assert.deepEqual(affected, ['cycle,"1"']);
