@@ -22,28 +22,28 @@
   function close() {
     if (active) active.cancelled = true;
     active = null;
-    var overlay = document.getElementById('gait-qr-overlay');
+    var overlay = document.getElementById('gait-upload-qr-overlay');
     if (overlay) overlay.remove();
   }
 
   function render(side, url) {
     var overlay = document.createElement('div');
-    overlay.id = 'gait-qr-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:#102b27aa;display:flex;align-items:center;justify-content:center;padding:18px;';
+    overlay.id = 'gait-upload-qr-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:40000;background:#102b27aa;display:flex;align-items:center;justify-content:center;padding:18px;';
     overlay.innerHTML = '<section style="background:#fff;border-radius:16px;padding:24px;max-width:430px;width:100%;text-align:center;box-shadow:0 20px 60px #0004">' +
       '<h3 style="margin:0 0 8px">手机扫码上传' + (side === 'left' ? '左侧' : '右侧') + '视频</h3>' +
       '<p style="color:#64748b;font-size:13px">从手机相册选择原视频，不经过聊天软件压缩。会话 30 分钟内有效。</p>' +
-      '<div id="gait-qr-image" style="display:flex;justify-content:center;margin:14px 0"></div>' +
-      '<div id="gait-qr-url" style="font-size:10px;color:#94a3b8;word-break:break-all">' + url + '</div>' +
-      '<div id="gait-qr-status" role="status" style="margin:16px 0;color:#0f766e;font-size:14px">等待手机扫码上传…</div>' +
-      '<button id="gait-qr-close" type="button" style="padding:8px 22px;border:1px solid #b8cbc6;border-radius:8px;background:#fff;cursor:pointer">取消并关闭</button></section>';
+      '<div id="gait-upload-qr-image" style="display:flex;justify-content:center;margin:14px 0"></div>' +
+      '<div id="gait-upload-qr-url" style="font-size:10px;color:#94a3b8;word-break:break-all">' + url + '</div>' +
+      '<div id="gait-upload-qr-status" role="status" style="margin:16px 0;color:#0f766e;font-size:14px">等待手机扫码上传…</div>' +
+      '<button id="gait-upload-qr-close" type="button" style="padding:8px 22px;border:1px solid #b8cbc6;border-radius:8px;background:#fff;cursor:pointer">取消并关闭</button></section>';
     document.body.appendChild(overlay);
-    document.getElementById('gait-qr-close').addEventListener('click', close);
+    document.getElementById('gait-upload-qr-close').addEventListener('click', close);
     return loadQrLibrary().then(function () {
       var qr = global.qrcode(0, 'M');
       qr.addData(url);
       qr.make();
-      var image = document.getElementById('gait-qr-image');
+      var image = document.getElementById('gait-upload-qr-image');
       if (image) {
         image.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4 });
         var svg = image.querySelector('svg');
@@ -56,7 +56,7 @@
   }
 
   function status(text) {
-    var element = document.getElementById('gait-qr-status');
+    var element = document.getElementById('gait-upload-qr-status');
     if (element) element.textContent = text;
   }
 

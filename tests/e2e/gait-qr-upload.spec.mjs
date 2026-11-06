@@ -64,11 +64,17 @@ try {
   desktop.once('dialog', dialog => dialog.accept());
   await desktop.click('#gait-new-session');
   await desktop.click('#gait-qr-left');
-  await desktop.waitForFunction(() => document.querySelector('#gait-qr-url')?.textContent.includes('gait-upload.html'));
-  await desktop.waitForSelector('#gait-qr-image svg');
-  const qrBox = await desktop.locator('#gait-qr-image svg').boundingBox();
+  await desktop.waitForFunction(() => document.querySelector('#gait-upload-qr-url')?.textContent.includes('gait-upload.html'));
+  await desktop.waitForSelector('#gait-upload-qr-image svg');
+  const qrBox = await desktop.locator('#gait-upload-qr-image svg').boundingBox();
   assert.ok(qrBox.width >= 200 && qrBox.height >= 200, '二维码必须有实际可见尺寸');
-  const uploadUrl = await desktop.locator('#gait-qr-url').textContent();
+  const qrOnTop = await desktop.evaluate(() => {
+    const rect = document.querySelector('#gait-upload-qr-image svg').getBoundingClientRect();
+    const top = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    return !!top?.closest('#gait-upload-qr-overlay');
+  });
+  assert.ok(qrOnTop, '二维码弹窗必须位于步态页面之上');
+  const uploadUrl = await desktop.locator('#gait-upload-qr-url').textContent();
   const mobile = await context.newPage();
   await mobile.setViewportSize({ width: 390, height: 844 });
   await mobile.goto(uploadUrl);

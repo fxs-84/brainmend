@@ -29,8 +29,8 @@ try {
   desktop.once('dialog', dialog => dialog.accept());
   await desktop.click('#gait-new-session');
   await desktop.click('#gait-qr-left');
-  await desktop.waitForFunction(() => document.querySelector('#gait-qr-url')?.textContent.includes('gait-upload.html'), null, { timeout: 30000 });
-  const uploadUrl = await desktop.locator('#gait-qr-url').textContent();
+  await desktop.waitForFunction(() => document.querySelector('#gait-upload-qr-url')?.textContent.includes('gait-upload.html'), null, { timeout: 30000 });
+  const uploadUrl = await desktop.locator('#gait-upload-qr-url').textContent();
   const params = new URL(uploadUrl).searchParams;
   sessionId = params.get('session');
   token = params.get('token');
